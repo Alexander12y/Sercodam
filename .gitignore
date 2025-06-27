@@ -1,0 +1,7 @@
+# ─── Dependencias compiladas ─────────────────────────
+sercodam-backend/node_modules/
+sercodam-frontend/node_modules/
+
+# ─── Archivos de bloqueo de npm ──────────────────────
+sercodam-backend/package-lock.json
+sercodam-frontend/package-lock.json

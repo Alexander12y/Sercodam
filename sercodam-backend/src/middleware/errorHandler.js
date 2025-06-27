@@ -58,11 +58,11 @@ const handleDatabaseError = (error) => {
             case '23505': // Unique violation
                 return new ConflictError('Ya existe un registro con estos datos');
             case '23503': // Foreign key violation
-                return new ValidationError('Referencia inválida a otro registro');
+                return new ValidationError('Referencia inválida a otro registro', [{ message: error.detail || error.message }]);
             case '23502': // Not null violation
-                return new ValidationError('Campo requerido faltante');
+                return new ValidationError('Campo requerido faltante', [{ message: error.detail || error.message }]);
             case '23514': // Check violation
-                return new ValidationError('Los datos no cumplen con las restricciones');
+                return new ValidationError('Los datos no cumplen con las restricciones', [{ message: error.detail || error.message }]);
             case '42P01': // Undefined table
                 return new AppError('Recurso no disponible', 500);
             case '42601': // Syntax error
@@ -111,6 +111,12 @@ const errorHandler = (error, req, res, next) => {
         params: req.params,
         query: req.query
     });
+
+    // Mostrar SIEMPRE el error SQL real en consola para depuración
+    console.error('ERROR SQL:', error.message);
+    if (error.stack) {
+        console.error('STACK SQL:', error.stack);
+    }
 
     // Handle different types of errors
     if (error.name === 'ValidationError' && error.details) {

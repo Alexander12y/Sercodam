@@ -9,7 +9,11 @@ const authenticateToken = async (req, res, next) => {
         const authHeader = req.headers['authorization'];
         const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
+        console.log('🔍 DEBUG - Auth Header:', authHeader);
+        console.log('🔍 DEBUG - Token:', token ? token.substring(0, 20) + '...' : 'No token');
+
         if (!token) {
+            console.log('❌ DEBUG - No token provided');
             return res.status(401).json({
                 success: false,
                 message: 'Token de acceso requerido'
@@ -19,6 +23,7 @@ const authenticateToken = async (req, res, next) => {
         // Check if token is blacklisted
         const isBlacklisted = await cache.exists(`blacklist:${token}`);
         if (isBlacklisted) {
+            console.log('❌ DEBUG - Token is blacklisted');
             return res.status(401).json({
                 success: false,
                 message: 'Token inválido'
@@ -27,13 +32,17 @@ const authenticateToken = async (req, res, next) => {
 
         // Verify token
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        console.log('✅ DEBUG - Token decoded:', { userId: decoded.userId, username: decoded.username, rol: decoded.rol });
 
         // Check if user still exists and is active
         const user = await db('usuario')
             .where({ id: decoded.userId })
             .first();
 
+        console.log('🔍 DEBUG - User from DB:', user ? { id: user.id, username: user.username, activo: user.activo } : 'User not found');
+
         if (!user || !user.activo) {
+            console.log('❌ DEBUG - User not found or inactive');
             return res.status(401).json({
                 success: false,
                 message: 'Usuario no encontrado o inactivo'
@@ -50,9 +59,11 @@ const authenticateToken = async (req, res, next) => {
         };
 
         req.token = token;
+        console.log('✅ DEBUG - Authentication successful for user:', req.user.username);
         next();
 
     } catch (error) {
+        console.log('❌ DEBUG - Auth error:', error.message);
         logger.error('Error en autenticación:', error);
 
         if (error.name === 'JsonWebTokenError') {
