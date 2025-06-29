@@ -55,7 +55,7 @@ const SUBGRUPOS_CATEGORIAS = {
   'Otros materiales': ['ÁCople para conexiones y mangueras', 'Clavos', 'Kit de supervivencia', 'Red de Nylon para Racks de LOréal', 'Redes Deportivas Terminadas', 'Rodillos', 'Tubos PVC', 'Zoclos', 'Tapas']
 };
 
-const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionados }) => {
+const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionados, onDraftSave }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [subgrupos] = useState(Object.keys(SUBGRUPOS_CATEGORIAS));
   const [subgrupo, setSubgrupo] = useState('');
@@ -66,6 +66,13 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
   const [loading, setLoading] = useState(false);
   const [cantidad, setCantidad] = useState(1);
   const [materialSeleccionado, setMaterialSeleccionado] = useState(null);
+
+  // Función para guardar draft cuando cambian los materiales
+  const saveDraftOnChange = (newMaterialesSeleccionados) => {
+    if (onDraftSave) {
+      onDraftSave(newMaterialesSeleccionados);
+    }
+  };
 
   useEffect(() => {
     loadAllMateriales();
@@ -125,14 +132,24 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
 
   const handleAgregar = () => {
     if (materialSeleccionado && cantidad > 0) {
-      setMaterialesSeleccionados(prev => [
-        ...prev,
+      const newMaterialesSeleccionados = [
+        ...materialesSeleccionados,
         { ...materialSeleccionado, cantidad }
-      ]);
+      ];
+      
+      setMaterialesSeleccionados(newMaterialesSeleccionados);
+      saveDraftOnChange(newMaterialesSeleccionados);
+      
       setMaterialSeleccionado(null);
       setCantidad(1);
       setModalOpen(false);
     }
+  };
+
+  const handleEliminarMaterial = (index) => {
+    const newMaterialesSeleccionados = materialesSeleccionados.filter((_, i) => i !== index);
+    setMaterialesSeleccionados(newMaterialesSeleccionados);
+    saveDraftOnChange(newMaterialesSeleccionados);
   };
 
   const getEstadoColor = (estado) => {
@@ -292,9 +309,7 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
                           <IconButton
                             size="small"
                             color="error"
-                            onClick={() => {
-                              setMaterialesSeleccionados(prev => prev.filter((_, i) => i !== idx));
-                            }}
+                            onClick={() => handleEliminarMaterial(idx)}
                             title="Eliminar material"
                           >
                             <ClearIcon />
@@ -335,10 +350,15 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
               </Box>
               
               <Grid container spacing={2}>
-                <Grid item xs={12} md={3}>
+                <Grid item xs={12} md={4}>
                   <FormControl fullWidth size="small">
-                    <InputLabel>Subgrupo</InputLabel>
-                    <Select value={subgrupo} onChange={handleSubgrupoChange}>
+                    <InputLabel id="subgrupo-label">Subgrupo</InputLabel>
+                    <Select
+                      labelId="subgrupo-label"
+                      value={subgrupo}
+                      onChange={handleSubgrupoChange}
+                      label="Subgrupo"
+                    >
                       <MenuItem value="">Todos los subgrupos</MenuItem>
                       {subgrupos.map(sg => (
                         <MenuItem key={sg} value={sg}>{sg}</MenuItem>
@@ -346,13 +366,15 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12} md={3}>
+                <Grid item xs={12} md={4}>
                   <FormControl fullWidth size="small">
-                    <InputLabel>Categoría</InputLabel>
-                    <Select 
-                      value={categoria} 
-                      onChange={e => setCategoria(e.target.value)}
-                      disabled={!subgrupo && categorias.length === 0}
+                    <InputLabel id="categoria-label">Categoría</InputLabel>
+                    <Select
+                      labelId="categoria-label"
+                      value={categoria}
+                      onChange={(e) => setCategoria(e.target.value)}
+                      label="Categoría"
+                      disabled={!subgrupo}
                     >
                       <MenuItem value="">Todas las categorías</MenuItem>
                       {categorias.map(cat => (

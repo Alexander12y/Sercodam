@@ -76,7 +76,7 @@ const SUBGRUPOS_CATEGORIAS = {
   ]
 };
 
-const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSeleccionadas }) => {
+const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSeleccionadas, onDraftSave }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [subgrupos] = useState(Object.keys(SUBGRUPOS_CATEGORIAS));
   const [subgrupo, setSubgrupo] = useState('');
@@ -87,6 +87,13 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
   const [loading, setLoading] = useState(false);
   const [cantidad, setCantidad] = useState(1);
   const [herramientaSeleccionada, setHerramientaSeleccionada] = useState(null);
+
+  // Función para guardar draft cuando cambian las herramientas
+  const saveDraftOnChange = (newHerramientasSeleccionadas) => {
+    if (onDraftSave) {
+      onDraftSave(newHerramientasSeleccionadas);
+    }
+  };
 
   useEffect(() => {
     loadAllHerramientas();
@@ -146,14 +153,24 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
 
   const handleAgregar = () => {
     if (herramientaSeleccionada && cantidad > 0) {
-      setHerramientasSeleccionadas(prev => [
-        ...prev,
+      const newHerramientasSeleccionadas = [
+        ...herramientasSeleccionadas,
         { ...herramientaSeleccionada, cantidad }
-      ]);
+      ];
+      
+      setHerramientasSeleccionadas(newHerramientasSeleccionadas);
+      saveDraftOnChange(newHerramientasSeleccionadas);
+      
       setHerramientaSeleccionada(null);
       setCantidad(1);
       setModalOpen(false);
     }
+  };
+
+  const handleEliminarHerramienta = (index) => {
+    const newHerramientasSeleccionadas = herramientasSeleccionadas.filter((_, i) => i !== index);
+    setHerramientasSeleccionadas(newHerramientasSeleccionadas);
+    saveDraftOnChange(newHerramientasSeleccionadas);
   };
 
   const getEstadoColor = (estado) => {
@@ -315,9 +332,7 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
                           <IconButton
                             size="small"
                             color="error"
-                            onClick={() => {
-                              setHerramientasSeleccionadas(prev => prev.filter((_, i) => i !== idx));
-                            }}
+                            onClick={() => handleEliminarHerramienta(idx)}
                             title="Eliminar herramienta"
                           >
                             <ClearIcon />
@@ -358,10 +373,15 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
               </Box>
               
               <Grid container spacing={2}>
-                <Grid item xs={12} md={3}>
+                <Grid item xs={12} md={4}>
                   <FormControl fullWidth size="small">
-                    <InputLabel>Subgrupo</InputLabel>
-                    <Select value={subgrupo} onChange={handleSubgrupoChange}>
+                    <InputLabel id="subgrupo-herramientas-label">Subgrupo</InputLabel>
+                    <Select
+                      labelId="subgrupo-herramientas-label"
+                      value={subgrupo}
+                      onChange={handleSubgrupoChange}
+                      label="Subgrupo"
+                    >
                       <MenuItem value="">Todos los subgrupos</MenuItem>
                       {subgrupos.map(sg => (
                         <MenuItem key={sg} value={sg}>{sg}</MenuItem>
@@ -369,13 +389,15 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12} md={3}>
+                <Grid item xs={12} md={4}>
                   <FormControl fullWidth size="small">
-                    <InputLabel>Categoría</InputLabel>
-                    <Select 
-                      value={categoria} 
-                      onChange={e => setCategoria(e.target.value)}
-                      disabled={!subgrupo && categorias.length === 0}
+                    <InputLabel id="categoria-herramientas-label">Categoría</InputLabel>
+                    <Select
+                      labelId="categoria-herramientas-label"
+                      value={categoria}
+                      onChange={(e) => setCategoria(e.target.value)}
+                      label="Categoría"
+                      disabled={!subgrupo}
                     >
                       <MenuItem value="">Todas las categorías</MenuItem>
                       {categorias.map(cat => (

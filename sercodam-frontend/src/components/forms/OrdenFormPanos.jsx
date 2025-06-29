@@ -37,11 +37,12 @@ import {
 } from '@mui/icons-material';
 import { panosApi } from '../../services/api';
 
-const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados }) => {
+const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [panos, setPanos] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [areaTomar, setAreaTomar] = useState(0);
+  const [largoTomar, setLargoTomar] = useState(0);
+  const [anchoTomar, setAnchoTomar] = useState(0);
   const [panoSeleccionado, setPanoSeleccionado] = useState(null);
   
   // Filtros
@@ -61,6 +62,13 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados }) => {
   const tiposRed = ['nylon', 'lona', 'polipropileno', 'malla sombra'];
   const estados = ['bueno', 'regular', 'malo', '50%'];
   const ubicaciones = ['Bodega CDMX', 'Querétaro', 'Oficina', 'Instalación'];
+
+  // Función para guardar draft cuando cambian los paños
+  const saveDraftOnChange = (newPanosSeleccionados) => {
+    if (onDraftSave) {
+      onDraftSave(newPanosSeleccionados);
+    }
+  };
 
   const loadPanos = async () => {
     setLoading(true);
@@ -137,19 +145,38 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados }) => {
   };
 
   const handleAgregar = () => {
-    if (panoSeleccionado && areaTomar > 0) {
-      const areaDisponible = Number(panoSeleccionado.area_m2) || 0;
-      if (areaTomar > areaDisponible) {
-        alert(`No puedes tomar más área de la disponible. Área disponible: ${areaDisponible.toFixed(2)} m²`);
+    if (panoSeleccionado && largoTomar > 0 && anchoTomar > 0) {
+      const largoDisponible = Number(panoSeleccionado.largo_m) || 0;
+      const anchoDisponible = Number(panoSeleccionado.ancho_m) || 0;
+      
+      if (largoTomar > largoDisponible) {
+        alert(`No puedes tomar más largo del disponible. Largo disponible: ${largoDisponible.toFixed(2)} m`);
         return;
       }
       
-      setPanosSeleccionados(prev => [
-        ...prev,
-        { ...panoSeleccionado, cantidad: areaTomar }
-      ]);
+      if (anchoTomar > anchoDisponible) {
+        alert(`No puedes tomar más ancho del disponible. Ancho disponible: ${anchoDisponible.toFixed(2)} m`);
+        return;
+      }
+      
+      const areaTomar = largoTomar * anchoTomar;
+      
+      const newPanosSeleccionados = [
+        ...panosSeleccionados,
+        { 
+          ...panoSeleccionado, 
+          largo_tomar: largoTomar,
+          ancho_tomar: anchoTomar,
+          cantidad: areaTomar
+        }
+      ];
+      
+      setPanosSeleccionados(newPanosSeleccionados);
+      saveDraftOnChange(newPanosSeleccionados);
+      
       setPanoSeleccionado(null);
-      setAreaTomar(0);
+      setLargoTomar(0);
+      setAnchoTomar(0);
       setModalOpen(false);
     }
   };
@@ -159,6 +186,12 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados }) => {
       ...prev,
       [campo]: event.target.value
     }));
+  };
+
+  const handleEliminarPano = (index) => {
+    const newPanosSeleccionados = panosSeleccionados.filter((_, i) => i !== index);
+    setPanosSeleccionados(newPanosSeleccionados);
+    saveDraftOnChange(newPanosSeleccionados);
   };
 
   const getEstadoColor = (estado) => {
@@ -172,9 +205,10 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados }) => {
   };
 
   // Calcular estadísticas
-  const totalArea = panosSeleccionados.reduce((sum, p) => sum + (Number(p.cantidad) || 0), 0);
-  const totalPiezas = panosSeleccionados.length;
-  const tiposUnicos = [...new Set(panosSeleccionados.map(p => p.tipo_red))];
+  const panosArray = Array.isArray(panosSeleccionados) ? panosSeleccionados : [];
+  const totalArea = panosArray.reduce((sum, p) => sum + (Number(p.cantidad) || 0), 0);
+  const totalPiezas = panosArray.length;
+  const tiposUnicos = [...new Set(panosArray.map(p => p.tipo_red))];
 
   return (
     <Grid container spacing={3}>
@@ -193,7 +227,7 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados }) => {
               <Grid item xs={12} md={3}>
                 <Box textAlign="center">
                   <Typography variant="h4" color="primary">
-                    {panosSeleccionados.length}
+                    {panosArray.length}
                   </Typography>
                   <Typography variant="body2" color="textSecondary">
                     Paños Seleccionados
@@ -250,14 +284,14 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados }) => {
       </Grid>
 
       {/* Lista de paños seleccionados */}
-      {panosSeleccionados.length > 0 && (
+      {panosArray.length > 0 && (
         <Grid item xs={12}>
           <Card>
             <CardContent>
               <Box display="flex" alignItems="center" mb={2}>
                 <FilterIcon sx={{ mr: 1, color: 'primary.main' }} />
                 <Typography variant="h6">
-                  Paños Seleccionados ({panosSeleccionados.length})
+                  Paños Seleccionados ({panosArray.length})
                 </Typography>
               </Box>
               
@@ -267,16 +301,16 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados }) => {
                     <TableRow>
                       <TableCell><strong>Descripción</strong></TableCell>
                       <TableCell><strong>Tipo</strong></TableCell>
-                      <TableCell><strong>Dimensiones</strong></TableCell>
-                      <TableCell><strong>Área Disponible (m²)</strong></TableCell>
+                      <TableCell><strong>Dimensiones Disponibles</strong></TableCell>
+                      <TableCell><strong>Dimensiones a Tomar</strong></TableCell>
+                      <TableCell><strong>Área a Tomar (m²)</strong></TableCell>
                       <TableCell><strong>Estado</strong></TableCell>
                       <TableCell><strong>Ubicación</strong></TableCell>
-                      <TableCell><strong>Área a Tomar (m²)</strong></TableCell>
                       <TableCell><strong>Acciones</strong></TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {panosSeleccionados.map((p, idx) => (
+                    {panosArray.map((p, idx) => (
                       <TableRow key={idx} hover>
                         <TableCell>
                           <Typography variant="body2" fontWeight="medium">
@@ -297,8 +331,13 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados }) => {
                           </Typography>
                         </TableCell>
                         <TableCell>
-                          <Typography variant="body2" fontWeight="medium">
-                            {(Number(p.area_m2) || 0).toFixed(2)}
+                          <Typography variant="body2" fontWeight="medium" color="primary">
+                            {Number(p.largo_tomar || 0).toFixed(2)} × {Number(p.ancho_tomar || 0).toFixed(2)} m
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight="medium" color="success.main">
+                            {(Number(p.cantidad) || 0).toFixed(2)}
                           </Typography>
                         </TableCell>
                         <TableCell>
@@ -314,17 +353,10 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados }) => {
                           </Typography>
                         </TableCell>
                         <TableCell>
-                          <Typography variant="body2" fontWeight="medium" color="primary">
-                            {(Number(p.cantidad) || 0).toFixed(2)}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
                           <IconButton
                             size="small"
                             color="error"
-                            onClick={() => {
-                              setPanosSeleccionados(prev => prev.filter((_, i) => i !== idx));
-                            }}
+                            onClick={() => handleEliminarPano(idx)}
                             title="Eliminar paño"
                           >
                             <ClearIcon />
@@ -367,8 +399,13 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados }) => {
               <Grid container spacing={2}>
                 <Grid item xs={12} md={3}>
                   <FormControl fullWidth size="small">
-                    <InputLabel>Tipo de Red</InputLabel>
-                    <Select value={filtros.tipo_red} onChange={handleFiltroChange('tipo_red')}>
+                    <InputLabel id="tipo-red-label">Tipo de Red</InputLabel>
+                    <Select 
+                      labelId="tipo-red-label"
+                      value={filtros.tipo_red} 
+                      onChange={handleFiltroChange('tipo_red')}
+                      label="Tipo de Red"
+                    >
                       <MenuItem value="">Todos los tipos</MenuItem>
                       {tiposRed.map(tipo => (
                         <MenuItem key={tipo} value={tipo}>{tipo}</MenuItem>
@@ -378,8 +415,13 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados }) => {
                 </Grid>
                 <Grid item xs={12} md={3}>
                   <FormControl fullWidth size="small">
-                    <InputLabel>Estado</InputLabel>
-                    <Select value={filtros.estado} onChange={handleFiltroChange('estado')}>
+                    <InputLabel id="estado-label">Estado</InputLabel>
+                    <Select 
+                      labelId="estado-label"
+                      value={filtros.estado} 
+                      onChange={handleFiltroChange('estado')}
+                      label="Estado"
+                    >
                       <MenuItem value="">Todos los estados</MenuItem>
                       {estados.map(estado => (
                         <MenuItem key={estado} value={estado}>{estado}</MenuItem>
@@ -389,8 +431,13 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados }) => {
                 </Grid>
                 <Grid item xs={12} md={3}>
                   <FormControl fullWidth size="small">
-                    <InputLabel>Ubicación</InputLabel>
-                    <Select value={filtros.ubicacion} onChange={handleFiltroChange('ubicacion')}>
+                    <InputLabel id="ubicacion-label">Ubicación</InputLabel>
+                    <Select 
+                      labelId="ubicacion-label"
+                      value={filtros.ubicacion} 
+                      onChange={handleFiltroChange('ubicacion')}
+                      label="Ubicación"
+                    >
                       <MenuItem value="">Todas las ubicaciones</MenuItem>
                       {ubicaciones.map(ubicacion => (
                         <MenuItem key={ubicacion} value={ubicacion}>{ubicacion}</MenuItem>
@@ -517,6 +564,7 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados }) => {
                       <TableCell><strong>Área (m²)</strong></TableCell>
                       <TableCell><strong>Estado</strong></TableCell>
                       <TableCell><strong>Ubicación</strong></TableCell>
+                      <TableCell><strong>Especificaciones</strong></TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -575,6 +623,11 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados }) => {
                             {pano.ubicacion || 'S/L'}
                           </Typography>
                         </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" style={{ whiteSpace: 'pre-line', fontSize: '0.75rem' }}>
+                            {pano.especificaciones || 'Sin especificaciones'}
+                          </Typography>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -604,22 +657,81 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados }) => {
                       Dimensiones: {Number(panoSeleccionado.largo_m || 0).toFixed(2)} × {Number(panoSeleccionado.ancho_m || 0).toFixed(2)} m • 
                       Área Disponible: {(Number(panoSeleccionado.area_m2) || 0).toFixed(2)} m²
                     </Typography>
+                    {panoSeleccionado.especificaciones && (
+                      <Typography variant="body2" color="textSecondary" style={{ whiteSpace: 'pre-line', marginTop: 1 }}>
+                        <strong>Especificaciones:</strong><br />
+                        {panoSeleccionado.especificaciones}
+                      </Typography>
+                    )}
                   </Grid>
-                  <Grid item xs={12} md={4}>
-                    <TextField
-                      label="Área a tomar (m²)"
-                      type="number"
-                      value={areaTomar}
-                      onChange={(e) => setAreaTomar(Number(e.target.value))}
-                      inputProps={{ 
-                        min: 0.01, 
-                        max: Number(panoSeleccionado.area_m2) || 0,
-                        step: 0.01 
-                      }}
-                      size="small"
-                      fullWidth
-                      helperText={`Máximo: ${(Number(panoSeleccionado.area_m2) || 0).toFixed(2)} m²`}
-                    />
+                  
+                  {/* Campos de dimensiones */}
+                  <Grid item xs={12}>
+                    <Box sx={{ 
+                      p: 2, 
+                      bgcolor: 'grey.50', 
+                      borderRadius: 2,
+                      border: '1px solid',
+                      borderColor: 'grey.200'
+                    }}>
+                      <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+                        Dimensiones a tomar:
+                      </Typography>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} md={4}>
+                          <TextField
+                            label="Largo a tomar (m)"
+                            type="number"
+                            value={largoTomar}
+                            onChange={(e) => setLargoTomar(Number(e.target.value))}
+                            inputProps={{ 
+                              min: 0.01, 
+                              max: Number(panoSeleccionado.largo_m) || 0,
+                              step: 0.01 
+                            }}
+                            size="small"
+                            fullWidth
+                            helperText={`Máximo: ${(Number(panoSeleccionado.largo_m) || 0).toFixed(2)} m`}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={4}>
+                          <TextField
+                            label="Ancho a tomar (m)"
+                            type="number"
+                            value={anchoTomar}
+                            onChange={(e) => setAnchoTomar(Number(e.target.value))}
+                            inputProps={{ 
+                              min: 0.01, 
+                              max: Number(panoSeleccionado.ancho_m) || 0,
+                              step: 0.01 
+                            }}
+                            size="small"
+                            fullWidth
+                            helperText={`Máximo: ${(Number(panoSeleccionado.ancho_m) || 0).toFixed(2)} m`}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={4}>
+                          <TextField
+                            label="Área a tomar (m²)"
+                            type="text"
+                            value={(largoTomar * anchoTomar).toFixed(2)}
+                            size="small"
+                            fullWidth
+                            InputProps={{
+                              readOnly: true,
+                              style: { 
+                                backgroundColor: '#FFFFFF',
+                                color: 'black',
+                                fontWeight: 'bold'
+                              }
+                            }}
+                            InputLabelProps={{
+                              style: { color: 'black', fontWeight: 'bold' }
+                            }}
+                          />
+                        </Grid>
+                      </Grid>
+                    </Box>
                   </Grid>
                 </Grid>
               </CardContent>
@@ -631,7 +743,7 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados }) => {
           <Button 
             onClick={handleAgregar}
             variant="contained"
-            disabled={!panoSeleccionado || areaTomar < 0.01}
+            disabled={!panoSeleccionado || (largoTomar < 0.01 || anchoTomar < 0.01)}
           >
             Agregar Paño a la Orden
           </Button>

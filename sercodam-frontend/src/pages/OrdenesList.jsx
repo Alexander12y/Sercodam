@@ -22,15 +22,29 @@ import {
   Select,
   MenuItem,
   Grid,
+  Tooltip,
+  Container,
+  Pagination,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  DialogContentText,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Visibility as VisibilityIcon,
   Edit as EditIcon,
+  Refresh as RefreshIcon,
+  PlayArrow as PlayArrowIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon,
+  Pause as PauseIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchOrdenes } from '../store/slices/ordenesSlice';
+import { fetchOrdenes, cambiarEstadoOrden } from '../store/slices/ordenesSlice';
+import { useSnackbar } from 'notistack';
 
 const getEstadoColor = (estado) => {
   switch (estado) {
@@ -42,6 +56,8 @@ const getEstadoColor = (estado) => {
       return 'success';
     case 'cancelada':
       return 'error';
+    case 'pausada':
+      return 'default';
     default:
       return 'default';
   }
@@ -57,66 +73,161 @@ const getEstadoText = (estado) => {
       return 'Completada';
     case 'cancelada':
       return 'Cancelada';
+    case 'pausada':
+      return 'Pausada';
     default:
       return estado;
+  }
+};
+
+const getPrioridadColor = (prioridad) => {
+  switch (prioridad) {
+    case 'alta':
+      return 'error';
+    case 'media':
+      return 'warning';
+    case 'baja':
+      return 'success';
+    default:
+      return 'default';
+  }
+};
+
+const getPrioridadText = (prioridad) => {
+  switch (prioridad) {
+    case 'alta':
+      return 'Alta';
+    case 'media':
+      return 'Media';
+    case 'baja':
+      return 'Baja';
+    default:
+      return 'Media';
   }
 };
 
 const OrdenesList = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { ordenes, loading, error } = useSelector((state) => state.ordenes);
+  const { enqueueSnackbar } = useSnackbar();
+  const { ordenes, loading, error, pagination } = useSelector((state) => state.ordenes);
   
   const [filtroEstado, setFiltroEstado] = useState('');
   const [filtroBusqueda, setFiltroBusqueda] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    orden: null,
+    action: null,
+    title: '',
+    message: ''
+  });
 
   useEffect(() => {
-    dispatch(fetchOrdenes());
-  }, [dispatch]);
+    loadOrdenes();
+  }, [currentPage, filtroEstado, filtroBusqueda]);
 
-  const ordenesFiltradas = ordenes.filter(orden => {
-    const cumpleEstado = !filtroEstado || orden.estado === filtroEstado;
-    const cumpleBusqueda = !filtroBusqueda || 
-      orden.numero_op?.toLowerCase().includes(filtroBusqueda.toLowerCase()) ||
-      orden.descripcion?.toLowerCase().includes(filtroBusqueda.toLowerCase());
-    
-    return cumpleEstado && cumpleBusqueda;
-  });
+  const loadOrdenes = () => {
+    const params = {
+      page: currentPage,
+      limit: 20,
+      ...(filtroEstado && { estado: filtroEstado }),
+      ...(filtroBusqueda && { cliente: filtroBusqueda })
+    };
+    dispatch(fetchOrdenes(params));
+  };
 
   const handleVerOrden = (id) => {
     navigate(`/ordenes/${id}`);
   };
 
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
+  const handleEditarOrden = (id) => {
+    navigate(`/ordenes/${id}/editar`);
+  };
 
-  if (error) {
+  const handleCambiarEstado = (orden, nuevoEstado) => {
+    const acciones = {
+      'en_proceso': { title: 'Iniciar Producción', message: '¿Estás seguro de que quieres iniciar la producción de esta orden?' },
+      'completada': { title: 'Completar Orden', message: '¿Estás seguro de que quieres marcar esta orden como completada?' },
+      'cancelada': { title: 'Cancelar Orden', message: '¿Estás seguro de que quieres cancelar esta orden? Esta acción no se puede deshacer.' },
+      'pausada': { title: 'Pausar Orden', message: '¿Estás seguro de que quieres pausar esta orden?' }
+    };
+
+    setConfirmDialog({
+      open: true,
+      orden,
+      action: nuevoEstado,
+      title: acciones[nuevoEstado]?.title || 'Cambiar Estado',
+      message: acciones[nuevoEstado]?.message || '¿Estás seguro de que quieres cambiar el estado de esta orden?'
+    });
+  };
+
+  const confirmarAccion = async () => {
+    try {
+      await dispatch(cambiarEstadoOrden({ 
+        id: confirmDialog.orden.id_op, 
+        estado: confirmDialog.action 
+      })).unwrap();
+      
+      enqueueSnackbar(`Estado cambiado exitosamente a ${getEstadoText(confirmDialog.action)}`, { 
+        variant: 'success' 
+      });
+      
+      loadOrdenes(); // Recargar la lista
+    } catch (error) {
+      enqueueSnackbar('Error al cambiar el estado de la orden', { 
+        variant: 'error' 
+      });
+    } finally {
+      setConfirmDialog({ open: false, orden: null, action: null, title: '', message: '' });
+    }
+  };
+
+  const canStart = (estado) => estado === 'pendiente';
+  const canComplete = (estado) => estado === 'en_proceso';
+  const canCancel = (estado) => ['pendiente', 'en_proceso', 'pausada'].includes(estado);
+  const canPause = (estado) => estado === 'en_proceso';
+
+  if (loading && ordenes.length === 0) {
     return (
-      <Alert severity="error" sx={{ mb: 2 }}>
-        Error al cargar las órdenes: {error}
-      </Alert>
+      <Container maxWidth="xl">
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+          <CircularProgress />
+        </Box>
+      </Container>
     );
   }
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+    <Container maxWidth="xl">
+      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h4" component="h1">
           Órdenes de Producción
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => navigate('/ordenes/nueva')}
-        >
-          Nueva Orden
-        </Button>
+        <Box>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={loadOrdenes}
+            sx={{ mr: 1 }}
+          >
+            Actualizar
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => navigate('/ordenes/nueva')}
+          >
+            Nueva Orden
+          </Button>
+        </Box>
       </Box>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Error al cargar las órdenes: {error}
+        </Alert>
+      )}
 
       {/* Filtros */}
       <Card sx={{ mb: 3 }}>
@@ -125,10 +236,11 @@ const OrdenesList = () => {
             <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
-                label="Buscar por número o descripción"
+                label="Buscar por cliente"
                 value={filtroBusqueda}
                 onChange={(e) => setFiltroBusqueda(e.target.value)}
                 size="small"
+                placeholder="Escribe el nombre del cliente..."
               />
             </Grid>
             <Grid item xs={12} md={6}>
@@ -139,11 +251,12 @@ const OrdenesList = () => {
                   label="Estado"
                   onChange={(e) => setFiltroEstado(e.target.value)}
                 >
-                  <MenuItem value="">Todos</MenuItem>
+                  <MenuItem value="">Todos los estados</MenuItem>
                   <MenuItem value="pendiente">Pendiente</MenuItem>
                   <MenuItem value="en_proceso">En Proceso</MenuItem>
                   <MenuItem value="completada">Completada</MenuItem>
                   <MenuItem value="cancelada">Cancelada</MenuItem>
+                  <MenuItem value="pausada">Pausada</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
@@ -152,20 +265,20 @@ const OrdenesList = () => {
       </Card>
 
       {/* Tabla de órdenes */}
-      <TableContainer component={Paper}>
+      <TableContainer component={Paper} sx={{ mb: 2 }}>
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Número OP</TableCell>
-              <TableCell>Descripción</TableCell>
-              <TableCell>Fecha Creación</TableCell>
-              <TableCell>Estado</TableCell>
-              <TableCell>Prioridad</TableCell>
-              <TableCell>Acciones</TableCell>
+              <TableCell><strong>Número OP</strong></TableCell>
+              <TableCell><strong>Cliente</strong></TableCell>
+              <TableCell><strong>Fecha Creación</strong></TableCell>
+              <TableCell><strong>Estado</strong></TableCell>
+              <TableCell><strong>Prioridad</strong></TableCell>
+              <TableCell><strong>Acciones</strong></TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {ordenesFiltradas.length === 0 ? (
+            {ordenes.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} align="center">
                   <Typography variant="body2" color="text.secondary">
@@ -174,12 +287,37 @@ const OrdenesList = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              ordenesFiltradas.map((orden) => (
+              ordenes.map((orden) => (
                 <TableRow key={orden.id_op} hover>
-                  <TableCell>{orden.numero_op}</TableCell>
-                  <TableCell>{orden.descripcion}</TableCell>
                   <TableCell>
-                    {orden.fecha_creacion ? new Date(orden.fecha_creacion).toLocaleDateString() : '-'}
+                    <Typography variant="body2" fontFamily="monospace" fontWeight="medium">
+                      {orden.numero_op}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" fontWeight="medium">
+                      {orden.cliente}
+                    </Typography>
+                    {orden.observaciones && (
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        {orden.observaciones}
+                      </Typography>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {orden.fecha_creacion ? 
+                      new Date(orden.fecha_creacion).toLocaleDateString('es-ES', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      }) : 
+                      (orden.fecha_op ? 
+                        new Date(orden.fecha_op).toLocaleDateString('es-ES', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        }) : '-')
+                    }
                   </TableCell>
                   <TableCell>
                     <Chip
@@ -190,26 +328,82 @@ const OrdenesList = () => {
                   </TableCell>
                   <TableCell>
                     <Chip
-                      label={orden.prioridad === 'media' ? 'Media' : orden.prioridad || 'Media'}
-                      color={orden.prioridad === 'alta' ? 'error' : 'default'}
+                      label={getPrioridadText(orden.prioridad)}
+                      color={getPrioridadColor(orden.prioridad)}
                       size="small"
+                      variant="outlined"
                     />
                   </TableCell>
                   <TableCell>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleVerOrden(orden.id_op)}
-                      title="Ver detalles"
-                    >
-                      <VisibilityIcon />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => navigate(`/ordenes/${orden.id_op}/editar`)}
-                      title="Editar"
-                    >
-                      <EditIcon />
-                    </IconButton>
+                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                      <Tooltip title="Ver detalles">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleVerOrden(orden.id_op)}
+                          color="primary"
+                        >
+                          <VisibilityIcon />
+                        </IconButton>
+                      </Tooltip>
+                      
+                      <Tooltip title="Editar">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleEditarOrden(orden.id_op)}
+                          color="warning"
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+
+                      {canStart(orden.estado) && (
+                        <Tooltip title="Iniciar Producción">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleCambiarEstado(orden, 'en_proceso')}
+                            color="success"
+                          >
+                            <PlayArrowIcon />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+
+                      {canComplete(orden.estado) && (
+                        <Tooltip title="Completar">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleCambiarEstado(orden, 'completada')}
+                            color="success"
+                          >
+                            <CheckCircleIcon />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+
+                      {canPause(orden.estado) && (
+                        <Tooltip title="Pausar">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleCambiarEstado(orden, 'pausada')}
+                            color="warning"
+                          >
+                            <PauseIcon />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+
+                      {canCancel(orden.estado) && (
+                        <Tooltip title="Cancelar">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleCambiarEstado(orden, 'cancelada')}
+                            color="error"
+                          >
+                            <CancelIcon />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Box>
                   </TableCell>
                 </TableRow>
               ))
@@ -218,12 +412,55 @@ const OrdenesList = () => {
         </Table>
       </TableContainer>
 
+      {/* Paginación */}
+      {pagination && pagination.totalPages > 1 && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+          <Pagination
+            count={pagination.totalPages}
+            page={currentPage}
+            onChange={(event, value) => setCurrentPage(value)}
+            color="primary"
+            showFirstButton
+            showLastButton
+          />
+        </Box>
+      )}
+
+      {/* Información de resultados */}
       <Box sx={{ mt: 2, textAlign: 'center' }}>
         <Typography variant="body2" color="text.secondary">
-          Mostrando {ordenesFiltradas.length} de {ordenes.length} órdenes
+          Mostrando {ordenes.length} de {pagination?.total || 0} órdenes
         </Typography>
       </Box>
-    </Box>
+
+      {/* Dialog de confirmación */}
+      <Dialog
+        open={confirmDialog.open}
+        onClose={() => setConfirmDialog({ open: false, orden: null, action: null, title: '', message: '' })}
+      >
+        <DialogTitle>{confirmDialog.title}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {confirmDialog.message}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setConfirmDialog({ open: false, orden: null, action: null, title: '', message: '' })}
+          >
+            Cancelar
+          </Button>
+          <Button 
+            onClick={confirmarAccion} 
+            variant="contained" 
+            color="primary"
+            autoFocus
+          >
+            Confirmar
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Container>
   );
 };
 

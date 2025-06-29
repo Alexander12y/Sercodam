@@ -2,6 +2,7 @@ const db = require('../config/database');
 const { cache } = require('../config/redis');
 const logger = require('../config/logger');
 const { NotFoundError, ValidationError, ConflictError } = require('../middleware/errorHandler');
+const fs = require('fs');
 
 // Función helper para verificar si existe una vista materializada
 async function checkViewExists(viewName) {
@@ -442,13 +443,14 @@ const ordenesController = {
             const [ordenCreada] = await trx('orden_produccion')
                 .insert({
                     numero_op,
-                fecha_op: fechaActual,
-                cliente,
-                observaciones,
+                    fecha_op: fechaActual,
+                    fecha_creacion: fechaActual,
+                    cliente,
+                    observaciones,
                     prioridad,
                     fecha_inicio: fecha_inicio ? new Date(fecha_inicio) : null,
                     fecha_fin: fecha_fin ? new Date(fecha_fin) : null,
-                estado: 'pendiente'
+                    estado: 'pendiente'
                 })
                 .returning('id_op');
 
@@ -632,6 +634,9 @@ const ordenesController = {
                 throw new ValidationError('Estado inválido');
             }
 
+            // Guardar estado anterior para logging
+            const estadoAnterior = orden.estado;
+
             // Actualizar estado
             await trx('orden_produccion')
                 .where('id_op', id)
@@ -639,9 +644,118 @@ const ordenesController = {
 
             await trx.commit();
 
+            // Si el estado cambió a 'en_proceso', enviar webhook a Make.com
+            if (estado === 'en_proceso' && estadoAnterior !== 'en_proceso') {
+                try {
+                    const makeWebhookService = require('../services/makeWebhookService');
+                    
+                    // Obtener datos completos de la orden para el webhook
+                    const ordenCompleta = await db('orden_produccion as op')
+                        .where('op.id_op', id)
+                        .select('op.*')
+                        .first();
+
+                    // Obtener detalles de paños
+                    const panos = await db('orden_produccion_detalle as opd')
+                        .leftJoin('pano as p', 'opd.id_item', 'p.id_item')
+                        .leftJoin('red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
+                        .where('opd.id_op', id)
+                        .where('opd.tipo_item', 'PANO')
+                        .select(
+                            'opd.*',
+                            'p.largo_m',
+                            'p.ancho_m',
+                            'p.area_m2',
+                            'rp.tipo_red'
+                        );
+
+                    // Obtener detalles de materiales
+                    const materiales = await db('orden_produccion_detalle as opd')
+                        .leftJoin('materiales_extras as me', 'opd.id_item', 'me.id_item')
+                        .where('opd.id_op', id)
+                        .where('opd.tipo_item', 'EXTRA')
+                        .select(
+                            'opd.*',
+                            'me.descripcion',
+                            'me.categoria',
+                            'me.unidad'
+                        );
+
+                    // Obtener herramientas asignadas
+                    const herramientas = await db('herramienta_ordenada as ho')
+                        .leftJoin('herramientas as h', 'ho.id_item', 'h.id_item')
+                        .where('ho.id_op', id)
+                        .select(
+                            'ho.*',
+                            'h.descripcion',
+                            'h.categoria',
+                            'h.marca'
+                        );
+
+                    // Preparar datos completos para el webhook
+                    const ordenData = {
+                        ...ordenCompleta,
+                        panos: panos.map(pano => ({
+                            largo_m: pano.largo_m,
+                            ancho_m: pano.ancho_m,
+                            cantidad: pano.cantidad,
+                            tipo_red: pano.tipo_red || 'nylon',
+                            area_m2: pano.area_m2
+                        })),
+                        materiales: materiales.map(material => ({
+                            descripcion: material.descripcion,
+                            categoria: material.categoria,
+                            cantidad: material.cantidad,
+                            unidad: material.unidad
+                        })),
+                        herramientas: herramientas.map(herramienta => ({
+                            nombre: herramienta.descripcion || 'Herramienta',
+                            descripcion: herramienta.descripcion || '',
+                            categoria: herramienta.categoria || 'General',
+                            cantidad: herramienta.cantidad || 1
+                        }))
+                    };
+
+                    // Enviar webhook de forma asíncrona (no bloquear la respuesta)
+                    setImmediate(async () => {
+                        try {
+                            const resultado = await makeWebhookService.enviarOrdenEnProceso(ordenData);
+                            if (resultado.success) {
+                                logger.info('Webhook enviado exitosamente al cambiar estado a en_proceso', {
+                                    ordenId: id,
+                                    estado: estado
+                                });
+                            } else {
+                                logger.warn('Error enviando webhook al cambiar estado a en_proceso', {
+                                    ordenId: id,
+                                    error: resultado.error
+                                });
+                            }
+                        } catch (webhookError) {
+                            logger.error('Error crítico enviando webhook', {
+                                ordenId: id,
+                                error: webhookError.message
+                            });
+                        }
+                    });
+
+                } catch (webhookError) {
+                    logger.error('Error preparando webhook', {
+                        ordenId: id,
+                        error: webhookError.message
+                    });
+                }
+            }
+
             res.json({
                 success: true,
-                message: `Estado de orden cambiado a ${estado}`
+                message: `Estado de orden cambiado a ${estado}`,
+                data: {
+                    id_op: id,
+                    estado_anterior: estadoAnterior,
+                    estado_nuevo: estado,
+                    webhook_enviado: estado === 'en_proceso' && estadoAnterior !== 'en_proceso'
+                }
             });
 
         } catch (error) {
@@ -756,6 +870,194 @@ const ordenesController = {
         } catch (error) {
             logger.error('Error obteniendo estadísticas:', error);
             throw error;
+        }
+    },
+
+    // GET /api/v1/ordenes/:id/pdf - Generar PDF de orden de producción
+    generarPDF: async (req, res) => {
+        let filepath = null;
+        
+        try {
+            const { id } = req.params;
+            const pdfService = require('../services/pdfService');
+
+            logger.info('Solicitud de generación de PDF', { ordenId: id });
+
+            // Obtener orden con todos sus detalles
+            const orden = await db('orden_produccion as op')
+                .where('op.id_op', id)
+                .select('op.*')
+                .first();
+
+            if (!orden) {
+                throw new NotFoundError('Orden de producción no encontrada');
+            }
+
+            logger.info('Orden encontrada para PDF', { 
+                ordenId: id, 
+                numeroOp: orden.numero_op,
+                cliente: orden.cliente 
+            });
+
+            // Obtener detalles de paños
+            const panos = await db('orden_produccion_detalle as opd')
+                .leftJoin('pano as p', 'opd.id_item', 'p.id_item')
+                .leftJoin('red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
+                .where('opd.id_op', id)
+                .where('opd.tipo_item', 'PANO')
+                .select(
+                    'opd.*',
+                    'p.largo_m',
+                    'p.ancho_m',
+                    'p.area_m2',
+                    'p.estado as estado_pano',
+                    'rp.tipo_red',
+                    'rp.descripcion as descripcion_producto'
+                );
+
+            // Obtener detalles de materiales
+            const materiales = await db('orden_produccion_detalle as opd')
+                .leftJoin('materiales_extras as me', 'opd.id_item', 'me.id_item')
+                .where('opd.id_op', id)
+                .where('opd.tipo_item', 'EXTRA')
+                .select(
+                    'opd.*',
+                    'me.descripcion',
+                    'me.categoria',
+                    'me.unidad',
+                    'me.precioxunidad'
+                );
+
+            // Obtener herramientas asignadas
+            const herramientas = await db('herramienta_ordenada as ho')
+                .leftJoin('herramientas as h', 'ho.id_item', 'h.id_item')
+                .where('ho.id_op', id)
+                .select(
+                    'ho.*',
+                    'h.descripcion',
+                    'h.categoria',
+                    'h.marca'
+                );
+
+            logger.info('Datos obtenidos para PDF', {
+                ordenId: id,
+                panosCount: panos.length,
+                materialesCount: materiales.length,
+                herramientasCount: herramientas.length
+            });
+
+            // Preparar datos para el PDF
+            const ordenData = {
+                ...orden,
+                panos: panos.map(pano => ({
+                    largo_m: pano.largo_m || 0,
+                    ancho_m: pano.ancho_m || 0,
+                    cantidad: pano.cantidad || 1,
+                    tipo_red: pano.tipo_red || 'nylon',
+                    calibre: '18', // Valor por defecto
+                    cuadro: '1"', // Valor por defecto
+                    torsion: 'torcida', // Valor por defecto
+                    refuerzo: 'con refuerzo', // Valor por defecto
+                    color: 'teñida', // Valor por defecto
+                    precio_m2: pano.costo_unitario || 0
+                })),
+                materiales: materiales.map(material => ({
+                    descripcion: material.descripcion || 'Material',
+                    categoria: material.categoria || 'General',
+                    cantidad: material.cantidad || 0,
+                    unidad: material.unidad || 'unidad',
+                    precio_unitario: material.precioxunidad || 0,
+                    precio_total: material.costo_total || 0
+                })),
+                herramientas: herramientas.map(herramienta => ({
+                    nombre: herramienta.descripcion || 'Herramienta',
+                    descripcion: herramienta.descripcion || '',
+                    categoria: herramienta.categoria || 'General',
+                    cantidad: herramienta.cantidad || 1
+                }))
+            };
+
+            logger.info('Generando PDF con datos preparados', { ordenId: id });
+
+            // Generar PDF
+            const { filepath: generatedFilepath, filename } = await pdfService.generateOrdenProduccionPDF(ordenData);
+            filepath = generatedFilepath;
+
+            logger.info('PDF generado exitosamente', { 
+                ordenId: id, 
+                filepath, 
+                filename 
+            });
+
+            // Verificar que el archivo existe
+            if (!fs.existsSync(filepath)) {
+                throw new Error('El archivo PDF no se generó correctamente');
+            }
+
+            // Obtener estadísticas del archivo
+            const stats = fs.statSync(filepath);
+            logger.info('Archivo PDF listo para descarga', {
+                ordenId: id,
+                filename,
+                size: stats.size,
+                filepath
+            });
+
+            // Configurar headers para descarga
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            res.setHeader('Content-Length', stats.size);
+
+            // Enviar archivo
+            res.download(filepath, filename, (err) => {
+                if (err) {
+                    logger.error('Error enviando PDF:', err);
+                    if (!res.headersSent) {
+                        res.status(500).json({
+                            success: false,
+                            message: 'Error enviando archivo PDF',
+                            error: err.message
+                        });
+                    }
+                } else {
+                    logger.info('PDF enviado exitosamente', { ordenId: id, filename });
+                }
+
+                // Limpiar archivo temporal después de enviarlo
+                setTimeout(() => {
+                    try {
+                        if (fs.existsSync(filepath)) {
+                            fs.unlinkSync(filepath);
+                            logger.info('Archivo PDF temporal eliminado:', filename);
+                        }
+                    } catch (cleanupError) {
+                        logger.error('Error eliminando archivo temporal:', cleanupError);
+                    }
+                }, 1000);
+            });
+
+        } catch (error) {
+            logger.error('Error generando PDF:', error);
+            
+            // Limpiar archivo temporal si existe
+            if (filepath && fs.existsSync(filepath)) {
+                try {
+                    fs.unlinkSync(filepath);
+                    logger.info('Archivo temporal eliminado después de error:', filepath);
+                } catch (cleanupError) {
+                    logger.error('Error eliminando archivo temporal después de error:', cleanupError);
+                }
+            }
+
+            // Enviar respuesta de error
+            if (!res.headersSent) {
+                res.status(500).json({
+                    success: false,
+                    message: 'Error generando PDF',
+                    error: error.message,
+                    ordenId: req.params.id
+                });
+            }
         }
     }
 };

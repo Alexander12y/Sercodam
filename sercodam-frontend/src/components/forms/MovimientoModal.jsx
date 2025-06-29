@@ -7,47 +7,43 @@ import {
   Button,
   TextField,
   Grid,
-  Typography,
   Box,
+  Typography,
   Alert,
+  CircularProgress,
   Chip
 } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
-import { 
-  entradaMaterial, 
-  salidaMaterial,
-  clearError,
-  clearSuccessMessage 
-} from '../../store/slices/materialesSlice';
+import { entradaHerramienta, salidaHerramienta, clearError } from '../../store/slices/herramientasSlice';
 
-const MovimientoModal = ({ open, onClose, item, tipo, onSuccess, apiEndpoint }) => {
+const MovimientoModal = ({ open, onClose, item, tipo, onSuccess, tipoItem = 'herramienta' }) => {
   const dispatch = useDispatch();
-  const { loading, error, successMessage } = useSelector((state) => state.materiales);
+  const { loading, error } = useSelector((state) => state.herramientas);
   
   const [formData, setFormData] = useState({
     cantidad: '',
-    descripcion: ''
+    notas: ''
   });
+
+  const isEntrada = tipo === 'entrada';
 
   useEffect(() => {
     if (open) {
       setFormData({
         cantidad: '',
-        descripcion: ''
+        notas: ''
       });
     }
   }, [open]);
 
   useEffect(() => {
-    if (successMessage) {
+    if (error) {
       const timer = setTimeout(() => {
-        dispatch(clearSuccessMessage());
-        onSuccess();
-        onClose();
-      }, 1000);
+        dispatch(clearError());
+      }, 5000);
       return () => clearTimeout(timer);
     }
-  }, [successMessage, dispatch, onSuccess, onClose]);
+  }, [error, dispatch]);
 
   const handleInputChange = (field) => (event) => {
     setFormData(prev => ({
@@ -59,34 +55,34 @@ const MovimientoModal = ({ open, onClose, item, tipo, onSuccess, apiEndpoint }) 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!item || !formData.cantidad || parseFloat(formData.cantidad) <= 0) {
+    if (!formData.cantidad || parseFloat(formData.cantidad) <= 0) {
       return;
     }
 
-    const movimientoData = {
-      id: item.id_item,
-      cantidad: parseFloat(formData.cantidad),
-      descripcion: formData.descripcion
-    };
+    try {
+      const movimientoData = {
+        id: item.id_item,
+        cantidad: parseFloat(formData.cantidad),
+        notas: formData.notas || `${isEntrada ? 'Entrada' : 'Salida'} de ${tipoItem}`
+      };
 
-    if (tipo === 'entrada') {
-      await dispatch(entradaMaterial(movimientoData));
-    } else {
-      await dispatch(salidaMaterial(movimientoData));
+      if (isEntrada) {
+        await dispatch(entradaHerramienta(movimientoData)).unwrap();
+      } else {
+        await dispatch(salidaHerramienta(movimientoData)).unwrap();
+      }
+      
+      onSuccess();
+      onClose();
+    } catch (error) {
+      console.error('Error registrando movimiento:', error);
     }
   };
 
   const handleClose = () => {
-    dispatch(clearError());
-    onClose();
-  };
-
-  const getTipoColor = () => {
-    return tipo === 'entrada' ? 'success' : 'warning';
-  };
-
-  const getTipoText = () => {
-    return tipo === 'entrada' ? 'Entrada' : 'Salida';
+    if (!loading) {
+      onClose();
+    }
   };
 
   if (!item) return null;
@@ -94,18 +90,8 @@ const MovimientoModal = ({ open, onClose, item, tipo, onSuccess, apiEndpoint }) 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Chip 
-            label={getTipoText()} 
-            color={getTipoColor()} 
-            size="small"
-          />
-          <Typography variant="h6">
-            {getTipoText()} de Material
-          </Typography>
-        </Box>
+        {isEntrada ? 'Registrar Entrada' : 'Registrar Salida'} - {item.descripcion}
       </DialogTitle>
-      
       <form onSubmit={handleSubmit}>
         <DialogContent>
           {error && (
@@ -114,38 +100,54 @@ const MovimientoModal = ({ open, onClose, item, tipo, onSuccess, apiEndpoint }) 
             </Alert>
           )}
           
-          {/* Información del material */}
+          {/* Información del item */}
           <Box sx={{ mb: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Material seleccionado:
-            </Typography>
-            <Typography variant="h6" gutterBottom>
-              {item.descripcion}
+              Información del {tipoItem}
             </Typography>
             <Grid container spacing={1}>
               <Grid item xs={6}>
                 <Typography variant="body2" color="text.secondary">
-                  ID: {item.id_material_extra}
+                  Código:
+                </Typography>
+                <Typography variant="body1" fontFamily="monospace">
+                  {item.id_herramienta || item.id_material || item.id_pano}
                 </Typography>
               </Grid>
               <Grid item xs={6}>
                 <Typography variant="body2" color="text.secondary">
-                  Categoría: {item.categoria}
+                  Stock Actual:
+                </Typography>
+                <Typography variant="body1" fontWeight="bold">
+                  {item.cantidad_disponible || 0} {item.unidad || 'unidad'}
                 </Typography>
               </Grid>
-              <Grid item xs={6}>
-                <Typography variant="body2" color="text.secondary">
-                  Stock actual: {item.cantidad_disponible || 0} {item.unidad || 'unidad'}
-                </Typography>
-              </Grid>
-              <Grid item xs={6}>
-                <Typography variant="body2" color="text.secondary">
-                  Ubicación: {item.ubicacion}
-                </Typography>
-              </Grid>
+              {item.categoria && (
+                <Grid item xs={6}>
+                  <Typography variant="body2" color="text.secondary">
+                    Categoría:
+                  </Typography>
+                  <Chip label={item.categoria} size="small" />
+                </Grid>
+              )}
+              {item.estado_calidad && (
+                <Grid item xs={6}>
+                  <Typography variant="body2" color="text.secondary">
+                    Estado:
+                  </Typography>
+                  <Chip 
+                    label={item.estado_calidad} 
+                    size="small" 
+                    color={
+                      item.estado_calidad === 'Bueno' ? 'success' : 
+                      item.estado_calidad === 'Regular' ? 'warning' : 'error'
+                    }
+                  />
+                </Grid>
+              )}
             </Grid>
           </Box>
-
+          
           <Grid container spacing={2}>
             <Grid item xs={12}>
               <TextField
@@ -156,32 +158,30 @@ const MovimientoModal = ({ open, onClose, item, tipo, onSuccess, apiEndpoint }) 
                 onChange={handleInputChange('cantidad')}
                 required
                 inputProps={{ 
-                  min: 0, 
-                  step: item.permite_decimales ? 0.01 : 1,
-                  max: tipo === 'salida' ? item.cantidad_disponible : undefined
+                  min: 0.01, 
+                  step: 0.01,
+                  max: !isEntrada ? (item.cantidad_disponible || 0) : undefined
                 }}
-                helperText={`Cantidad a ${tipo === 'entrada' ? 'agregar' : 'retirar'} (${item.unidad || 'unidad'})`}
+                helperText={
+                  !isEntrada && item.cantidad_disponible 
+                    ? `Máximo disponible: ${item.cantidad_disponible} ${item.unidad || 'unidad'}`
+                    : ''
+                }
               />
             </Grid>
             
             <Grid item xs={12}>
               <TextField
                 fullWidth
-                label="Descripción"
-                value={formData.descripcion}
-                onChange={handleInputChange('descripcion')}
+                label="Notas"
+                value={formData.notas}
+                onChange={handleInputChange('notas')}
                 multiline
                 rows={3}
-                helperText={`Motivo de la ${tipo === 'entrada' ? 'entrada' : 'salida'} (opcional)`}
+                placeholder={`Descripción de la ${isEntrada ? 'entrada' : 'salida'}...`}
               />
             </Grid>
           </Grid>
-
-          {tipo === 'salida' && item.cantidad_disponible <= 10 && (
-            <Alert severity="warning" sx={{ mt: 2 }}>
-              Stock bajo: Solo quedan {item.cantidad_disponible} {item.unidad || 'unidad'}
-            </Alert>
-          )}
         </DialogContent>
         
         <DialogActions>
@@ -191,10 +191,11 @@ const MovimientoModal = ({ open, onClose, item, tipo, onSuccess, apiEndpoint }) 
           <Button 
             type="submit" 
             variant="contained" 
-            color={getTipoColor()}
             disabled={loading || !formData.cantidad || parseFloat(formData.cantidad) <= 0}
+            color={isEntrada ? 'success' : 'warning'}
+            startIcon={loading ? <CircularProgress size={20} /> : null}
           >
-            {loading ? 'Registrando...' : `Registrar ${getTipoText()}`}
+            {loading ? 'Registrando...' : (isEntrada ? 'Registrar Entrada' : 'Registrar Salida')}
           </Button>
         </DialogActions>
       </form>

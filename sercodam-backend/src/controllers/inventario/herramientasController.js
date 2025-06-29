@@ -1,57 +1,48 @@
 const db = require('../../config/database');
 const logger = require('../../config/logger');
-const { NotFoundError } = require('../../middleware/errorHandler');
+const { NotFoundError, ValidationError } = require('../../middleware/errorHandler');
 
 const herramientasController = {
-    // GET /api/v1/inventario/herramientas - Obtener herramientas (Catálogo 3)
+    // GET /api/v1/inventario/herramientas - Obtener herramientas
     getHerramientas: async (req, res) => {
         try {
-            // Verificar si la tabla herramientas existe
-            const tableExists = await db.schema.hasTable('herramientas');
-            if (!tableExists) {
-                return res.json({
-                    success: true,
-                    herramientas: [],
-                    message: 'Tabla de herramientas no disponible aún'
-                });
-            }
-
             const { 
                 page = 1, 
                 limit = 50, 
                 search, 
                 categoria,
-                estado,
+                estado_calidad,
                 ubicacion,
                 sortBy = 'descripcion',
                 sortOrder = 'asc'
             } = req.query;
 
-            let query = db('herramientas')
-                .select('*');
+            let query = db('herramientas as h')
+                .select('h.*');
 
             // Filtro de búsqueda
             if (search) {
                 query = query.where(function() {
-                    this.where('descripcion', 'ilike', `%${search}%`)
-                          .orWhere('id_herramienta', 'ilike', `%${search}%`)
-                          .orWhere('categoria', 'ilike', `%${search}%`);
+                    this.where('h.descripcion', 'ilike', `%${search}%`)
+                          .orWhere('h.id_herramienta', 'ilike', `%${search}%`)
+                          .orWhere('h.categoria', 'ilike', `%${search}%`)
+                          .orWhere('h.marca', 'ilike', `%${search}%`);
                 });
             }
 
             // Filtro por categoría
             if (categoria) {
-                query = query.where('categoria', categoria);
+                query = query.where('h.categoria', categoria);
             }
 
-            // Filtro por estado
-            if (estado) {
-                query = query.where('estado', estado);
+            // Filtro por estado de calidad
+            if (estado_calidad) {
+                query = query.where('h.estado_calidad', estado_calidad);
             }
 
             // Filtro por ubicación
             if (ubicacion) {
-                query = query.where('ubicacion', ubicacion);
+                query = query.where('h.ubicacion', ubicacion);
             }
 
             // Verificar si es una consulta sin paginación (limit >= 1000)
@@ -62,28 +53,29 @@ const herramientasController = {
 
             if (isNoPagination) {
                 // Consulta sin paginación
-                herramientas = await query.orderBy(sortBy, sortOrder);
+                herramientas = await query.orderBy(`h.${sortBy}`, sortOrder);
                 total = herramientas.length;
             } else {
-                // Contar total para paginación - crear query separado sin select('*')
-                const countQuery = db('herramientas');
+                // Contar total para paginación
+                const countQuery = db('herramientas as h');
                 
                 // Aplicar los mismos filtros al query de conteo
                 if (search) {
                     countQuery.where(function() {
-                        this.where('descripcion', 'ilike', `%${search}%`)
-                              .orWhere('id_herramienta', 'ilike', `%${search}%`)
-                              .orWhere('categoria', 'ilike', `%${search}%`);
+                        this.where('h.descripcion', 'ilike', `%${search}%`)
+                              .orWhere('h.id_herramienta', 'ilike', `%${search}%`)
+                              .orWhere('h.categoria', 'ilike', `%${search}%`)
+                              .orWhere('h.marca', 'ilike', `%${search}%`);
                     });
                 }
                 if (categoria) {
-                    countQuery.where('categoria', categoria);
+                    countQuery.where('h.categoria', categoria);
                 }
-                if (estado) {
-                    countQuery.where('estado', estado);
+                if (estado_calidad) {
+                    countQuery.where('h.estado_calidad', estado_calidad);
                 }
                 if (ubicacion) {
-                    countQuery.where('ubicacion', ubicacion);
+                    countQuery.where('h.ubicacion', ubicacion);
                 }
                 
                 const { count } = await countQuery.count('* as count').first();
@@ -92,36 +84,29 @@ const herramientasController = {
                 // Aplicar paginación y ordenamiento
                 const offset = (parseInt(page) - 1) * parseInt(limit);
                 herramientas = await query
-                    .orderBy(sortBy, sortOrder)
+                    .orderBy(`h.${sortBy}`, sortOrder)
                     .limit(parseInt(limit))
                     .offset(offset);
             }
 
             const response = {
                 success: true,
-                herramientas
+                data: {
+                    herramientas,
+                    pagination: isNoPagination ? null : {
+                        page: parseInt(page),
+                        limit: parseInt(limit),
+                        total,
+                        totalPages: Math.ceil(total / parseInt(limit))
+                    }
+                }
             };
-
-            // Agregar paginación solo si no es consulta sin paginación
-            if (!isNoPagination) {
-                response.pagination = {
-                    page: parseInt(page),
-                    limit: parseInt(limit),
-                    total,
-                    totalPages: Math.ceil(total / parseInt(limit))
-                };
-            }
 
             res.json(response);
 
         } catch (error) {
             logger.error('Error obteniendo herramientas:', error);
-            // En lugar de lanzar error, devolver respuesta vacía
-            res.json({
-                success: true,
-                herramientas: [],
-                message: 'Error obteniendo herramientas'
-            });
+            throw error;
         }
     },
 
@@ -147,6 +132,50 @@ const herramientasController = {
         }
     },
 
+    // GET /api/v1/inventario/herramientas/estados - Obtener estados de calidad disponibles
+    getEstados: async (req, res) => {
+        try {
+            const estados = await db('herramientas')
+                .select('estado_calidad')
+                .distinct()
+                .whereNotNull('estado_calidad')
+                .orderBy('estado_calidad');
+
+            const estadosList = estados.map(item => item.estado_calidad);
+
+            res.json({
+                success: true,
+                data: estadosList
+            });
+
+        } catch (error) {
+            logger.error('Error obteniendo estados:', error);
+            throw error;
+        }
+    },
+
+    // GET /api/v1/inventario/herramientas/ubicaciones - Obtener ubicaciones disponibles
+    getUbicaciones: async (req, res) => {
+        try {
+            const ubicaciones = await db('herramientas')
+                .select('ubicacion')
+                .distinct()
+                .whereNotNull('ubicacion')
+                .orderBy('ubicacion');
+
+            const ubicacionesList = ubicaciones.map(item => item.ubicacion);
+
+            res.json({
+                success: true,
+                data: ubicacionesList
+            });
+
+        } catch (error) {
+            logger.error('Error obteniendo ubicaciones:', error);
+            throw error;
+        }
+    },
+
     // GET /api/v1/inventario/herramientas/categoria/:categoria - Obtener herramientas por categoría
     getHerramientasPorCategoria: async (req, res) => {
         try {
@@ -160,8 +189,10 @@ const herramientasController = {
 
             res.json({
                 success: true,
-                herramientas,
-                categoria
+                data: {
+                    herramientas,
+                    categoria
+                }
             });
 
         } catch (error) {
@@ -176,7 +207,7 @@ const herramientasController = {
             const { id } = req.params;
 
             const herramienta = await db('herramientas')
-                .where('id', id)
+                .where('id_item', id)
                 .first();
 
             if (!herramienta) {
@@ -194,21 +225,196 @@ const herramientasController = {
         }
     },
 
-    // POST /api/v1/inventario/herramientas/entrada
+    // POST /api/v1/inventario/herramientas - Crear nueva herramienta
+    createHerramienta: async (req, res) => {
+        const trx = await db.transaction();
+        
+        try {
+            const {
+                id_herramienta,
+                categoria,
+                descripcion,
+                presentacion,
+                unidad,
+                cantidad_disponible,
+                marca,
+                estado_calidad,
+                ubicacion,
+                precioxunidad,
+                uso_principal
+            } = req.body;
+
+            // Verificar que el ID de herramienta no exista
+            const herramientaExistente = await trx('herramientas')
+                .where('id_herramienta', id_herramienta)
+                .first();
+
+            if (herramientaExistente) {
+                throw new ValidationError('Ya existe una herramienta con ese código');
+            }
+
+            // Crear registro en inventario_item
+            const [inventarioItem] = await trx('inventario_item')
+                .insert({
+                    tipo_item: 'HERRAMIENTA'
+                })
+                .returning('id_item');
+
+            // Crear la herramienta
+            const [herramientaCreada] = await trx('herramientas')
+                .insert({
+                    id_item: inventarioItem.id_item,
+                    id_herramienta,
+                    categoria,
+                    descripcion,
+                    presentacion,
+                    unidad: unidad || 'unidad',
+                    cantidad_disponible: cantidad_disponible || 0,
+                    marca,
+                    estado_calidad: estado_calidad || 'Bueno',
+                    ubicacion,
+                    precioxunidad,
+                    uso_principal
+                })
+                .returning('*');
+
+            await trx.commit();
+
+            res.status(201).json({
+                success: true,
+                message: 'Herramienta creada exitosamente',
+                data: herramientaCreada
+            });
+
+        } catch (error) {
+            await trx.rollback();
+            logger.error('Error creando herramienta:', error);
+            throw error;
+        }
+    },
+
+    // PUT /api/v1/inventario/herramientas/:id - Actualizar herramienta
+    updateHerramienta: async (req, res) => {
+        const trx = await db.transaction();
+        
+        try {
+            const { id } = req.params;
+            const {
+                categoria,
+                descripcion,
+                presentacion,
+                unidad,
+                cantidad_disponible,
+                marca,
+                estado_calidad,
+                ubicacion,
+                precioxunidad,
+                uso_principal
+            } = req.body;
+
+            // Verificar que la herramienta existe
+            const herramientaExistente = await trx('herramientas')
+                .where('id_item', id)
+                .first();
+
+            if (!herramientaExistente) {
+                throw new NotFoundError('Herramienta no encontrada');
+            }
+
+            // Actualizar la herramienta
+            const [herramientaActualizada] = await trx('herramientas')
+                .where('id_item', id)
+                .update({
+                    categoria,
+                    descripcion,
+                    presentacion,
+                    unidad: unidad || 'unidad',
+                    cantidad_disponible: cantidad_disponible || 0,
+                    marca,
+                    estado_calidad: estado_calidad || 'Bueno',
+                    ubicacion,
+                    precioxunidad,
+                    uso_principal
+                })
+                .returning('*');
+
+            await trx.commit();
+
+            res.json({
+                success: true,
+                message: 'Herramienta actualizada exitosamente',
+                data: herramientaActualizada
+            });
+
+        } catch (error) {
+            await trx.rollback();
+            logger.error('Error actualizando herramienta:', error);
+            throw error;
+        }
+    },
+
+    // DELETE /api/v1/inventario/herramientas/:id - Eliminar herramienta
+    deleteHerramienta: async (req, res) => {
+        const trx = await db.transaction();
+        
+        try {
+            const { id } = req.params;
+
+            // Verificar que la herramienta existe
+            const herramienta = await trx('herramientas')
+                .where('id_item', id)
+                .first();
+
+            if (!herramienta) {
+                throw new NotFoundError('Herramienta no encontrada');
+            }
+
+            // Verificar si la herramienta está asignada a alguna orden
+            const herramientaAsignada = await trx('herramienta_ordenada')
+                .where('id_item', id)
+                .first();
+
+            if (herramientaAsignada) {
+                throw new ValidationError('No se puede eliminar la herramienta porque está asignada a una orden');
+            }
+
+            // Eliminar la herramienta (esto también eliminará el registro en inventario_item por CASCADE)
+            await trx('herramientas')
+                .where('id_item', id)
+                .del();
+
+            await trx.commit();
+
+            res.json({
+                success: true,
+                message: 'Herramienta eliminada exitosamente'
+            });
+
+        } catch (error) {
+            await trx.rollback();
+            logger.error('Error eliminando herramienta:', error);
+            throw error;
+        }
+    },
+
+    // POST /api/v1/inventario/herramientas/entrada - Registrar entrada de herramienta
     entradaHerramienta: async (req, res) => {
         const trx = await db.transaction();
         
         try {
-            const { id, cantidad, descripcion } = req.body;
+            const { id, cantidad, notas } = req.body;
+            
             if (!id || !cantidad || isNaN(cantidad) || cantidad <= 0) {
-                return res.status(400).json({ success: false, message: 'Datos inválidos' });
+                throw new ValidationError('Datos inválidos');
             }
 
             // Verificar que la herramienta existe
-            const herramienta = await trx('herramientas').where({ id }).first();
+            const herramienta = await trx('herramientas')
+                .where('id_item', id)
+                .first();
+
             if (!herramienta) {
-                await trx.rollback();
-                return res.status(404).json({ success: false, message: 'Herramienta no encontrada' });
+                throw new NotFoundError('Herramienta no encontrada');
             }
 
             // Registrar movimiento
@@ -217,18 +423,17 @@ const herramientasController = {
                 tipo_mov: 'AJUSTE_IN',
                 cantidad,
                 unidad: herramienta.unidad || 'unidad',
-                notas: descripcion || null,
+                notas: notas || 'Entrada de herramienta',
                 fecha: new Date(),
                 id_usuario: req.user.id
             });
 
             // Actualizar cantidad de la herramienta
-            const nuevaCantidad = (herramienta.cantidad || 0) + parseFloat(cantidad);
+            const nuevaCantidad = (herramienta.cantidad_disponible || 0) + parseFloat(cantidad);
             await trx('herramientas')
-                .where({ id })
+                .where('id_item', id)
                 .update({
-                    cantidad: nuevaCantidad,
-                    updated_at: db.fn.now()
+                    cantidad_disponible: nuevaCantidad
                 });
 
             await trx.commit();
@@ -239,44 +444,42 @@ const herramientasController = {
                 data: {
                     id,
                     cantidad_agregada: cantidad,
-                    cantidad_anterior: herramienta.cantidad || 0,
+                    cantidad_anterior: herramienta.cantidad_disponible || 0,
                     cantidad_nueva: nuevaCantidad
                 }
             });
         } catch (error) {
             await trx.rollback();
             logger.error('Error en entrada de herramienta:', error);
-            res.status(500).json({ success: false, message: 'Error registrando entrada' });
+            throw error;
         }
     },
 
-    // POST /api/v1/inventario/herramientas/salida
+    // POST /api/v1/inventario/herramientas/salida - Registrar salida de herramienta
     salidaHerramienta: async (req, res) => {
         const trx = await db.transaction();
         
         try {
-            const { id, cantidad, descripcion } = req.body;
+            const { id, cantidad, notas } = req.body;
+            
             if (!id || !cantidad || isNaN(cantidad) || cantidad <= 0) {
-                return res.status(400).json({ success: false, message: 'Datos inválidos' });
+                throw new ValidationError('Datos inválidos');
             }
 
             // Obtener herramienta actual
-            const herramienta = await trx('herramientas').where({ id }).first();
+            const herramienta = await trx('herramientas')
+                .where('id_item', id)
+                .first();
+
             if (!herramienta) {
-                await trx.rollback();
-                return res.status(404).json({ success: false, message: 'Herramienta no encontrada' });
+                throw new NotFoundError('Herramienta no encontrada');
             }
 
-            const stockActual = herramienta.cantidad || 0;
+            const stockActual = herramienta.cantidad_disponible || 0;
             if (cantidad > stockActual) {
-                await trx.rollback();
-                return res.status(400).json({ 
-                    success: false, 
-                    message: 'No hay suficiente stock disponible',
-                    data: {
-                        stock_disponible: stockActual,
-                        cantidad_solicitada: cantidad
-                    }
+                throw new ValidationError('No hay suficiente stock disponible', {
+                    stock_disponible: stockActual,
+                    cantidad_solicitada: cantidad
                 });
             }
 
@@ -286,7 +489,7 @@ const herramientasController = {
                 tipo_mov: 'AJUSTE_OUT',
                 cantidad,
                 unidad: herramienta.unidad || 'unidad',
-                notas: descripcion || null,
+                notas: notas || 'Salida de herramienta',
                 fecha: new Date(),
                 id_usuario: req.user.id
             });
@@ -294,10 +497,9 @@ const herramientasController = {
             // Actualizar cantidad de la herramienta
             const nuevaCantidad = stockActual - parseFloat(cantidad);
             await trx('herramientas')
-                .where({ id })
+                .where('id_item', id)
                 .update({
-                    cantidad: nuevaCantidad,
-                    updated_at: db.fn.now()
+                    cantidad_disponible: nuevaCantidad
                 });
 
             await trx.commit();
@@ -315,7 +517,7 @@ const herramientasController = {
         } catch (error) {
             await trx.rollback();
             logger.error('Error en salida de herramienta:', error);
-            res.status(500).json({ success: false, message: 'Error registrando salida' });
+            throw error;
         }
     }
 };

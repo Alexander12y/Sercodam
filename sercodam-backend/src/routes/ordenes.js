@@ -56,4 +56,9 @@ router.post('/:id/herramientas',
   asyncHandler(ordenesController.asignarHerramientas)
 );
 
+// GET /api/v1/ordenes/:id/pdf - Generar PDF de orden de producción
+router.get('/:id/pdf',
+  asyncHandler(ordenesController.generarPDF)
+);
+
 module.exports = router;

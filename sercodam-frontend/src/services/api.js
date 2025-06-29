@@ -31,7 +31,24 @@ api.interceptors.response.use(
       // Token expirado o inválido
       localStorage.removeItem('token');
       window.location.href = '/login';
+    } else if (error.response?.status === 429) {
+      // Rate limiting - mostrar mensaje más amigable
+      console.warn('Rate limit alcanzado. Esperando antes de reintentar...');
+      
+      // Retornar un error más descriptivo
+      return Promise.reject({
+        ...error,
+        message: 'Demasiadas solicitudes. Por favor, espera un momento antes de continuar.'
+      });
+    } else if (error.response?.status >= 500) {
+      // Errores del servidor
+      console.error('Error del servidor:', error.response?.data);
+      return Promise.reject({
+        ...error,
+        message: 'Error interno del servidor. Por favor, intenta de nuevo más tarde.'
+      });
     }
+    
     return Promise.reject(error);
   }
 );
@@ -81,7 +98,9 @@ export const authApi = {
   register: (userData) => api.post('/auth/register', userData),
   logout: () => api.post('/auth/logout'),
   refreshToken: () => api.post('/auth/refresh'),
-  getProfile: () => api.get('/auth/profile'),
+  getProfile: () => api.get('/auth/me'),
+  updateProfile: (profileData) => api.put('/auth/me', profileData),
+  changePassword: (passwordData) => api.post('/auth/change-password', passwordData),
 };
 
 // API de inventario (para obtener materiales y herramientas)
@@ -121,6 +140,53 @@ export const materialesApi = {
     api.get(`/inventario/materiales/categoria/${categoria}`, { params }),
   entradaMaterial: (data) => api.post('/inventario/materiales/entrada', data),
   salidaMaterial: (data) => api.post('/inventario/materiales/salida', data),
+};
+
+// API de drafts
+export const draftsApi = {
+  saveDraft: (data) => api.post('/drafts', data),
+  getDraftByUser: (idUsuario) => api.get(`/drafts/user/${idUsuario}`),
+  getAllDrafts: (params = {}) => api.get('/drafts', { params }),
+  deleteDraft: (idDraft) => api.delete(`/drafts/${idDraft}`),
+  deleteUserDraft: (idUsuario) => api.delete(`/drafts/user/${idUsuario}`),
+  cleanupExpiredDrafts: () => api.post('/drafts/cleanup'),
+};
+
+// API de herramientas
+export const herramientasApi = {
+  // Obtener todas las herramientas
+  getHerramientas: (params = {}) => api.get('/inventario/herramientas', { params }),
+  
+  // Obtener categorías
+  getCategorias: () => api.get('/inventario/herramientas/categorias'),
+  
+  // Obtener estados de calidad
+  getEstados: () => api.get('/inventario/herramientas/estados'),
+  
+  // Obtener ubicaciones
+  getUbicaciones: () => api.get('/inventario/herramientas/ubicaciones'),
+  
+  // Obtener herramientas por categoría
+  getHerramientasPorCategoria: (categoria, params = {}) => 
+    api.get(`/inventario/herramientas/categoria/${categoria}`, { params }),
+  
+  // Obtener herramienta por ID
+  getHerramientaById: (id) => api.get(`/inventario/herramientas/${id}`),
+  
+  // Crear nueva herramienta
+  createHerramienta: (data) => api.post('/inventario/herramientas', data),
+  
+  // Actualizar herramienta
+  updateHerramienta: (id, data) => api.put(`/inventario/herramientas/${id}`, data),
+  
+  // Eliminar herramienta
+  deleteHerramienta: (id) => api.delete(`/inventario/herramientas/${id}`),
+  
+  // Registrar entrada
+  entradaHerramienta: (data) => api.post('/inventario/herramientas/entrada', data),
+  
+  // Registrar salida
+  salidaHerramienta: (data) => api.post('/inventario/herramientas/salida', data),
 };
 
 export default api; 

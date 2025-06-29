@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -14,6 +14,15 @@ import {
   List,
   ListItem,
   ListItemText,
+  Container,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  DialogContentText,
+  Tooltip,
+  IconButton,
+  TextField
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -21,9 +30,14 @@ import {
   PlayArrow as PlayArrowIcon,
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
+  Pause as PauseIcon,
+  Refresh as RefreshIcon,
+  PictureAsPdf as PdfIcon
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchOrdenById, cambiarEstadoOrden } from '../store/slices/ordenesSlice';
+import { useSnackbar } from 'notistack';
+import api from '../services/api';
 
 const getEstadoColor = (estado) => {
   switch (estado) {
@@ -35,6 +49,8 @@ const getEstadoColor = (estado) => {
       return 'success';
     case 'cancelada':
       return 'error';
+    case 'pausada':
+      return 'default';
     default:
       return 'default';
   }
@@ -50,8 +66,36 @@ const getEstadoText = (estado) => {
       return 'Completada';
     case 'cancelada':
       return 'Cancelada';
+    case 'pausada':
+      return 'Pausada';
     default:
       return estado;
+  }
+};
+
+const getPrioridadColor = (prioridad) => {
+  switch (prioridad) {
+    case 'alta':
+      return 'error';
+    case 'media':
+      return 'warning';
+    case 'baja':
+      return 'success';
+    default:
+      return 'default';
+  }
+};
+
+const getPrioridadText = (prioridad) => {
+  switch (prioridad) {
+    case 'alta':
+      return 'Alta';
+    case 'media':
+      return 'Media';
+    case 'baja':
+      return 'Baja';
+    default:
+      return 'Media';
   }
 };
 
@@ -59,7 +103,19 @@ const OrdenDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const { enqueueSnackbar } = useSnackbar();
   const { ordenActual, loading, error } = useSelector((state) => state.ordenes);
+  
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    action: null,
+    title: '',
+    message: ''
+  });
+  const [loadingPdf, setLoadingPdf] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [nuevoEstado, setNuevoEstado] = useState('');
+  const [notas, setNotas] = useState('');
 
   useEffect(() => {
     if (id) {
@@ -67,40 +123,98 @@ const OrdenDetail = () => {
     }
   }, [dispatch, id]);
 
-  const handleCambiarEstado = (nuevoEstado) => {
-    dispatch(cambiarEstadoOrden({ id, estado: nuevoEstado }));
+  const handleCambiarEstado = (estado) => {
+    setNuevoEstado(estado);
+    setDialogOpen(true);
+  };
+
+  const confirmarAccion = async () => {
+    try {
+      await dispatch(cambiarEstadoOrden({ id, estado: nuevoEstado, notas })).unwrap();
+      enqueueSnackbar('Estado actualizado exitosamente', { variant: 'success' });
+      setDialogOpen(false);
+      setNotas('');
+      // Recargar la orden
+      dispatch(fetchOrdenById(id));
+    } catch (error) {
+      enqueueSnackbar('Error al actualizar el estado', { variant: 'error' });
+    }
+  };
+
+  const handleGenerarPDF = async () => {
+    try {
+      setLoadingPdf(true);
+      
+      // Hacer la petición para generar el PDF
+      const response = await api.get(`/ordenes/${id}/pdf`, {
+        responseType: 'blob'
+      });
+
+      // Crear un blob con el PDF
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      
+      // Crear URL del blob
+      const url = window.URL.createObjectURL(blob);
+      
+      // Crear elemento de descarga
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `orden_produccion_${ordenActual.numero_op}.pdf`;
+      
+      // Simular clic para descargar
+      document.body.appendChild(link);
+      link.click();
+      
+      // Limpiar
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      enqueueSnackbar('PDF generado y descargado exitosamente', { variant: 'success' });
+    } catch (error) {
+      console.error('Error generando PDF:', error);
+      enqueueSnackbar('Error al generar el PDF', { variant: 'error' });
+    } finally {
+      setLoadingPdf(false);
+    }
   };
 
   const canStart = ordenActual?.estado === 'pendiente';
   const canComplete = ordenActual?.estado === 'en_proceso';
-  const canCancel = ['pendiente', 'en_proceso'].includes(ordenActual?.estado);
+  const canCancel = ['pendiente', 'en_proceso', 'pausada'].includes(ordenActual?.estado);
+  const canPause = ordenActual?.estado === 'en_proceso';
 
-  if (loading) {
+  if (loading && !ordenActual) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-        <CircularProgress />
-      </Box>
+      <Container maxWidth="xl">
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+          <CircularProgress />
+        </Box>
+      </Container>
     );
   }
 
   if (error) {
     return (
-      <Alert severity="error" sx={{ mb: 2 }}>
-        Error al cargar la orden: {error}
-      </Alert>
+      <Container maxWidth="xl">
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Error al cargar la orden: {error}
+        </Alert>
+      </Container>
     );
   }
 
   if (!ordenActual) {
     return (
-      <Alert severity="info">
-        No se encontró la orden solicitada
-      </Alert>
+      <Container maxWidth="xl">
+        <Alert severity="info">
+          No se encontró la orden solicitada
+        </Alert>
+      </Container>
     );
   }
 
   return (
-    <Box>
+    <Container maxWidth="xl">
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <Button
@@ -113,6 +227,16 @@ const OrdenDetail = () => {
         <Typography variant="h4" component="h1">
           Orden de Producción: {ordenActual.numero_op}
         </Typography>
+        <Box sx={{ ml: 'auto' }}>
+          <Tooltip title="Actualizar">
+            <IconButton
+              onClick={() => dispatch(fetchOrdenById(id))}
+              disabled={loading}
+            >
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </Box>
 
       {/* Acciones */}
@@ -130,7 +254,7 @@ const OrdenDetail = () => {
             {canStart && (
               <Button
                 variant="contained"
-                color="primary"
+                color="success"
                 startIcon={<PlayArrowIcon />}
                 onClick={() => handleCambiarEstado('en_proceso')}
               >
@@ -148,6 +272,17 @@ const OrdenDetail = () => {
                 Completar
               </Button>
             )}
+
+            {canPause && (
+              <Button
+                variant="contained"
+                color="warning"
+                startIcon={<PauseIcon />}
+                onClick={() => handleCambiarEstado('pausada')}
+              >
+                Pausar
+              </Button>
+            )}
             
             {canCancel && (
               <Button
@@ -159,6 +294,16 @@ const OrdenDetail = () => {
                 Cancelar
               </Button>
             )}
+
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={loadingPdf ? <CircularProgress size={20} color="inherit" /> : <PdfIcon />}
+              onClick={handleGenerarPDF}
+              disabled={loadingPdf}
+            >
+              {loadingPdf ? 'Generando...' : 'Generar PDF'}
+            </Button>
           </Box>
         </CardContent>
       </Card>
@@ -176,7 +321,7 @@ const OrdenDetail = () => {
                   <Typography variant="body2" color="text.secondary">
                     Número OP
                   </Typography>
-                  <Typography variant="body1">
+                  <Typography variant="body1" fontFamily="monospace" fontWeight="medium">
                     {ordenActual.numero_op}
                   </Typography>
                 </Grid>
@@ -192,10 +337,10 @@ const OrdenDetail = () => {
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <Typography variant="body2" color="text.secondary">
-                    Fecha de Creación
+                    Cliente
                   </Typography>
-                  <Typography variant="body1">
-                    {ordenActual.fecha_creacion ? new Date(ordenActual.fecha_creacion).toLocaleDateString() : '-'}
+                  <Typography variant="body1" fontWeight="medium">
+                    {ordenActual.cliente}
                   </Typography>
                 </Grid>
                 <Grid item xs={12} sm={6}>
@@ -203,75 +348,167 @@ const OrdenDetail = () => {
                     Prioridad
                   </Typography>
                   <Chip
-                    label={ordenActual.prioridad === 'media' ? 'Media' : ordenActual.prioridad || 'Media'}
-                    color={ordenActual.prioridad === 'alta' ? 'error' : 'default'}
+                    label={getPrioridadText(ordenActual.prioridad)}
+                    color={getPrioridadColor(ordenActual.prioridad)}
+                    variant="outlined"
                     sx={{ mt: 0.5 }}
                   />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid item xs={12} sm={6}>
                   <Typography variant="body2" color="text.secondary">
-                    Descripción
+                    Fecha de Creación
                   </Typography>
                   <Typography variant="body1">
-                    {ordenActual.descripcion || 'Sin descripción'}
+                    {ordenActual.fecha_creacion ? 
+                      new Date(ordenActual.fecha_creacion).toLocaleDateString('es-ES', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      }) : 
+                      (ordenActual.fecha_op ? 
+                        new Date(ordenActual.fecha_op).toLocaleDateString('es-ES', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        }) : '-')
+                    }
                   </Typography>
                 </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body2" color="text.secondary">
+                    Fecha de Inicio
+                  </Typography>
+                  <Typography variant="body1">
+                    {ordenActual.fecha_inicio ? 
+                      new Date(ordenActual.fecha_inicio).toLocaleDateString('es-ES') : 
+                      'No definida'
+                    }
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body2" color="text.secondary">
+                    Fecha de Fin
+                  </Typography>
+                  <Typography variant="body1">
+                    {ordenActual.fecha_fin ? 
+                      new Date(ordenActual.fecha_fin).toLocaleDateString('es-ES') : 
+                      'No definida'
+                    }
+                  </Typography>
+                </Grid>
+                {ordenActual.observaciones && (
+                  <Grid item xs={12}>
+                    <Typography variant="body2" color="text.secondary">
+                      Observaciones
+                    </Typography>
+                    <Typography variant="body1">
+                      {ordenActual.observaciones}
+                    </Typography>
+                  </Grid>
+                )}
               </Grid>
             </CardContent>
           </Card>
         </Grid>
 
-        {/* Información adicional */}
+        {/* Estado y progreso */}
         <Grid item xs={12} md={4}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Detalles Adicionales
+                Estado Actual
               </Typography>
-              <List dense>
-                <ListItem>
-                  <ListItemText
-                    primary="Cantidad"
-                    secondary={ordenActual.cantidad || 'No especificada'}
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemText
-                    primary="Unidad"
-                    secondary={ordenActual.unidad || 'No especificada'}
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemText
-                    primary="Fecha Inicio"
-                    secondary={ordenActual.fecha_inicio ? new Date(ordenActual.fecha_inicio).toLocaleDateString() : 'No iniciada'}
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemText
-                    primary="Fecha Fin"
-                    secondary={ordenActual.fecha_fin ? new Date(ordenActual.fecha_fin).toLocaleDateString() : 'No completada'}
-                  />
-                </ListItem>
-              </List>
+              <Box sx={{ textAlign: 'center', py: 2 }}>
+                <Chip
+                  label={getEstadoText(ordenActual.estado)}
+                  color={getEstadoColor(ordenActual.estado)}
+                  size="large"
+                  sx={{ fontSize: '1.1rem', py: 1 }}
+                />
+              </Box>
+              
+              <Divider sx={{ my: 2 }} />
+              
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Progreso de la Orden
+              </Typography>
+              <Box sx={{ width: '100%', bgcolor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
+                <Box 
+                  sx={{ 
+                    width: `${getProgresoOrden(ordenActual.estado)}%`, 
+                    height: 8, 
+                    bgcolor: getEstadoColor(ordenActual.estado) === 'success' ? 'success.main' : 'primary.main',
+                    transition: 'width 0.3s ease'
+                  }} 
+                />
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                {getProgresoOrden(ordenActual.estado)}% completado
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      {/* Sección de materiales y herramientas (placeholder) */}
-      <Card sx={{ mt: 3 }}>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>
-            Materiales y Herramientas
+      {/* Dialog de confirmación */}
+      <Dialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+      >
+        <DialogTitle>Cambiar Estado de Orden</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            ¿Estás seguro de que quieres cambiar el estado de la orden a "{getEstadoText(nuevoEstado)}"?
           </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Esta funcionalidad estará disponible próximamente
-          </Typography>
-        </CardContent>
-      </Card>
-    </Box>
+          <TextField
+            fullWidth
+            label="Notas (opcional)"
+            multiline
+            rows={3}
+            value={notas}
+            onChange={(e) => setNotas(e.target.value)}
+            placeholder="Agregar notas sobre el cambio de estado..."
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setDialogOpen(false)}
+          >
+            Cancelar
+          </Button>
+          <Button 
+            onClick={confirmarAccion}
+            variant="contained"
+            color="primary"
+          >
+            Confirmar
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Container>
   );
+};
+
+// Función auxiliar para calcular el progreso
+const getProgresoOrden = (estado) => {
+  switch (estado) {
+    case 'pendiente':
+      return 0;
+    case 'en_proceso':
+      return 50;
+    case 'completada':
+      return 100;
+    case 'cancelada':
+      return 0;
+    case 'pausada':
+      return 25;
+    default:
+      return 0;
+  }
 };
 
 export default OrdenDetail; 

@@ -30,6 +30,7 @@ try {
     const logger = require('./config/logger');
     const db = require('./config/database');
     const { redis } = require('./config/redis');
+    const devConfig = require('../config/development');
     console.log('✅ Configuraciones cargadas');
 
     // Middleware
@@ -41,47 +42,76 @@ try {
     const PORT = process.env.PORT || 4000;
     const API_VERSION = process.env.API_VERSION || 'v1';
     const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:5173';
-    const RATE_LIMIT_WINDOW = parseInt(process.env.RATE_LIMIT_WINDOW) || 15;
-    const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX) || 100;
+    const RATE_LIMIT_WINDOW = parseInt(process.env.RATE_LIMIT_WINDOW) || 1; // 1 minuto
+    const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX) || 50000; // 50000 peticiones por minuto (muy permisivo para desarrollo)
 
     console.log('Configuración:');
     console.log('- Puerto:', PORT);
     console.log('- API Version:', API_VERSION);
     console.log('- CORS Origin:', CORS_ORIGIN);
+    console.log('- Rate Limit:', RATE_LIMIT_MAX, 'peticiones por', RATE_LIMIT_WINDOW, 'minuto(s)');
 
     // Crear app Express
     const app = express();
 
-    // Security middleware
-    app.use(helmet({
-        crossOriginEmbedderPolicy: false,
-        contentSecurityPolicy: {
-            directives: {
-                defaultSrc: ["'self'"],
-                styleSrc: ["'self'", "'unsafe-inline'"],
-                scriptSrc: ["'self'"],
-                imgSrc: ["'self'", "data:", "https:"],
-            },
+    // CORS configuration (lo más arriba posible)
+    app.use(cors({
+        origin: function (origin, callback) {
+            if (!origin) return callback(null, true);
+            const allowed = [
+                'http://localhost:3000',
+                'http://localhost:5173',
+                'http://127.0.0.1:3000',
+                'http://127.0.0.1:5173',
+                'https://sercodam.com',
+                'https://www.sercodam.com'
+            ];
+            if (allowed.includes(origin)) {
+                return callback(null, true);
+            } else {
+                return callback(new Error('Not allowed by CORS'));
+            }
         },
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization'],
+        credentials: true,
+        preflightContinue: false,
+        optionsSuccessStatus: 204
     }));
+    // Middleware global para forzar headers CORS en todas las respuestas (antes de cualquier ruta)
+    app.use((req, res, next) => {
+      res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+      if (req.method === 'OPTIONS') {
+        return res.sendStatus(204);
+      }
+      next();
+    });
 
-    // Rate limiting
-    const limiter = rateLimit({
+    // Rate limiting - Configuración más inteligente
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    const rateLimitConfig = isDevelopment ? devConfig.rateLimit : {
         windowMs: RATE_LIMIT_WINDOW * 60 * 1000,
         max: RATE_LIMIT_MAX,
-        message: 'Demasiadas solicitudes desde esta IP, intenta de nuevo más tarde.',
+        message: {
+            success: false,
+            message: 'Demasiadas solicitudes desde esta IP, intenta de nuevo más tarde.',
+            retryAfter: Math.ceil(RATE_LIMIT_WINDOW * 60 / 60)
+        },
         standardHeaders: true,
         legacyHeaders: false,
-    });
-    app.use('/api/', limiter);
+        skip: (req) => {
+            return req.path === '/health' || req.path.startsWith('/api/v1/auth/login');
+        },
+        keyGenerator: (req) => {
+            return req.ip + ':' + (req.get('User-Agent') || 'unknown');
+        }
+    };
 
-    // CORS configuration
-    app.use(cors({
-        origin: CORS_ORIGIN.split(','),
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-        allowedHeaders: ['Content-Type', 'Authorization'],
-        credentials: true
-    }));
+    const limiter = rateLimit(rateLimitConfig);
+    app.use('/api/', limiter);
 
     // Body parsing middleware
     app.use(express.json({ limit: '10mb' }));
@@ -96,6 +126,43 @@ try {
             stream: { write: (message) => logger.info(message.trim()) }
         }));
     }
+
+    // Middleware de logging personalizado para monitorear peticiones
+    app.use((req, res, next) => {
+        const start = Date.now();
+        
+        // Log de peticiones problemáticas
+        if (req.path.includes('/ubicaciones') || req.path.includes('/categorias') || req.path.includes('/estados')) {
+            logger.info('API Call', {
+                method: req.method,
+                path: req.path,
+                ip: req.ip,
+                userAgent: req.get('User-Agent'),
+                timestamp: new Date().toISOString()
+            });
+        }
+        
+        // Interceptar respuesta para logging
+        const originalSend = res.send;
+        res.send = function(data) {
+            const duration = Date.now() - start;
+            
+            // Log de respuestas lentas o errores
+            if (duration > 1000 || res.statusCode >= 400) {
+                logger.warn('Slow/Error Response', {
+                    method: req.method,
+                    path: req.path,
+                    statusCode: res.statusCode,
+                    duration: `${duration}ms`,
+                    ip: req.ip
+                });
+            }
+            
+            originalSend.call(this, data);
+        };
+        
+        next();
+    });
 
     console.log('✅ Middleware básico configurado');
 
@@ -167,6 +234,26 @@ try {
     } catch (error) {
         console.error('❌ Error cargando rutas de ordenes:', error.message);
         console.log('⚠️  Continuando sin rutas de ordenes (pueden no estar implementadas)');
+    }
+
+    try {
+        console.log('Cargando rutas de drafts...');
+        const draftsRoutes = require('./routes/drafts');
+        app.use(`/api/${API_VERSION}/drafts`, draftsRoutes);
+        console.log('✅ Rutas de drafts cargadas');
+    } catch (error) {
+        console.error('❌ Error cargando rutas de drafts:', error.message);
+        console.log('⚠️  Continuando sin rutas de drafts (pueden no estar implementadas)');
+    }
+
+    try {
+        console.log('Cargando rutas de webhook...');
+        const webhookRoutes = require('./routes/webhook');
+        app.use(`/api/${API_VERSION}/webhook`, webhookRoutes);
+        console.log('✅ Rutas de webhook cargadas');
+    } catch (error) {
+        console.error('❌ Error cargando rutas de webhook:', error.message);
+        console.log('⚠️  Continuando sin rutas de webhook (pueden no estar implementadas)');
     }
 
     // Error handling middleware

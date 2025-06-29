@@ -19,7 +19,8 @@ const {
     validateHerramientaCreacion,
     validateDisponibilidad,
     validateQueryParams,
-    validateIdParam
+    validateIdParam,
+    validateHerramientaUpdate
 } = require('../validators/inventarioValidator');
 
 // Middleware de autenticación para todas las rutas
@@ -190,6 +191,16 @@ router.get('/herramientas/categorias',
     asyncHandler(herramientasController.getCategorias)
 );
 
+// GET /api/v1/inventario/herramientas/estados - Obtener estados de calidad
+router.get('/herramientas/estados', 
+    asyncHandler(herramientasController.getEstados)
+);
+
+// GET /api/v1/inventario/herramientas/ubicaciones - Obtener ubicaciones
+router.get('/herramientas/ubicaciones', 
+    asyncHandler(herramientasController.getUbicaciones)
+);
+
 // GET /api/v1/inventario/herramientas/categoria/:categoria - Obtener herramientas por categoría
 router.get('/herramientas/categoria/:categoria', 
     asyncHandler(herramientasController.getHerramientasPorCategoria)
@@ -199,6 +210,28 @@ router.get('/herramientas/categoria/:categoria',
 router.get('/herramientas/:id', 
     validateIdParam,
     asyncHandler(herramientasController.getHerramientaById)
+);
+
+// POST /api/v1/inventario/herramientas - Crear nueva herramienta
+router.post('/herramientas', 
+    requireRole(['admin', 'supervisor']),
+    validateHerramientaCreacion,
+    asyncHandler(herramientasController.createHerramienta)
+);
+
+// PUT /api/v1/inventario/herramientas/:id - Actualizar herramienta
+router.put('/herramientas/:id', 
+    requireRole(['admin', 'supervisor']),
+    validateIdParam,
+    validateHerramientaUpdate,
+    asyncHandler(herramientasController.updateHerramienta)
+);
+
+// DELETE /api/v1/inventario/herramientas/:id - Eliminar herramienta
+router.delete('/herramientas/:id', 
+    requireRole(['admin']),
+    validateIdParam,
+    asyncHandler(herramientasController.deleteHerramienta)
 );
 
 // POST /api/v1/inventario/herramientas/entrada - Registrar entrada de herramienta

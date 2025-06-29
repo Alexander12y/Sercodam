@@ -254,18 +254,144 @@ const validateHerramientaCreacion = [
         .isLength({ min: 1, max: 50 })
         .withMessage('Código debe tener entre 1 y 50 caracteres'),
     
-    body('nombre')
-        .notEmpty()
-        .withMessage('Nombre es requerido')
-        .trim()
-        .isLength({ min: 2, max: 100 })
-        .withMessage('Nombre debe tener entre 2 y 100 caracteres'),
-    
     body('categoria')
         .notEmpty()
         .withMessage('Categoría es requerida')
-        .isInt()
-        .withMessage('Categoría debe ser un número entero'),
+        .trim()
+        .isLength({ min: 2, max: 100 })
+        .withMessage('Categoría debe tener entre 2 y 100 caracteres'),
+    
+    body('descripcion')
+        .notEmpty()
+        .withMessage('Descripción es requerida')
+        .trim()
+        .isLength({ min: 2, max: 200 })
+        .withMessage('Descripción debe tener entre 2 y 200 caracteres'),
+    
+    body('presentacion')
+        .optional()
+        .trim()
+        .isLength({ max: 100 })
+        .withMessage('Presentación no puede exceder 100 caracteres'),
+    
+    body('unidad')
+        .optional()
+        .trim()
+        .isLength({ max: 20 })
+        .withMessage('Unidad no puede exceder 20 caracteres'),
+    
+    body('cantidad_disponible')
+        .optional()
+        .isNumeric()
+        .withMessage('Cantidad disponible debe ser un número')
+        .custom((value) => {
+            if (value < 0) {
+                throw new Error('Cantidad disponible no puede ser negativa');
+            }
+            return true;
+        }),
+    
+    body('marca')
+        .optional()
+        .trim()
+        .isLength({ max: 50 })
+        .withMessage('Marca no puede exceder 50 caracteres'),
+    
+    body('estado_calidad')
+        .optional()
+        .isIn(['Bueno', 'Regular', 'Malo', 'Usado 50%'])
+        .withMessage('Estado de calidad debe ser: Bueno, Regular, Malo, Usado 50%'),
+    
+    body('ubicacion')
+        .optional()
+        .trim()
+        .isLength({ max: 100 })
+        .withMessage('Ubicación no puede exceder 100 caracteres'),
+    
+    body('precioxunidad')
+        .optional()
+        .isNumeric()
+        .withMessage('Precio por unidad debe ser un número')
+        .custom((value) => {
+            if (value < 0) {
+                throw new Error('Precio por unidad no puede ser negativo');
+            }
+            return true;
+        }),
+    
+    body('uso_principal')
+        .optional()
+        .trim()
+        .isLength({ max: 200 })
+        .withMessage('Uso principal no puede exceder 200 caracteres'),
+    
+    handleValidationErrors
+];
+
+// Validaciones para actualización de herramientas
+const validateHerramientaUpdate = [
+    body('categoria')
+        .optional()
+        .trim()
+        .isLength({ min: 2, max: 100 })
+        .withMessage('Categoría debe tener entre 2 y 100 caracteres'),
+    
+    body('descripcion')
+        .optional()
+        .trim()
+        .isLength({ min: 2, max: 200 })
+        .withMessage('Descripción debe tener entre 2 y 200 caracteres'),
+    
+    body('presentacion')
+        .optional()
+        .trim()
+        .isLength({ max: 100 })
+        .withMessage('Presentación no puede exceder 100 caracteres'),
+    
+    body('unidad')
+        .optional()
+        .trim()
+        .isLength({ max: 20 })
+        .withMessage('Unidad no puede exceder 20 caracteres'),
+    
+    body('cantidad_disponible')
+        .optional()
+        .isNumeric()
+        .withMessage('Cantidad disponible debe ser un número')
+        .custom((value) => {
+            if (value < 0) {
+                throw new Error('Cantidad disponible no puede ser negativa');
+            }
+            return true;
+        }),
+    
+    body('marca')
+        .optional()
+        .trim()
+        .isLength({ max: 50 })
+        .withMessage('Marca no puede exceder 50 caracteres'),
+    
+    body('estado_calidad')
+        .optional()
+        .isIn(['Bueno', 'Regular', 'Malo', 'Usado 50%'])
+        .withMessage('Estado de calidad debe ser: Bueno, Regular, Malo, Usado 50%'),
+    
+    body('ubicacion')
+        .optional()
+        .trim()
+        .isLength({ max: 100 })
+        .withMessage('Ubicación no puede exceder 100 caracteres'),
+    
+    body('precioxunidad')
+        .optional()
+        .isNumeric()
+        .withMessage('Precio por unidad debe ser un número')
+        .custom((value) => {
+            if (value < 0) {
+                throw new Error('Precio por unidad no puede ser negativo');
+            }
+            return true;
+        }),
     
     body('uso_principal')
         .optional()
@@ -351,6 +477,7 @@ module.exports = {
     validateMovimiento,
     validateMaterialCreacion,
     validateHerramientaCreacion,
+    validateHerramientaUpdate,
     validateDisponibilidad,
     validateQueryParams,
     validateIdParam,

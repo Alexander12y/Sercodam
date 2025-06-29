@@ -20,6 +20,36 @@ async function checkViewExists(viewName) {
 }
 
 const panosController = {
+    // Función auxiliar para generar especificaciones formateadas
+    generateSpecifications: (pano) => {
+        const specs = [];
+        
+        switch (pano.tipo_red?.toLowerCase()) {
+            case 'nylon':
+                if (pano.calibre) specs.push(`Calibre: ${pano.calibre}`);
+                if (pano.cuadro) specs.push(`Cuadro: ${pano.cuadro}`);
+                if (pano.torsion) specs.push(`Torsión: ${pano.torsion}`);
+                if (pano.refuerzo !== undefined && pano.refuerzo !== null) {
+                    specs.push(`Refuerzo: ${pano.refuerzo === true || pano.refuerzo === 't' ? 'Sí' : 'No'}`);
+                }
+                break;
+            case 'lona':
+                if (pano.color) specs.push(`Color: ${pano.color}`);
+                if (pano.presentacion) specs.push(`Presentación: ${pano.presentacion}`);
+                break;
+            case 'polipropileno':
+                if (pano.grosor) specs.push(`Grosor: ${pano.grosor}`);
+                if (pano.cuadro) specs.push(`Cuadro: ${pano.cuadro}`);
+                break;
+            case 'malla sombra':
+                if (pano.color_tipo_red) specs.push(`Color/Tipo: ${pano.color_tipo_red}`);
+                if (pano.presentacion) specs.push(`Presentación: ${pano.presentacion}`);
+                break;
+        }
+        
+        return specs.join('\n');
+    },
+
     // GET /api/v1/inventario/panos - Obtener paños con filtros
     getPanos: async (req, res) => {
         try {
@@ -141,7 +171,6 @@ const panosController = {
                     .offset(offset);
             }
 
-            // Obtener datos específicos de las tablas hijas
             const panosWithDetails = await Promise.all(panos.map(async (pano) => {
                 const result = {
                     id_item: pano.id_item,
@@ -210,6 +239,9 @@ const panosController = {
                         logger.warn(`Error obteniendo datos específicos para ${pano.tipo_red}:`, error.message);
                     }
                 }
+
+                // Generar especificaciones formateadas
+                result.especificaciones = panosController.generateSpecifications(result);
 
                 return result;
             }));

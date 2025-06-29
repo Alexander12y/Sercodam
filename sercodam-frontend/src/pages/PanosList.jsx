@@ -167,9 +167,9 @@ const PanosList = () => {
             <Typography variant="caption" display="block" color="text.secondary">
               Torsión: {pano.torsion || 'N/A'}
             </Typography>
-            {pano.refuerzo && (
+            {pano.refuerzo !== undefined && pano.refuerzo !== null && (
               <Typography variant="caption" display="block" color="text.secondary">
-                Refuerzo: {pano.refuerzo}
+                Refuerzo: {pano.refuerzo === true || pano.refuerzo === 't' ? 'Sí' : 'No'}
               </Typography>
             )}
           </Box>
@@ -200,7 +200,7 @@ const PanosList = () => {
         return (
           <Box>
             <Typography variant="caption" display="block" color="text.secondary">
-              Color y Tipo: {pano.color_tipo_red || 'N/A'}
+              Color/Tipo: {pano.color_tipo_red || 'N/A'}
             </Typography>
             <Typography variant="caption" display="block" color="text.secondary">
               Presentación: {pano.presentacion || 'N/A'}
@@ -208,7 +208,7 @@ const PanosList = () => {
           </Box>
         );
       default:
-        return <Typography variant="body2" color="text.secondary">N/A</Typography>;
+        return <Typography variant="caption" color="text.secondary">Sin especificaciones</Typography>;
     }
   };
 
@@ -217,34 +217,37 @@ const PanosList = () => {
       case 'nylon':
         return (
           <>
-            <Grid item xs={12}>
+            <Grid item xs={12} md={6}>
               <Typography variant="subtitle2" color="text.secondary">Calibre:</Typography>
               <Typography variant="body2">{pano.calibre || 'N/A'}</Typography>
             </Grid>
-            <Grid item xs={12}>
+            <Grid item xs={12} md={6}>
               <Typography variant="subtitle2" color="text.secondary">Cuadro:</Typography>
               <Typography variant="body2">{pano.cuadro || 'N/A'}</Typography>
             </Grid>
-            <Grid item xs={12}>
+            <Grid item xs={12} md={6}>
               <Typography variant="subtitle2" color="text.secondary">Torsión:</Typography>
               <Typography variant="body2">{pano.torsion || 'N/A'}</Typography>
             </Grid>
-            {pano.refuerzo && (
-              <Grid item xs={12}>
-                <Typography variant="subtitle2" color="text.secondary">Refuerzo:</Typography>
-                <Typography variant="body2">{pano.refuerzo}</Typography>
-              </Grid>
-            )}
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle2" color="text.secondary">Refuerzo:</Typography>
+              <Typography variant="body2">
+                {pano.refuerzo !== undefined && pano.refuerzo !== null 
+                  ? (pano.refuerzo === true || pano.refuerzo === 't' ? 'Sí' : 'No')
+                  : 'N/A'
+                }
+              </Typography>
+            </Grid>
           </>
         );
       case 'lona':
         return (
           <>
-            <Grid item xs={12}>
+            <Grid item xs={12} md={6}>
               <Typography variant="subtitle2" color="text.secondary">Color:</Typography>
               <Typography variant="body2">{pano.color || 'N/A'}</Typography>
             </Grid>
-            <Grid item xs={12}>
+            <Grid item xs={12} md={6}>
               <Typography variant="subtitle2" color="text.secondary">Presentación:</Typography>
               <Typography variant="body2">{pano.presentacion || 'N/A'}</Typography>
             </Grid>
@@ -253,32 +256,36 @@ const PanosList = () => {
       case 'polipropileno':
         return (
           <>
-            <Grid item xs={12}>
+            <Grid item xs={12} md={6}>
               <Typography variant="subtitle2" color="text.secondary">Grosor:</Typography>
               <Typography variant="body2">{pano.grosor || 'N/A'}</Typography>
             </Grid>
-            <Grid item xs={12}>
+            <Grid item xs={12} md={6}>
               <Typography variant="subtitle2" color="text.secondary">Cuadro:</Typography>
               <Typography variant="body2">{pano.cuadro || 'N/A'}</Typography>
             </Grid>
           </>
         );
       case 'malla sombra':
-    return (
+        return (
           <>
-            <Grid item xs={12}>
-              <Typography variant="subtitle2" color="text.secondary">Color y Tipo de Red:</Typography>
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle2" color="text.secondary">Color/Tipo:</Typography>
               <Typography variant="body2">{pano.color_tipo_red || 'N/A'}</Typography>
             </Grid>
-            <Grid item xs={12}>
+            <Grid item xs={12} md={6}>
               <Typography variant="subtitle2" color="text.secondary">Presentación:</Typography>
               <Typography variant="body2">{pano.presentacion || 'N/A'}</Typography>
             </Grid>
           </>
         );
       default:
-        return <Typography variant="body2" color="text.secondary">N/A</Typography>;
-  }
+        return (
+          <Grid item xs={12}>
+            <Typography variant="body2" color="text.secondary">Sin especificaciones disponibles</Typography>
+          </Grid>
+        );
+    }
   };
 
   return (
@@ -315,8 +322,9 @@ const PanosList = () => {
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6} md={3}>
               <FormControl fullWidth size="small">
-                <InputLabel>Tipo de Red</InputLabel>
+                <InputLabel id="tipo-red-filter-label">Tipo de Red</InputLabel>
                 <Select
+                  labelId="tipo-red-filter-label"
                   value={filters.tipo_red}
                   onChange={handleFilterChange('tipo_red')}
                   label="Tipo de Red"
@@ -332,8 +340,9 @@ const PanosList = () => {
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
               <FormControl fullWidth size="small">
-                <InputLabel>Estado</InputLabel>
+                <InputLabel id="estado-filter-label">Estado</InputLabel>
                 <Select
+                  labelId="estado-filter-label"
                   value={filters.estado}
                   onChange={handleFilterChange('estado')}
                   label="Estado"
