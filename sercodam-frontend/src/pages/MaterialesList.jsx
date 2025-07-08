@@ -438,49 +438,59 @@ const MaterialesList = () => {
                       <TableCell>
                         <Box sx={{ display: 'flex', gap: 0.5 }}>
                           <Tooltip title="Ver detalles">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleView(material)}
-                              color="primary"
-                            >
-                              <ViewIcon />
-                            </IconButton>
+                            <span>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleView(material)}
+                                color="primary"
+                              >
+                                <ViewIcon />
+                              </IconButton>
+                            </span>
                           </Tooltip>
                           <Tooltip title="Editar">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleEdit(material)}
-                              color="warning"
-                            >
-                              <EditIcon />
-                            </IconButton>
+                            <span>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleEdit(material)}
+                                color="warning"
+                              >
+                                <EditIcon />
+                              </IconButton>
+                            </span>
                           </Tooltip>
                           <Tooltip title="Entrada">
-                            <IconButton
-                              size="small"
-                              color="success"
-                              onClick={() => handleMovimiento(material, 'entrada')}
-                            >
-                              <InputIcon />
-                            </IconButton>
+                            <span>
+                              <IconButton
+                                size="small"
+                                color="success"
+                                onClick={() => handleMovimiento(material, 'entrada')}
+                              >
+                                <InputIcon />
+                              </IconButton>
+                            </span>
                           </Tooltip>
                           <Tooltip title="Salida">
-                            <IconButton
-                              size="small"
-                              color="warning"
-                              onClick={() => handleMovimiento(material, 'salida')}
-                            >
-                              <OutputIcon />
-                            </IconButton>
+                            <span>
+                              <IconButton
+                                size="small"
+                                color="warning"
+                                onClick={() => handleMovimiento(material, 'salida')}
+                              >
+                                <OutputIcon />
+                              </IconButton>
+                            </span>
                           </Tooltip>
                           <Tooltip title="Eliminar">
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => handleDelete(material)}
-                            >
-                              <DeleteIcon />
-                            </IconButton>
+                            <span>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => handleDelete(material)}
+                              >
+                                <DeleteIcon />
+                              </IconButton>
+                            </span>
                           </Tooltip>
                         </Box>
                       </TableCell>

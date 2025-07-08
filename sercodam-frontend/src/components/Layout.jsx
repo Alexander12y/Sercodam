@@ -35,6 +35,7 @@ import {
   Logout as LogoutIcon,
   Person as PersonIcon,
   Security as SecurityIcon,
+  People as PeopleIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
@@ -48,6 +49,7 @@ const menuItems = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
   { text: 'Órdenes', icon: <AssignmentIcon />, path: '/ordenes' },
   { text: 'Nueva Orden', icon: <AddIcon />, path: '/ordenes/nueva' },
+  { text: 'Clientes', icon: <PeopleIcon />, path: '/clientes' },
   { 
     text: 'Inventario', 
     icon: <InventoryIcon />, 

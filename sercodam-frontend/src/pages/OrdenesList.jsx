@@ -48,8 +48,6 @@ import { useSnackbar } from 'notistack';
 
 const getEstadoColor = (estado) => {
   switch (estado) {
-    case 'pendiente':
-      return 'warning';
     case 'en_proceso':
       return 'info';
     case 'completada':
@@ -65,8 +63,6 @@ const getEstadoColor = (estado) => {
 
 const getEstadoText = (estado) => {
   switch (estado) {
-    case 'pendiente':
-      return 'Pendiente';
     case 'en_proceso':
       return 'En Proceso';
     case 'completada':
@@ -183,9 +179,9 @@ const OrdenesList = () => {
     }
   };
 
-  const canStart = (estado) => estado === 'pendiente';
+  const canStart = (estado) => false; // No hay estado pendiente, las órdenes se crean directamente en en_proceso
   const canComplete = (estado) => estado === 'en_proceso';
-  const canCancel = (estado) => ['pendiente', 'en_proceso', 'pausada'].includes(estado);
+  const canCancel = (estado) => ['en_proceso', 'pausada'].includes(estado);
   const canPause = (estado) => estado === 'en_proceso';
 
   if (loading && ordenes.length === 0) {
@@ -252,7 +248,6 @@ const OrdenesList = () => {
                   onChange={(e) => setFiltroEstado(e.target.value)}
                 >
                   <MenuItem value="">Todos los estados</MenuItem>
-                  <MenuItem value="pendiente">Pendiente</MenuItem>
                   <MenuItem value="en_proceso">En Proceso</MenuItem>
                   <MenuItem value="completada">Completada</MenuItem>
                   <MenuItem value="cancelada">Cancelada</MenuItem>
@@ -337,70 +332,82 @@ const OrdenesList = () => {
                   <TableCell>
                     <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                       <Tooltip title="Ver detalles">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleVerOrden(orden.id_op)}
-                          color="primary"
-                        >
-                          <VisibilityIcon />
-                        </IconButton>
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleVerOrden(orden.id_op)}
+                            color="primary"
+                          >
+                            <VisibilityIcon />
+                          </IconButton>
+                        </span>
                       </Tooltip>
                       
                       <Tooltip title="Editar">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleEditarOrden(orden.id_op)}
-                          color="warning"
-                        >
-                          <EditIcon />
-                        </IconButton>
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleEditarOrden(orden.id_op)}
+                            color="warning"
+                          >
+                            <EditIcon />
+                          </IconButton>
+                        </span>
                       </Tooltip>
 
                       {canStart(orden.estado) && (
                         <Tooltip title="Iniciar Producción">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleCambiarEstado(orden, 'en_proceso')}
-                            color="success"
-                          >
-                            <PlayArrowIcon />
-                          </IconButton>
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleCambiarEstado(orden, 'en_proceso')}
+                              color="success"
+                            >
+                              <PlayArrowIcon />
+                            </IconButton>
+                          </span>
                         </Tooltip>
                       )}
 
                       {canComplete(orden.estado) && (
                         <Tooltip title="Completar">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleCambiarEstado(orden, 'completada')}
-                            color="success"
-                          >
-                            <CheckCircleIcon />
-                          </IconButton>
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleCambiarEstado(orden, 'completada')}
+                              color="success"
+                            >
+                              <CheckCircleIcon />
+                            </IconButton>
+                          </span>
                         </Tooltip>
                       )}
 
                       {canPause(orden.estado) && (
                         <Tooltip title="Pausar">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleCambiarEstado(orden, 'pausada')}
-                            color="warning"
-                          >
-                            <PauseIcon />
-                          </IconButton>
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleCambiarEstado(orden, 'pausada')}
+                              color="warning"
+                            >
+                              <PauseIcon />
+                            </IconButton>
+                          </span>
                         </Tooltip>
                       )}
 
                       {canCancel(orden.estado) && (
                         <Tooltip title="Cancelar">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleCambiarEstado(orden, 'cancelada')}
-                            color="error"
-                          >
-                            <CancelIcon />
-                          </IconButton>
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleCambiarEstado(orden, 'cancelada')}
+                              color="error"
+                            >
+                              <CancelIcon />
+                            </IconButton>
+                          </span>
                         </Tooltip>
                       )}
                     </Box>

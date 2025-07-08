@@ -20,9 +20,16 @@ export const fetchOrdenById = createAsyncThunk(
 
 export const createOrden = createAsyncThunk(
   'ordenes/createOrden',
-  async (ordenData) => {
-    const response = await ordenesApi.createOrden(ordenData);
-    return response.data;
+  async (ordenData, { rejectWithValue }) => {
+    try {
+      const response = await ordenesApi.createOrden(ordenData);
+      return response.data;
+    } catch (err) {
+      if (err.response && err.response.data) {
+        return rejectWithValue(err.response.data);
+      }
+      throw err;
+    }
   }
 );
 
@@ -119,7 +126,7 @@ const ordenesSlice = createSlice({
       })
       .addCase(createOrden.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message;
+        state.error = action.payload || { message: action.error.message };
       })
       // updateOrden
       .addCase(updateOrden.pending, (state) => {

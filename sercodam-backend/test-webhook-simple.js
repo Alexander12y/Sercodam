@@ -1,57 +1,85 @@
-const axios = require('axios');
+// Script simple para probar el webhook de Make.com
+require('dotenv').config();
 
-const BASE_URL = 'http://localhost:4000/api/v1';
+const webhookService = require('./src/services/makeWebhookService');
 
-async function testWebhookEndpoints() {
-    console.log('🔍 Probando endpoints de webhook...\n');
+async function testWebhook() {
+    console.log('🧪 PRUEBA SIMPLE DE WEBHOOK\n');
     
     try {
-        // Probar endpoint de configuración
-        console.log('1. Probando /webhook/make-config...');
-        const configResponse = await axios.get(`${BASE_URL}/webhook/make-config`);
-        console.log('✅ Configuración obtenida:', configResponse.data);
+        console.log('📋 Configuración del webhook:');
+        console.log(`   URL: ${webhookService.makeWebhookUrl}`);
+        console.log(`   API Key: ${webhookService.apiKey.substring(0, 8)}...`);
+        
+        // Datos de prueba
+        const testData = {
+            id_op: 999,
+            numero_op: 'TEST-WEBHOOK-001',
+            cliente: 'Cliente de Prueba Webhook',
+            descripcion_trabajo: 'Prueba de webhook simple',
+            observaciones: 'Esta es una prueba del webhook',
+            prioridad: 'media',
+            fecha_creacion: new Date(),
+            fecha_inicio: '2025-01-15',
+            fecha_fin: '2025-01-20',
+            direccion_instalacion: 'Dirección de prueba',
+            contacto_cliente: 'Contacto de prueba',
+            telefono_cliente: '123-456-7890',
+            estado: 'en_proceso',
+            panos: [
+                {
+                    largo_m: 10,
+                    ancho_m: 5,
+                    cantidad: 1,
+                    tipo_red: 'nylon',
+                    area_m2: 50,
+                    precio_m2: 25.50
+                }
+            ],
+            materiales: [
+                {
+                    descripcion: 'Material de prueba',
+                    categoria: 'General',
+                    cantidad: 1,
+                    unidad: 'unidad'
+                }
+            ],
+            herramientas: [
+                {
+                    nombre: 'Herramienta de prueba',
+                    descripcion: 'Descripción de herramienta',
+                    categoria: 'General',
+                    cantidad: 1
+                }
+            ]
+        };
+        
+        console.log('\n📤 Enviando webhook de prueba...');
+        
+        const resultado = await webhookService.enviarOrdenEnProceso(testData);
+        
+        console.log('\n📊 Resultado:');
+        console.log(`   Éxito: ${resultado.success}`);
+        console.log(`   Status: ${resultado.status}`);
+        console.log(`   PDF incluido: ${resultado.pdfIncluido}`);
+        
+        if (resultado.success) {
+            console.log('✅ Webhook enviado exitosamente');
+            console.log(`   Respuesta: ${JSON.stringify(resultado.data, null, 2)}`);
+        } else {
+            console.log('❌ Error enviando webhook');
+            console.log(`   Error: ${resultado.error}`);
+            console.log(`   Status: ${resultado.status}`);
+        }
         
     } catch (error) {
-        console.log('❌ Error en configuración:');
-        if (error.response) {
-            console.log(`   Status: ${error.response.status}`);
-            console.log(`   Data:`, error.response.data);
-        } else {
-            console.log(`   Error: ${error.message}`);
-        }
-    }
-    
-    try {
-        // Probar endpoint de test
-        console.log('\n2. Probando /webhook/test-make...');
-        const testResponse = await axios.post(`${BASE_URL}/webhook/test-make`);
-        console.log('✅ Test exitoso:', testResponse.data);
-        
-    } catch (error) {
-        console.log('❌ Error en test:');
-        if (error.response) {
-            console.log(`   Status: ${error.response.status}`);
-            console.log(`   Data:`, error.response.data);
-        } else {
-            console.log(`   Error: ${error.message}`);
-        }
-    }
-    
-    try {
-        // Probar endpoint de health
-        console.log('\n3. Probando /webhook/health...');
-        const healthResponse = await axios.get(`${BASE_URL}/webhook/health`);
-        console.log('✅ Health check:', healthResponse.data);
-        
-    } catch (error) {
-        console.log('❌ Error en health check:');
-        if (error.response) {
-            console.log(`   Status: ${error.response.status}`);
-            console.log(`   Data:`, error.response.data);
-        } else {
-            console.log(`   Error: ${error.message}`);
-        }
+        console.error('💥 Error crítico:', error.message);
+        console.error('Stack:', error.stack);
     }
 }
 
-testWebhookEndpoints().catch(console.error); 
+// Ejecutar prueba
+testWebhook().then(() => {
+    console.log('\n✨ Prueba completada');
+    process.exit(0);
+}).catch(console.error); 

@@ -6,16 +6,20 @@ import { authApi } from './services/api';
 import { setUser, logout } from './store/slices/authSlice';
 
 import Layout from './components/Layout';
+import RequireRole from './components/RequireRole';
 import Dashboard from './pages/Dashboard';
 import OrdenesList from './pages/OrdenesList';
 import OrdenDetail from './pages/OrdenDetail';
 import EditOrden from './pages/EditOrden';
 import CreateOrden from './pages/CreateOrden';
+import ClientesList from './pages/ClientesList';
+import ClienteDetail from './pages/ClienteDetail';
 import PanosList from './pages/PanosList';
 import MaterialesList from './pages/MaterialesList';
 import HerramientasList from './pages/HerramientasList';
 import Profile from './pages/Profile';
 import ChangePassword from './pages/ChangePassword';
+import Configuracion from './pages/Configuracion';
 import Login from './pages/Login';
 
 function RequireAuth({ children }) {
@@ -62,11 +66,21 @@ function App() {
                   <Route path="/ordenes/nueva" element={<CreateOrden />} />
                   <Route path="/ordenes/:id" element={<OrdenDetail />} />
                   <Route path="/ordenes/:id/editar" element={<EditOrden />} />
+                  <Route path="/clientes" element={<ClientesList />} />
+                  <Route path="/clientes/:id/ordenes" element={<ClienteDetail />} />
                   <Route path="/inventario/panos" element={<PanosList />} />
                   <Route path="/inventario/materiales" element={<MaterialesList />} />
                   <Route path="/inventario/herramientas" element={<HerramientasList />} />
                   <Route path="/perfil" element={<Profile />} />
                   <Route path="/cambiar-contraseña" element={<ChangePassword />} />
+                  <Route 
+                    path="/configuracion" 
+                    element={
+                      <RequireRole roles={['admin']}>
+                        <Configuracion />
+                      </RequireRole>
+                    } 
+                  />
                 </Routes>
               </Layout>
             </RequireAuth>

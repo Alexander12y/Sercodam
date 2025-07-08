@@ -23,12 +23,16 @@ const validateOrdenCreacion = [
         .notEmpty()
         .withMessage('El cliente es requerido')
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 2, max: 200 })
         .withMessage('El cliente debe tener entre 2 y 200 caracteres'),
     
     body('observaciones')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 1000 })
         .withMessage('Las observaciones no pueden exceder 1000 caracteres'),
     
@@ -74,6 +78,8 @@ const validateOrdenCreacion = [
         .if(body('materiales').exists())
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 500 })
         .withMessage('Notas no pueden exceder 500 caracteres'),
     
@@ -93,6 +99,8 @@ const validateOrdenCreacion = [
         .if(body('herramientas').exists())
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 500 })
         .withMessage('Notas de herramienta no pueden exceder 500 caracteres'),
     
@@ -104,18 +112,22 @@ const validateOrdenUpdate = [
     body('cliente')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 2, max: 200 })
         .withMessage('El cliente debe tener entre 2 y 200 caracteres'),
     
     body('observaciones')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 1000 })
         .withMessage('Las observaciones no pueden exceder 1000 caracteres'),
     
     body('estado')
         .optional()
-        .isIn(['pendiente', 'en_proceso', 'completada', 'cancelada', 'pausada', 'BORRADOR'])
+        .isIn(['en_proceso', 'completada', 'cancelada', 'pausada'])
         .withMessage('Estado inválido'),
     
     handleValidationErrors
@@ -126,12 +138,14 @@ const validateCambioEstado = [
     body('estado')
         .notEmpty()
         .withMessage('El estado es requerido')
-        .isIn(['pendiente', 'en_proceso', 'completada', 'cancelada', 'pausada', 'BORRADOR'])
+        .isIn(['en_proceso', 'completada', 'cancelada', 'pausada'])
         .withMessage('Estado inválido'),
     
     body('notas')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 500 })
         .withMessage('Las notas no pueden exceder 500 caracteres'),
     
@@ -144,6 +158,8 @@ const validateCancelacion = [
         .notEmpty()
         .withMessage('El motivo de cancelación es requerido')
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 5, max: 500 })
         .withMessage('El motivo debe tener entre 5 y 500 caracteres'),
     
@@ -182,6 +198,8 @@ const validateAgregarMateriales = [
     body('materiales.*.notas')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 500 })
         .withMessage('Notas no pueden exceder 500 caracteres'),
     
@@ -203,6 +221,8 @@ const validateAsignarHerramientas = [
     body('herramientas.*.notas')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 500 })
         .withMessage('Notas no pueden exceder 500 caracteres'),
     
@@ -226,6 +246,8 @@ const validateActualizarMaterial = [
     body('notas')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 500 })
         .withMessage('Notas no pueden exceder 500 caracteres'),
     
@@ -236,7 +258,7 @@ const validateActualizarMaterial = [
 const validateOrdenesQuery = [
     query('estado')
         .optional()
-        .isIn(['pendiente', 'en_proceso', 'completada', 'cancelada', 'pausada'])
+        .isIn(['en_proceso', 'completada', 'cancelada', 'pausada'])
         .withMessage('Estado inválido'),
     
     query('cliente')

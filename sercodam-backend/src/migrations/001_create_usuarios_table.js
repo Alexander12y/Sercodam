@@ -17,6 +17,8 @@ exports.up = function(knex) {
         table.string('password', 255).notNullable();
         table.string('rol', 20).defaultTo('usuario').notNullable();
         table.boolean('activo').defaultTo(true).notNullable();
+        table.string('twofa_secret', 255);
+        table.boolean('twofa_enabled').defaultTo(false);
         
         // Tokens y sesiones
         table.string('reset_token', 255);

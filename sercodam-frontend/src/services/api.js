@@ -58,8 +58,8 @@ export const ordenesApi = {
   // Obtener todas las órdenes
   getOrdenes: (params = {}) => api.get('/ordenes', { params }),
   
-  // Obtener órdenes pendientes
-  getOrdenesPendientes: () => api.get('/ordenes/pendientes'),
+      // Obtener órdenes borrador
+    getOrdenesBorradores: () => api.get('/ordenes/borradores'),
   
   // Obtener órdenes activas
   getOrdenesActivas: () => api.get('/ordenes/activas'),
@@ -90,6 +90,9 @@ export const ordenesApi = {
   
   // Obtener estadísticas
   getEstadisticas: () => api.get('/ordenes/stats/resumen'),
+  
+  // Buscar clientes para autocompletado
+  searchClientes: (query) => api.get(`/ordenes/clientes/search?q=${query}`),
 };
 
 // API de autenticación
@@ -101,6 +104,20 @@ export const authApi = {
   getProfile: () => api.get('/auth/me'),
   updateProfile: (profileData) => api.put('/auth/me', profileData),
   changePassword: (passwordData) => api.post('/auth/change-password', passwordData),
+  
+  // Gestión de usuarios (solo admin)
+  getUsers: (params = '') => api.get(`/auth/users?${params}`),
+  getUserById: (id) => api.get(`/auth/users/${id}`),
+  createUser: (userData) => api.post('/auth/users', userData),
+  updateUser: (id, userData) => api.put(`/auth/users/${id}`, userData),
+  deactivateUser: (id) => api.delete(`/auth/users/${id}`),
+  activateUser: (id) => api.post(`/auth/users/${id}/activate`),
+  
+  // 2FA
+  login2FA: (data) => api.post('/auth/login/2fa', data),
+  setup2FA: () => api.post('/auth/2fa/setup'),
+  verify2FA: (data) => api.post('/auth/2fa/verify', data),
+  resetUser2FA: (id) => api.post(`/auth/users/${id}/reset-2fa`),
 };
 
 // API de inventario (para obtener materiales y herramientas)
@@ -187,6 +204,30 @@ export const herramientasApi = {
   
   // Registrar salida
   salidaHerramienta: (data) => api.post('/inventario/herramientas/salida', data),
+};
+
+// API de clientes
+export const clientesApi = {
+  // Obtener todos los clientes
+  getClientes: (params = {}) => api.get('/clientes', { params }),
+  
+  // Buscar clientes para autocompletado
+  searchClientes: (query) => api.get(`/clientes/search?q=${query}`),
+  
+  // Obtener cliente por ID
+  getClienteById: (id) => api.get(`/clientes/${id}`),
+  
+  // Obtener órdenes de un cliente
+  getOrdenesCliente: (id, params = {}) => api.get(`/clientes/${id}/ordenes`, { params }),
+  
+  // Crear nuevo cliente
+  createCliente: (data) => api.post('/clientes', data),
+  
+  // Actualizar cliente
+  updateCliente: (id, data) => api.put(`/clientes/${id}`, data),
+  
+  // Eliminar cliente
+  deleteCliente: (id) => api.delete(`/clientes/${id}`),
 };
 
 export default api; 

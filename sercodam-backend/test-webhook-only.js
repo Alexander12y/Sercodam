@@ -89,11 +89,11 @@ async function testEstadoChangeWithWebhook() {
             'Authorization': `Bearer ${token}`
         };
         
-        // Obtener una orden pendiente
-        const ordenesResponse = await axios.get(`${BASE_URL}/ordenes?estado=pendiente&limit=1`, { headers });
+        // Obtener una orden en proceso
+        const ordenesResponse = await axios.get(`${BASE_URL}/ordenes?estado=en_proceso&limit=1`, { headers });
         
         if (!ordenesResponse.data.success || !ordenesResponse.data.data.ordenes.length) {
-            console.log('❌ No hay órdenes pendientes para probar cambio de estado');
+            console.log('❌ No hay órdenes en proceso para probar cambio de estado');
             return;
         }
         

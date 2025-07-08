@@ -19,10 +19,12 @@ import {
   Security as SecurityIcon,
   Save as SaveIcon,
   ArrowBack as ArrowBackIcon,
+  QrCode2 as QrCodeIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { authApi } from '../services/api';
+import { setUser } from '../store/slices/authSlice';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -36,11 +38,29 @@ const Profile = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [show2FA, setShow2FA] = useState(false);
+  const [qrData, setQrData] = useState(null);
+  const [secret, setSecret] = useState('');
+  const [code2FA, setCode2FA] = useState('');
+  const [twofaSuccess, setTwofaSuccess] = useState('');
+  const [twofaError, setTwofaError] = useState('');
+  const [verifying, setVerifying] = useState(false);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
     setError('');
     setSuccess('');
+  };
+
+  const reloadProfile = async () => {
+    try {
+      const res = await authApi.getProfile();
+      if (res.data && res.data.success && res.data.data) {
+        dispatch(setUser(res.data.data));
+      }
+    } catch (err) {
+      // Ignorar errores silenciosamente
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -53,7 +73,7 @@ const Profile = () => {
       const response = await authApi.updateProfile(form);
       if (response.data.success) {
         setSuccess('Perfil actualizado correctamente');
-        // TODO: Actualizar el usuario en el store
+        await reloadProfile(); // Recargar perfil actualizado
       } else {
         setError(response.data.message || 'Error al actualizar el perfil');
       }
@@ -61,6 +81,53 @@ const Profile = () => {
       setError(err.response?.data?.message || 'Error al actualizar el perfil');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSetup2FA = async () => {
+    setShow2FA(true);
+    setTwofaError('');
+    setTwofaSuccess('');
+    try {
+      const response = await authApi.setup2FA();
+      if (response.data.success) {
+        setQrData(response.data.data.qr);
+        setSecret(response.data.data.secret);
+      } else {
+        setShow2FA(false);
+        setTwofaError(response.data.message || 'Error generando QR');
+      }
+    } catch (err) {
+      setShow2FA(false);
+      // Si el backend responde que ya está activado, mostrar mensaje amigable
+      if (err.response?.data?.message?.includes('2FA ya está activado')) {
+        setTwofaError('2FA ya está activado para tu cuenta. Si necesitas reconfigurarlo, contacta a un administrador.');
+      } else {
+        setTwofaError(err.response?.data?.message || 'Error generando QR');
+      }
+    }
+  };
+
+  const handleVerify2FA = async () => {
+    setVerifying(true);
+    setTwofaError('');
+    setTwofaSuccess('');
+    try {
+      const response = await authApi.verify2FA({ token: code2FA });
+      if (response.data.success) {
+        setTwofaSuccess('¡2FA activado correctamente!');
+        setShow2FA(false);
+        setQrData(null);
+        setSecret('');
+        setCode2FA('');
+        await reloadProfile(); // Recargar perfil actualizado
+      } else {
+        setTwofaError(response.data.message || 'Código incorrecto');
+      }
+    } catch (err) {
+      setTwofaError(err.response?.data?.message || 'Código incorrecto');
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -195,6 +262,59 @@ const Profile = () => {
                   </Box>
                 </>
               )}
+
+              <Divider sx={{ my: 2 }} />
+              <Box>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Autenticación en dos pasos (2FA)
+                </Typography>
+                {user?.twofa_enabled || twofaSuccess ? (
+                  <Alert severity="success" icon={<QrCodeIcon />} sx={{ mb: 2 }}>
+                    2FA activado para tu cuenta
+                  </Alert>
+                ) : show2FA ? (
+                  <Box>
+                    {qrData && (
+                      <Box textAlign="center" mb={2}>
+                        <img src={qrData} alt="QR 2FA" style={{ width: 200, height: 200 }} />
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          Secreto: <b>{secret}</b>
+                        </Typography>
+                      </Box>
+                    )}
+                    <TextField
+                      label="Código de 6 dígitos"
+                      value={code2FA}
+                      onChange={e => setCode2FA(e.target.value)}
+                      fullWidth
+                      sx={{ mb: 2 }}
+                    />
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      onClick={handleVerify2FA}
+                      disabled={verifying || !code2FA}
+                      fullWidth
+                    >
+                      {verifying ? 'Verificando...' : 'Verificar y Activar 2FA'}
+                    </Button>
+                    {twofaError && <Alert severity="error" sx={{ mt: 2 }}>{twofaError}</Alert>}
+                    {twofaSuccess && <Alert severity="success" sx={{ mt: 2 }}>{twofaSuccess}</Alert>}
+                  </Box>
+                ) : (
+                  !user?.twofa_enabled && !twofaSuccess && (
+                    <Button
+                      variant="outlined"
+                      startIcon={<QrCodeIcon />}
+                      onClick={handleSetup2FA}
+                      fullWidth
+                      sx={{ mt: 1 }}
+                    >
+                      Configurar 2FA
+                    </Button>
+                  )
+                )}
+              </Box>
             </CardContent>
           </Card>
         </Grid>

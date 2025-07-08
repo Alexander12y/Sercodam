@@ -195,8 +195,8 @@ const herramientasSlice = createSlice({
       })
       .addCase(fetchHerramientas.fulfilled, (state, action) => {
         state.loading = false;
-        state.lista = action.payload.data?.herramientas || action.payload.herramientas || [];
-        state.pagination = action.payload.data?.pagination || action.payload.pagination || {
+        state.lista = action.payload.data?.data?.herramientas || action.payload.data?.herramientas || action.payload.herramientas || [];
+        state.pagination = action.payload.data?.data?.pagination || action.payload.data?.pagination || action.payload.pagination || {
           page: 1,
           limit: 50,
           total: 0,
@@ -209,15 +209,15 @@ const herramientasSlice = createSlice({
       })
       // fetchCategorias
       .addCase(fetchCategorias.fulfilled, (state, action) => {
-        state.categorias = action.payload.data || action.payload;
+        state.categorias = action.payload.data?.data || action.payload.data || action.payload;
       })
       // fetchEstados
       .addCase(fetchEstados.fulfilled, (state, action) => {
-        state.estados = action.payload.data || action.payload;
+        state.estados = action.payload.data?.data || action.payload.data || action.payload;
       })
       // fetchUbicaciones
       .addCase(fetchUbicaciones.fulfilled, (state, action) => {
-        state.ubicaciones = action.payload.data || action.payload;
+        state.ubicaciones = action.payload.data?.data || action.payload.data || action.payload;
       })
       // fetchHerramientaById
       .addCase(fetchHerramientaById.pending, (state) => {

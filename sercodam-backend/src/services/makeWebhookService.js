@@ -1,5 +1,8 @@
 const axios = require('axios');
 const logger = require('../config/logger');
+const fs = require('fs');
+const path = require('path');
+const FormData = require('form-data');
 
 class MakeWebhookService {
     constructor() {
@@ -41,26 +44,100 @@ class MakeWebhookService {
                 }
             };
 
-            // Enviar webhook
-            const response = await axios.post(this.makeWebhookUrl, webhookData, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-make-apikey': this.apiKey,
-                    'User-Agent': 'Sercodam-OP/1.0'
-                },
-                timeout: this.timeout
-            });
+            // Verificar si existe un PDF generado para esta orden
+            let pdfFilePath = null;
+            let pdfFileName = null;
+            
+            try {
+                // Buscar PDF en la base de datos
+                const db = require('../config/database');
+                const ordenConPDF = await db('orden_produccion')
+                    .where('id_op', ordenData.id_op)
+                    .select('pdf_filename')
+                    .first();
+                
+                if (ordenConPDF && ordenConPDF.pdf_filename) {
+                    pdfFileName = ordenConPDF.pdf_filename;
+                    pdfFilePath = path.join(__dirname, '../../temp', pdfFileName);
+                    
+                    // Verificar que el archivo existe
+                    if (!fs.existsSync(pdfFilePath)) {
+                        logger.warn('PDF no encontrado en el sistema de archivos', {
+                            ordenId: ordenData.id_op,
+                            expectedPath: pdfFilePath
+                        });
+                        pdfFilePath = null;
+                        pdfFileName = null;
+                    }
+                }
+            } catch (pdfError) {
+                logger.warn('Error verificando PDF de la orden', {
+                    ordenId: ordenData.id_op,
+                    error: pdfError.message
+                });
+            }
+
+            let response;
+            
+            if (pdfFilePath && fs.existsSync(pdfFilePath)) {
+                // Enviar webhook con PDF adjunto usando FormData
+                const formData = new FormData();
+                
+                // Agregar datos JSON
+                formData.append('data', JSON.stringify(webhookData), {
+                    contentType: 'application/json'
+                });
+                
+                // Agregar archivo PDF
+                formData.append('pdf', fs.createReadStream(pdfFilePath), {
+                    filename: pdfFileName,
+                    contentType: 'application/pdf'
+                });
+
+                logger.info('Enviando webhook con PDF adjunto', {
+                    ordenId: ordenData.id_op,
+                    pdfFileName,
+                    pdfSize: fs.statSync(pdfFilePath).size
+                });
+
+                response = await axios.post(this.makeWebhookUrl, formData, {
+                    headers: {
+                        ...formData.getHeaders(),
+                        'x-make-apikey': this.apiKey,
+                        'User-Agent': 'Sercodam-OP/1.0'
+                    },
+                    timeout: this.timeout
+                });
+            } else {
+                // Enviar webhook sin PDF (fallback)
+                logger.info('Enviando webhook sin PDF adjunto', {
+                    ordenId: ordenData.id_op,
+                    reason: 'PDF no disponible'
+                });
+
+                response = await axios.post(this.makeWebhookUrl, webhookData, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-make-apikey': this.apiKey,
+                        'User-Agent': 'Sercodam-OP/1.0'
+                    },
+                    timeout: this.timeout
+                });
+            }
 
             logger.info('Webhook enviado exitosamente a Make.com', {
                 ordenId: ordenData.id_op,
                 status: response.status,
-                responseData: response.data
+                responseData: response.data,
+                pdfIncluido: !!pdfFilePath
             });
 
             return {
                 success: true,
                 status: response.status,
-                data: response.data
+                data: response.data,
+                pdfIncluido: !!pdfFilePath,
+                pdfFileName
             };
 
         } catch (error) {

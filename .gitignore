@@ -5,3 +5,17 @@ sercodam-frontend/node_modules/
 # ─── Archivos de bloqueo de npm ──────────────────────
 sercodam-backend/package-lock.json
 sercodam-frontend/package-lock.json
+
+# ─── Directorios de Node en el repositorio raíz ───────
+node_modules/
+
+# ─── Archivos de log y directorios temporales ────────
+*.log
+sercodam-backend/src/logs/
+sercodam-backend/temp/
+
+# ─── Archivos PDF generados ──────────────────────────
+*.pdf
+
+# ─── Archivos de lock y cache globales ──────────────
+package-lock.json

@@ -115,4 +115,18 @@ router.post('/verify-token',
     asyncHandler(authController.verifyToken)
 );
 
+// 2FA endpoints
+router.post('/2fa/setup', authenticateToken, asyncHandler(authController.setup2FA));
+router.post('/2fa/verify', authenticateToken, asyncHandler(authController.verify2FA));
+
+// Login 2FA
+router.post('/login/2fa', asyncHandler(authController.login2FA));
+
+// POST /api/v1/auth/users/:id/reset-2fa - Resetear 2FA de un usuario (solo admin)
+router.post('/users/:id/reset-2fa',
+    authenticateToken,
+    requireRole(['admin']),
+    asyncHandler(authController.reset2FA)
+);
+
 module.exports = router;

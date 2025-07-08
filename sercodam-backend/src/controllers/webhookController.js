@@ -82,7 +82,7 @@ const webhookController = {
                     direccion_instalacion: ordenData.direccion_instalacion,
                     contacto_cliente: ordenData.contacto_cliente,
                     telefono_cliente: ordenData.telefono_cliente,
-                    estado: 'pendiente'
+                    estado: 'en_proceso'
                 })
                 .returning('id_op');
 
@@ -128,7 +128,8 @@ const webhookController = {
                     unidad: 'm²',
                     notas: `Consumo para orden ${numero_op} - ${panoData.cantidad} tramos`,
                     fecha: fechaActual,
-                    id_op: id_op
+                    id_op: id_op,
+                    id_usuario: 1 // Usuario por defecto para webhooks
                 });
 
                 // Actualizar área del paño
@@ -213,7 +214,7 @@ const webhookController = {
                     numero_op,
                     cliente: ordenData.cliente,
                     fecha_creacion: fechaActual,
-                    estado: 'pendiente',
+                    estado: 'en_proceso',
                     total_panos: ordenData.panos.length,
                     total_materiales: ordenData.materiales.length,
                     total_herramientas: ordenData.herramientas.length

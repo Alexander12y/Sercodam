@@ -463,33 +463,39 @@ const PanosList = () => {
                   <TableCell>
                         <Box>
                           <Tooltip title="Ver detalles">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleView(pano)}
-                              color="primary"
-                            >
-                          <ViewIcon />
-                        </IconButton>
-                      </Tooltip>
+                            <span>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleView(pano)}
+                                color="primary"
+                              >
+                                <ViewIcon />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
                           <Tooltip title="Editar">
-                        <IconButton 
-                          size="small" 
-                              onClick={() => handleEdit(pano)}
-                              color="warning"
-                        >
-                              <EditIcon />
-                        </IconButton>
-                      </Tooltip>
+                            <span>
+                              <IconButton 
+                                size="small" 
+                                onClick={() => handleEdit(pano)}
+                                color="warning"
+                              >
+                                <EditIcon />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
                           <Tooltip title="Eliminar">
-                        <IconButton 
-                          size="small" 
-                              onClick={() => handleDelete(pano)}
-                          color="error"
-                        >
-                              <DeleteIcon />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
+                            <span>
+                              <IconButton 
+                                size="small" 
+                                onClick={() => handleDelete(pano)}
+                                color="error"
+                              >
+                                <DeleteIcon />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </Box>
                   </TableCell>
                 </TableRow>
                   ))

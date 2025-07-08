@@ -23,7 +23,8 @@ import {
   Paper,
   IconButton,
   Card,
-  CardContent
+  CardContent,
+  Alert
 } from '@mui/material';
 import { 
   Add as AddIcon, 
@@ -33,7 +34,7 @@ import {
   FilterList as FilterIcon,
   Info as InfoIcon
 } from '@mui/icons-material';
-import { inventarioApi } from '../../services/api';
+import { herramientasApi } from '../../services/api';
 
 // Mapeo de subgrupos a categorías de herramientas
 const SUBGRUPOS_CATEGORIAS = {
@@ -87,6 +88,7 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
   const [loading, setLoading] = useState(false);
   const [cantidad, setCantidad] = useState(1);
   const [herramientaSeleccionada, setHerramientaSeleccionada] = useState(null);
+  const [error, setError] = useState('');
 
   // Función para guardar draft cuando cambian las herramientas
   const saveDraftOnChange = (newHerramientasSeleccionadas) => {
@@ -101,8 +103,8 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
 
   const loadAllHerramientas = async () => {
     try {
-      const res = await inventarioApi.getHerramientas({ limit: 1000 });
-      const allHerramientas = res.data?.herramientas || [];
+      const res = await herramientasApi.getHerramientas({ limit: 1000 });
+      const allHerramientas = res.data?.data?.herramientas || res.data?.herramientas || [];
       const categoriasUnicas = [...new Set(allHerramientas.map(h => h.categoria))].filter(Boolean).sort();
       setCategorias(categoriasUnicas);
     } catch (error) {
@@ -130,8 +132,8 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
       if (categoria) params.categoria = categoria;
       if (busqueda) params.search = busqueda;
       
-      const res = await inventarioApi.getHerramientas(params);
-      const herramientasOrdenadas = (res.data?.herramientas || []).sort((a, b) => 
+      const res = await herramientasApi.getHerramientas(params);
+      const herramientasOrdenadas = (res.data?.data?.herramientas || res.data?.herramientas || []).sort((a, b) => 
         (a.descripcion || a.id_herramienta || '').localeCompare(b.descripcion || b.id_herramienta || '')
       );
       setHerramientas(herramientasOrdenadas);
@@ -152,15 +154,19 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
   };
 
   const handleAgregar = () => {
-    if (herramientaSeleccionada && cantidad > 0) {
+    if (!herramientaSeleccionada) return;
+    setError("");
+    if (cantidad > (herramientaSeleccionada.cantidad_disponible || 0)) {
+      setError(`No hay suficiente stock disponible. Stock actual: ${herramientaSeleccionada.cantidad_disponible || 0}`);
+      return;
+    }
+    if (cantidad > 0) {
       const newHerramientasSeleccionadas = [
         ...herramientasSeleccionadas,
         { ...herramientaSeleccionada, cantidad }
       ];
-      
       setHerramientasSeleccionadas(newHerramientasSeleccionadas);
       saveDraftOnChange(newHerramientasSeleccionadas);
-      
       setHerramientaSeleccionada(null);
       setCantidad(1);
       setModalOpen(false);
@@ -563,6 +569,8 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
               </CardContent>
             </Card>
           )}
+
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setModalOpen(false)}>Cancelar</Button>

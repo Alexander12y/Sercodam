@@ -31,6 +31,8 @@ const validateInventarioUpdate = [
     body('ubicacion')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 2, max: 100 })
         .withMessage('Ubicación debe tener entre 2 y 100 caracteres'),
     
@@ -59,6 +61,8 @@ const validateInventarioUpdate = [
     body('marca')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 1, max: 50 })
         .withMessage('Marca debe tener entre 1 y 50 caracteres'),
     
@@ -75,24 +79,32 @@ const validateMaterialUpdate = [
     body('descripcion')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 2, max: 200 })
         .withMessage('Descripción debe tener entre 2 y 200 caracteres'),
     
     body('categoria')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 2, max: 100 })
         .withMessage('Categoría debe tener entre 2 y 100 caracteres'),
     
     body('presentacion')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 100 })
         .withMessage('Presentación no puede exceder 100 caracteres'),
     
     body('unidad')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 1, max: 20 })
         .withMessage('Unidad debe tener entre 1 y 20 caracteres'),
     
@@ -123,6 +135,8 @@ const validateMaterialUpdate = [
     body('marca')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 1, max: 50 })
         .withMessage('Marca debe tener entre 1 y 50 caracteres'),
     
@@ -154,6 +168,8 @@ const validateMaterialUpdate = [
     body('uso_principal')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 200 })
         .withMessage('Uso principal no puede exceder 200 caracteres'),
     
@@ -189,6 +205,8 @@ const validateMovimiento = [
     body('notas')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 500 })
         .withMessage('Notas no pueden exceder 500 caracteres'),
     
@@ -208,6 +226,8 @@ const validateMaterialCreacion = [
         .notEmpty()
         .withMessage('Descripción es requerida')
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 2, max: 200 })
         .withMessage('Descripción debe tener entre 2 y 200 caracteres'),
     
@@ -215,6 +235,8 @@ const validateMaterialCreacion = [
         .notEmpty()
         .withMessage('Categoría es requerida')
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 2, max: 100 })
         .withMessage('Categoría debe tener entre 2 y 100 caracteres'),
     
@@ -222,6 +244,8 @@ const validateMaterialCreacion = [
         .notEmpty()
         .withMessage('Unidad es requerida')
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 1, max: 20 })
         .withMessage('Unidad debe tener entre 1 y 20 caracteres'),
     
@@ -258,6 +282,8 @@ const validateHerramientaCreacion = [
         .notEmpty()
         .withMessage('Categoría es requerida')
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 2, max: 100 })
         .withMessage('Categoría debe tener entre 2 y 100 caracteres'),
     
@@ -265,18 +291,24 @@ const validateHerramientaCreacion = [
         .notEmpty()
         .withMessage('Descripción es requerida')
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 2, max: 200 })
         .withMessage('Descripción debe tener entre 2 y 200 caracteres'),
     
     body('presentacion')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 100 })
         .withMessage('Presentación no puede exceder 100 caracteres'),
     
     body('unidad')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 20 })
         .withMessage('Unidad no puede exceder 20 caracteres'),
     
@@ -294,6 +326,8 @@ const validateHerramientaCreacion = [
     body('marca')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 50 })
         .withMessage('Marca no puede exceder 50 caracteres'),
     
@@ -305,6 +339,8 @@ const validateHerramientaCreacion = [
     body('ubicacion')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 100 })
         .withMessage('Ubicación no puede exceder 100 caracteres'),
     
@@ -322,6 +358,8 @@ const validateHerramientaCreacion = [
     body('uso_principal')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 200 })
         .withMessage('Uso principal no puede exceder 200 caracteres'),
     
@@ -333,24 +371,32 @@ const validateHerramientaUpdate = [
     body('categoria')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 2, max: 100 })
         .withMessage('Categoría debe tener entre 2 y 100 caracteres'),
     
     body('descripcion')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 2, max: 200 })
         .withMessage('Descripción debe tener entre 2 y 200 caracteres'),
     
     body('presentacion')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 100 })
         .withMessage('Presentación no puede exceder 100 caracteres'),
     
     body('unidad')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 20 })
         .withMessage('Unidad no puede exceder 20 caracteres'),
     
@@ -368,6 +414,8 @@ const validateHerramientaUpdate = [
     body('marca')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 50 })
         .withMessage('Marca no puede exceder 50 caracteres'),
     
@@ -379,6 +427,8 @@ const validateHerramientaUpdate = [
     body('ubicacion')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 100 })
         .withMessage('Ubicación no puede exceder 100 caracteres'),
     
@@ -396,6 +446,8 @@ const validateHerramientaUpdate = [
     body('uso_principal')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ max: 200 })
         .withMessage('Uso principal no puede exceder 200 caracteres'),
     

@@ -54,19 +54,18 @@ try {
     // Crear app Express
     const app = express();
 
+    // Lista de orígenes permitidos para CORS (agrega aquí tu subdominio de producción cuando lo tengas)
+    const ALLOWED_ORIGINS = [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        // 'https://TU-SUBDOMINIO.sercodam.com' // <-- Agrega aquí tu subdominio de producción
+    ];
+
     // CORS configuration (lo más arriba posible)
     app.use(cors({
         origin: function (origin, callback) {
             if (!origin) return callback(null, true);
-            const allowed = [
-                'http://localhost:3000',
-                'http://localhost:5173',
-                'http://127.0.0.1:3000',
-                'http://127.0.0.1:5173',
-                'https://sercodam.com',
-                'https://www.sercodam.com'
-            ];
-            if (allowed.includes(origin)) {
+            if (ALLOWED_ORIGINS.includes(origin)) {
                 return callback(null, true);
             } else {
                 return callback(new Error('Not allowed by CORS'));
@@ -78,17 +77,32 @@ try {
         preflightContinue: false,
         optionsSuccessStatus: 204
     }));
-    // Middleware global para forzar headers CORS en todas las respuestas (antes de cualquier ruta)
-    app.use((req, res, next) => {
-      res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-      res.header('Access-Control-Allow-Credentials', 'true');
-      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-      if (req.method === 'OPTIONS') {
-        return res.sendStatus(204);
-      }
-      next();
-    });
+
+    // Helmet - Seguridad HTTP headers
+    app.use(helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", 'https://apis.google.com', 'https://cdn.jsdelivr.net'],
+          styleSrc: ["'self'", 'https://fonts.googleapis.com', 'https://cdn.jsdelivr.net'],
+          fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+          imgSrc: ["'self'", 'data:', 'https://cdn.jsdelivr.net'],
+          connectSrc: ["'self'", 'https://sercodam.com', 'https://www.sercodam.com'],
+          objectSrc: ["'none'"],
+          upgradeInsecureRequests: [],
+        },
+      },
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+      frameguard: { action: 'deny' },
+      hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+      xssFilter: true,
+      noSniff: true,
+      dnsPrefetchControl: { allow: false },
+      permittedCrossDomainPolicies: { permittedPolicies: 'none' },
+      crossOriginResourcePolicy: { policy: 'same-origin' },
+      crossOriginEmbedderPolicy: true,
+      crossOriginOpenerPolicy: { policy: 'same-origin' },
+    }));
 
     // Rate limiting - Configuración más inteligente
     const isDevelopment = process.env.NODE_ENV === 'development';
@@ -103,13 +117,42 @@ try {
         standardHeaders: true,
         legacyHeaders: false,
         skip: (req) => {
-            return req.path === '/health' || req.path.startsWith('/api/v1/auth/login');
+            return req.path === '/health';
         },
         keyGenerator: (req) => {
             return req.ip + ':' + (req.get('User-Agent') || 'unknown');
         }
     };
 
+    // Rate limiting estricto para endpoints sensibles
+    const sensitiveLimiter = rateLimit({
+        windowMs: 60 * 1000, // 1 minuto
+        max: 5, // 5 intentos por minuto por IP
+        message: {
+            success: false,
+            message: 'Demasiados intentos. Espera un minuto antes de volver a intentarlo.'
+        },
+        standardHeaders: true,
+        legacyHeaders: false
+    });
+    const registerLimiter = rateLimit({
+        windowMs: 60 * 1000, // 1 minuto
+        max: 10, // 10 intentos por minuto por IP
+        message: {
+            success: false,
+            message: 'Demasiados registros. Espera un minuto antes de volver a intentarlo.'
+        },
+        standardHeaders: true,
+        legacyHeaders: false
+    });
+
+    // Aplicar limitadores a rutas sensibles
+    app.use('/api/v1/auth/login', sensitiveLimiter);
+    app.use('/api/v1/auth/login/2fa', sensitiveLimiter);
+    app.use('/api/v1/auth/2fa/verify', sensitiveLimiter);
+    app.use('/api/v1/auth/register', registerLimiter);
+
+    // Rate limit global para el resto de la API
     const limiter = rateLimit(rateLimitConfig);
     app.use('/api/', limiter);
 
@@ -254,6 +297,16 @@ try {
     } catch (error) {
         console.error('❌ Error cargando rutas de webhook:', error.message);
         console.log('⚠️  Continuando sin rutas de webhook (pueden no estar implementadas)');
+    }
+
+    try {
+        console.log('Cargando rutas de clientes...');
+        const clientesRoutes = require('./routes/clientes');
+        app.use(`/api/${API_VERSION}/clientes`, clientesRoutes);
+        console.log('✅ Rutas de clientes cargadas');
+    } catch (error) {
+        console.error('❌ Error cargando rutas de clientes:', error.message);
+        console.log('⚠️  Continuando sin rutas de clientes (pueden no estar implementadas)');
     }
 
     // Error handling middleware

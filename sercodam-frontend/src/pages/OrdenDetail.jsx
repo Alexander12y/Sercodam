@@ -41,8 +41,6 @@ import api from '../services/api';
 
 const getEstadoColor = (estado) => {
   switch (estado) {
-    case 'pendiente':
-      return 'warning';
     case 'en_proceso':
       return 'info';
     case 'completada':
@@ -58,8 +56,6 @@ const getEstadoColor = (estado) => {
 
 const getEstadoText = (estado) => {
   switch (estado) {
-    case 'pendiente':
-      return 'Pendiente';
     case 'en_proceso':
       return 'En Proceso';
     case 'completada':
@@ -145,8 +141,11 @@ const OrdenDetail = () => {
     try {
       setLoadingPdf(true);
       
-      // Hacer la petición para generar el PDF
-      const response = await api.get(`/ordenes/${id}/pdf`, {
+      // Siempre generar el PDF (ya no hay campo pdf_generado en la base de datos)
+      await api.get(`/ordenes/${id}/pdf`);
+      
+      // Ahora descargar el PDF
+      const response = await api.get(`/ordenes/${id}/pdf/download`, {
         responseType: 'blob'
       });
 
@@ -169,18 +168,18 @@ const OrdenDetail = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
       
-      enqueueSnackbar('PDF generado y descargado exitosamente', { variant: 'success' });
+      enqueueSnackbar('PDF descargado exitosamente', { variant: 'success' });
     } catch (error) {
-      console.error('Error generando PDF:', error);
-      enqueueSnackbar('Error al generar el PDF', { variant: 'error' });
+      console.error('Error descargando PDF:', error);
+      enqueueSnackbar('Error al descargar el PDF', { variant: 'error' });
     } finally {
       setLoadingPdf(false);
     }
   };
 
-  const canStart = ordenActual?.estado === 'pendiente';
-  const canComplete = ordenActual?.estado === 'en_proceso';
-  const canCancel = ['pendiente', 'en_proceso', 'pausada'].includes(ordenActual?.estado);
+  const canStart = ordenActual?.estado === 'en_proceso';
+  const canComplete = ordenActual?.estado === 'completada';
+  const canCancel = ['en_proceso', 'pausada'].includes(ordenActual?.estado);
   const canPause = ordenActual?.estado === 'en_proceso';
 
   if (loading && !ordenActual) {
@@ -302,7 +301,7 @@ const OrdenDetail = () => {
               onClick={handleGenerarPDF}
               disabled={loadingPdf}
             >
-              {loadingPdf ? 'Generando...' : 'Generar PDF'}
+              {loadingPdf ? 'Descargando...' : 'Descargar PDF'}
             </Button>
           </Box>
         </CardContent>
@@ -496,8 +495,6 @@ const OrdenDetail = () => {
 // Función auxiliar para calcular el progreso
 const getProgresoOrden = (estado) => {
   switch (estado) {
-    case 'pendiente':
-      return 0;
     case 'en_proceso':
       return 50;
     case 'completada':

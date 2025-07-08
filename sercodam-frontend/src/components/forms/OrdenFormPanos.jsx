@@ -44,6 +44,7 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
   const [largoTomar, setLargoTomar] = useState(0);
   const [anchoTomar, setAnchoTomar] = useState(0);
   const [panoSeleccionado, setPanoSeleccionado] = useState(null);
+  const [errorStock, setErrorStock] = useState("");
   
   // Filtros
   const [filtros, setFiltros] = useState({
@@ -148,32 +149,33 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
     if (panoSeleccionado && largoTomar > 0 && anchoTomar > 0) {
       const largoDisponible = Number(panoSeleccionado.largo_m) || 0;
       const anchoDisponible = Number(panoSeleccionado.ancho_m) || 0;
-      
+      setErrorStock("");
       if (largoTomar > largoDisponible) {
-        alert(`No puedes tomar más largo del disponible. Largo disponible: ${largoDisponible.toFixed(2)} m`);
+        setErrorStock(`No puedes tomar más largo del disponible. Largo disponible: ${largoDisponible.toFixed(2)} m`);
         return;
       }
-      
       if (anchoTomar > anchoDisponible) {
-        alert(`No puedes tomar más ancho del disponible. Ancho disponible: ${anchoDisponible.toFixed(2)} m`);
+        setErrorStock(`No puedes tomar más ancho del disponible. Ancho disponible: ${anchoDisponible.toFixed(2)} m`);
         return;
       }
-      
       const areaTomar = largoTomar * anchoTomar;
-      
+      if (areaTomar > (panoSeleccionado.area_m2 || (largoDisponible * anchoDisponible))) {
+        setErrorStock(`No puedes tomar más área de la disponible. Área disponible: ${(panoSeleccionado.area_m2 || (largoDisponible * anchoDisponible)).toFixed(2)} m²`);
+        return;
+      }
+      // Siempre cantidad 1 salvo que el usuario indique explícitamente lo contrario
       const newPanosSeleccionados = [
         ...panosSeleccionados,
-        { 
-          ...panoSeleccionado, 
+        {
+          ...panoSeleccionado,
           largo_tomar: largoTomar,
           ancho_tomar: anchoTomar,
-          cantidad: areaTomar
+          cantidad: 1,
+          area_tomar: areaTomar
         }
       ];
-      
       setPanosSeleccionados(newPanosSeleccionados);
       saveDraftOnChange(newPanosSeleccionados);
-      
       setPanoSeleccionado(null);
       setLargoTomar(0);
       setAnchoTomar(0);
@@ -388,6 +390,9 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
           </Box>
         </DialogTitle>
         <DialogContent>
+          {errorStock && (
+            <Alert severity="error" sx={{ mb: 2 }}>{errorStock}</Alert>
+          )}
           {/* Filtros */}
           <Card sx={{ mb: 3 }}>
             <CardContent>

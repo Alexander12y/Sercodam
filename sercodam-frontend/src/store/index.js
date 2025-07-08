@@ -5,6 +5,7 @@ import uiReducer from './slices/uiSlice';
 import panosReducer from './slices/panosSlice';
 import materialesReducer from './slices/materialesSlice';
 import herramientasReducer from './slices/herramientasSlice';
+import clientesReducer from './slices/clientesSlice';
 
 export const store = configureStore({
   reducer: {
@@ -14,6 +15,7 @@ export const store = configureStore({
     panos: panosReducer,
     materiales: materialesReducer,
     herramientas: herramientasReducer,
+    clientes: clientesReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

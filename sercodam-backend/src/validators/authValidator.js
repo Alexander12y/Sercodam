@@ -20,6 +20,8 @@ const handleValidationErrors = (req, res, next) => {
 const validateLogin = [
     body('username')
         .trim()
+        .escape()
+        .stripLow()
         .notEmpty()
         .withMessage('El nombre de usuario es requerido')
         .isLength({ min: 3, max: 50 })
@@ -40,6 +42,8 @@ const validateLogin = [
 const validateUserCreation = [
     body('username')
         .trim()
+        .escape()
+        .stripLow()
         .notEmpty()
         .withMessage('El nombre de usuario es requerido')
         .isLength({ min: 3, max: 50 })
@@ -57,6 +61,8 @@ const validateUserCreation = [
     
     body('nombre')
         .trim()
+        .escape()
+        .stripLow()
         .notEmpty()
         .withMessage('El nombre es requerido')
         .isLength({ min: 2, max: 100 })
@@ -64,6 +70,8 @@ const validateUserCreation = [
     
     body('email')
         .trim()
+        .escape()
+        .stripLow()
         .notEmpty()
         .withMessage('El email es requerido')
         .isEmail()
@@ -106,12 +114,16 @@ const validateProfileUpdate = [
     body('nombre')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 2, max: 100 })
         .withMessage('El nombre debe tener entre 2 y 100 caracteres'),
     
     body('email')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isEmail()
         .withMessage('El email debe tener un formato válido')
         .normalizeEmail(),
@@ -124,12 +136,16 @@ const validateUserUpdate = [
     body('nombre')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 2, max: 100 })
         .withMessage('El nombre debe tener entre 2 y 100 caracteres'),
     
     body('email')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isEmail()
         .withMessage('El email debe tener un formato válido')
         .normalizeEmail(),
@@ -194,6 +210,8 @@ const validateUserQuery = [
     body('search')
         .optional()
         .trim()
+        .escape()
+        .stripLow()
         .isLength({ min: 1, max: 100 })
         .withMessage('La búsqueda debe tener entre 1 y 100 caracteres'),
     

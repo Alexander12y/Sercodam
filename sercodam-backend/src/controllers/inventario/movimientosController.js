@@ -20,12 +20,10 @@ const movimientosController = {
             } = req.query;
 
             let query = db('movimiento_inventario as mi')
-                .leftJoin('inventario_item as ii', 'mi.id_item', 'ii.id_item')
                 .leftJoin('orden_produccion as op', 'mi.id_op', 'op.id_op')
                 .leftJoin('usuario as u', 'mi.id_usuario', 'u.id')
                 .select(
                     'mi.*',
-                    'ii.tipo_item',
                     'op.cliente',
                     'u.nombre as usuario_nombre'
                 );
@@ -148,14 +146,12 @@ const movimientosController = {
             // Validaciones específicas por tipo de movimiento
             if (tipo_mov === 'CONSUMO' || tipo_mov === 'AJUSTE_OUT') {
                 // Verificar que hay suficiente stock para materiales
-                if (item.tipo_item === 'EXTRA') {
-                    const material = await trx('materiales_extras')
-                        .where('id_item', id_item)
-                        .first();
+                const material = await trx('materiales_extras')
+                    .where('id_item', id_item)
+                    .first();
 
-                    if (material && material.cantidad_disponible < cantidad) {
-                        throw new ValidationError('Stock insuficiente para realizar el movimiento');
-                    }
+                if (material && material.cantidad_disponible < cantidad) {
+                    throw new ValidationError('Stock insuficiente para realizar el movimiento');
                 }
             }
 
@@ -173,36 +169,38 @@ const movimientosController = {
                 .returning('id_movimiento');
 
             // Actualizar stock si es material
-            if (item.tipo_item === 'EXTRA') {
-                const material = await trx('materiales_extras')
-                    .where('id_item', id_item)
-                    .first();
+            const material = await trx('materiales_extras')
+                .where('id_item', id_item)
+                .first();
 
-                if (material) {
-                    let nuevaCantidad = material.cantidad_disponible;
+            if (material) {
+                let nuevaCantidad = material.cantidad_disponible;
 
-                    switch (tipo_mov) {
-                        case 'CONSUMO':
-                        case 'AJUSTE_OUT':
-                            nuevaCantidad -= cantidad;
-                            break;
-                        case 'AJUSTE_IN':
-                        case 'DEVOLUCION':
-                            nuevaCantidad += cantidad;
-                            break;
-                    }
-
-                    await trx('materiales_extras')
-                        .where('id_item', id_item)
-                        .update({
-                            cantidad_disponible: Math.max(0, nuevaCantidad),
-                            última_modificación: db.fn.now()
-                        });
+                switch (tipo_mov) {
+                    case 'CONSUMO':
+                    case 'AJUSTE_OUT':
+                        nuevaCantidad -= cantidad;
+                        break;
+                    case 'AJUSTE_IN':
+                    case 'DEVOLUCION':
+                        nuevaCantidad += cantidad;
+                        break;
                 }
+
+                await trx('materiales_extras')
+                    .where('id_item', id_item)
+                    .update({
+                        cantidad_disponible: Math.max(0, nuevaCantidad),
+                        última_modificación: db.fn.now()
+                    });
             }
 
-            // Actualizar estado de paño si aplica
-            if (item.tipo_item === 'PANO' && (tipo_mov === 'CONSUMO' || tipo_mov === 'ASIGNACION')) {
+            // Verificar si es un paño y actualizar estado
+            const pano = await trx('pano')
+                .where('id_item', id_item)
+                .first();
+
+            if (pano && (tipo_mov === 'CONSUMO' || tipo_mov === 'ASIGNACION')) {
                 await trx('pano')
                     .where('id_item', id_item)
                     .update({ estado: 'reservado' });
@@ -245,13 +243,11 @@ const movimientosController = {
             const { id } = req.params;
 
             const movimiento = await db('movimiento_inventario as mi')
-                .leftJoin('inventario_item as ii', 'mi.id_item', 'ii.id_item')
                 .leftJoin('orden_produccion as op', 'mi.id_op', 'op.id_op')
                 .leftJoin('usuario as u', 'mi.id_usuario', 'u.id')
                 .where('mi.id_movimiento', id)
                 .select(
                     'mi.*',
-                    'ii.tipo_item',
                     'op.cliente',
                     'op.estado as estado_orden',
                     'u.nombre as usuario_nombre',
@@ -265,11 +261,16 @@ const movimientosController = {
 
             // Obtener detalle del item
             let detalleItem = null;
-            if (movimiento.tipo_item === 'PANO') {
-                detalleItem = await db('mv_panos_resumen')
-                    .where('id_item', movimiento.id_item)
-                    .first();
-            } else if (movimiento.tipo_item === 'EXTRA') {
+            
+            // Verificar si es un paño
+            const pano = await db('mv_panos_resumen')
+                .where('id_item', movimiento.id_item)
+                .first();
+            
+            if (pano) {
+                detalleItem = pano;
+            } else {
+                // Verificar si es un material
                 const material = await db('mv_materiales_resumen')
                     .where('id_item', movimiento.id_item)
                     .first();
@@ -277,6 +278,7 @@ const movimientosController = {
                 if (material) {
                     detalleItem = { ...material, subtipo: 'MATERIAL' };
                 } else {
+                    // Verificar si es una herramienta
                     const herramienta = await db('mv_herramientas_resumen')
                         .where('id_item', movimiento.id_item)
                         .first();

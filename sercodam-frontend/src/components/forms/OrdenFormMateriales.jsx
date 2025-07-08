@@ -23,7 +23,8 @@ import {
   Paper,
   IconButton,
   Card,
-  CardContent
+  CardContent,
+  Alert
 } from '@mui/material';
 import { 
   Add as AddIcon, 
@@ -66,6 +67,7 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
   const [loading, setLoading] = useState(false);
   const [cantidad, setCantidad] = useState(1);
   const [materialSeleccionado, setMaterialSeleccionado] = useState(null);
+  const [errorStock, setErrorStock] = useState("");
 
   // Función para guardar draft cuando cambian los materiales
   const saveDraftOnChange = (newMaterialesSeleccionados) => {
@@ -131,15 +133,19 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
   };
 
   const handleAgregar = () => {
-    if (materialSeleccionado && cantidad > 0) {
+    if (!materialSeleccionado) return;
+    if (cantidad > (materialSeleccionado.cantidad_disponible || 0)) {
+      setErrorStock(`No hay suficiente stock disponible. Stock actual: ${materialSeleccionado.cantidad_disponible || 0}`);
+      return;
+    }
+    setErrorStock("");
+    if (cantidad > 0) {
       const newMaterialesSeleccionados = [
         ...materialesSeleccionados,
         { ...materialSeleccionado, cantidad }
       ];
-      
       setMaterialesSeleccionados(newMaterialesSeleccionados);
       saveDraftOnChange(newMaterialesSeleccionados);
-      
       setMaterialSeleccionado(null);
       setCantidad(1);
       setModalOpen(false);
@@ -302,7 +308,7 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2" fontWeight="medium">
-                            ${((m.precioxunidad || 0) * m.cantidad).toFixed(2)}
+                            ${(Number(m.precioxunidad || 0) * m.cantidad).toFixed(2)}
                           </Typography>
                         </TableCell>
                         <TableCell>
@@ -528,7 +534,7 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
                       Categoría: {materialSeleccionado.categoria} • 
                       Marca: {materialSeleccionado.marca || 'S/M'} • 
                       Stock: {materialSeleccionado.cantidad_disponible || 0} • 
-                      Precio: ${(materialSeleccionado.precioxunidad || 0).toFixed(2)}
+                      Precio: ${Number(materialSeleccionado.precioxunidad || 0).toFixed(2)}
                     </Typography>
                   </Grid>
                   <Grid item xs={12} md={4}>
@@ -546,6 +552,8 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
               </CardContent>
             </Card>
           )}
+
+          {errorStock && <Alert severity="error" sx={{ mb: 2 }}>{errorStock}</Alert>}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setModalOpen(false)}>Cancelar</Button>

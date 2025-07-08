@@ -5,6 +5,8 @@ const db = require('../config/database');
 const { cache } = require('../config/redis');
 const logger = require('../config/logger');
 const { generateTokens, invalidateToken } = require('../middleware/auth');
+const speakeasy = require('speakeasy');
+const qrcode = require('qrcode');
 
 class AuthController {
     // POST /api/v1/auth/login
@@ -33,7 +35,23 @@ class AuthController {
                 });
             }
 
-            // Generar tokens
+            // Si el usuario tiene 2FA activado, pedir código
+            if (user.twofa_enabled) {
+                // Generar tempToken (JWT corto, solo para 2FA)
+                const tempToken = jwt.sign(
+                    { userId: user.id, username: user.username, twofa: true },
+                    process.env.JWT_SECRET,
+                    { expiresIn: '5m' }
+                );
+                return res.status(200).json({
+                    success: false,
+                    require2FA: true,
+                    message: 'Se requiere código 2FA',
+                    tempToken
+                });
+            }
+
+            // Generar tokens normales
             const { accessToken, refreshToken } = generateTokens(user);
 
             // Crear sesión
@@ -71,7 +89,9 @@ class AuthController {
                         username: user.username,
                         nombre: user.nombre,
                         email: user.email,
-                        rol: user.rol
+                        rol: user.rol,
+                        activo: user.activo,
+                        twofa_enabled: user.twofa_enabled || false
                     },
                     tokens: {
                         accessToken,
@@ -303,24 +323,29 @@ class AuthController {
         try {
             const { username, password, nombre, email, rol } = req.body;
 
-            // Verificar que el username no exista
-            const existingUsername = await db('usuario')
-                .where({ username })
-                .first();
+            // Validación robusta de datos
+            const validationErrors = [];
+            if (!username || username.length < 3) validationErrors.push('El nombre de usuario es obligatorio y debe tener al menos 3 caracteres.');
+            if (!nombre || nombre.length < 3) validationErrors.push('El nombre es obligatorio y debe tener al menos 3 caracteres.');
+            if (!email || !/^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$/.test(email)) validationErrors.push('El email no es válido.');
+            if (!password || password.length < 8) validationErrors.push('La contraseña debe tener al menos 8 caracteres.');
 
-            if (existingUsername) {
+            if (validationErrors.length > 0) {
+                return res.status(400).json({ success: false, message: validationErrors.join(' ') });
+            }
+
+            // Verificar que el usuario no exista
+            const existingUser = await db('usuario').where({ username }).first();
+            if (existingUser) {
                 return res.status(400).json({
                     success: false,
-                    message: 'El nombre de usuario ya existe'
+                    message: 'El nombre de usuario ya está en uso'
                 });
             }
 
             // Verificar que el email no exista
             if (email) {
-                const existingEmail = await db('usuario')
-                    .where({ email })
-                    .first();
-
+                const existingEmail = await db('usuario').where({ email }).first();
                 if (existingEmail) {
                     return res.status(400).json({
                         success: false,
@@ -332,17 +357,28 @@ class AuthController {
             // Encriptar contraseña
             const hashedPassword = await bcrypt.hash(password, 12);
 
-            // Crear usuario
-            const [userId] = await db('usuario').insert({
-                username,
-                password: hashedPassword,
-                nombre,
-                email,
-                rol: rol || 'usuario',
-                activo: true,
-                creado_en: new Date(),
-                actualizado_en: new Date()
-            });
+            // Crear usuario y asegurar que retorna el id
+            let userIdArr;
+            try {
+                userIdArr = await db('usuario').insert({
+                    username,
+                    password: hashedPassword,
+                    nombre,
+                    email,
+                    rol: rol || 'usuario',
+                    activo: true,
+                    creado_en: new Date(),
+                    actualizado_en: new Date()
+                }).returning('id');
+            } catch (err) {
+                logger.error('Error en el insert de usuario:', err);
+                return res.status(500).json({ success: false, message: 'Error al crear el usuario en la base de datos.' });
+            }
+
+            const userId = Array.isArray(userIdArr) ? (userIdArr[0]?.id || userIdArr[0]) : userIdArr;
+            if (!userId) {
+                return res.status(500).json({ success: false, message: 'No se pudo crear el usuario.' });
+            }
 
             logger.info(`Usuario ${req.user.username} creó el usuario ${username}`);
 
@@ -367,12 +403,12 @@ class AuthController {
             const { page = 1, limit = 10, search, rol } = req.query;
             const offset = (page - 1) * limit;
 
-            let query = db('usuario')
-                .select('id', 'username', 'nombre', 'email', 'rol', 'activo', 'creado_en', 'ultima_actividad');
+            // Construir query base para filtros
+            let baseQuery = db('usuario');
 
             // Aplicar filtros
             if (search) {
-                query = query.where(function() {
+                baseQuery = baseQuery.where(function() {
                     this.where('username', 'ilike', `%${search}%`)
                           .orWhere('nombre', 'ilike', `%${search}%`)
                           .orWhere('email', 'ilike', `%${search}%`);
@@ -380,15 +416,15 @@ class AuthController {
             }
 
             if (rol) {
-                query = query.where({ rol });
+                baseQuery = baseQuery.where({ rol });
             }
 
             // Obtener total de registros
-            const totalQuery = query.clone();
-            const [{ total }] = await totalQuery.count('* as total');
+            const [{ total }] = await baseQuery.clone().count('* as total');
 
             // Obtener usuarios paginados
-            const users = await query
+            const users = await baseQuery
+                .select('id', 'username', 'nombre', 'email', 'rol', 'activo', 'creado_en', 'ultima_actividad')
                 .orderBy('creado_en', 'desc')
                 .limit(limit)
                 .offset(offset);
@@ -775,6 +811,166 @@ class AuthController {
                 success: false,
                 message: 'Error interno del servidor'
             });
+        }
+    }
+
+    // POST /api/v1/auth/2fa/setup
+    async setup2FA(req, res) {
+        try {
+            const userId = req.user.id;
+            // Verificar si el usuario ya tiene 2FA activado
+            const user = await db('usuario').where({ id: userId }).first();
+            if (user && user.twofa_enabled) {
+                return res.status(400).json({
+                    success: false,
+                    message: '2FA ya está activado para este usuario.'
+                });
+            }
+            // Generar secreto TOTP
+            const secret = speakeasy.generateSecret({
+                name: `Sercodam (${req.user.username})`,
+                length: 32
+            });
+            // Guardar el secreto temporalmente en la base de datos (no activar 2FA aún)
+            await db('usuario').where({ id: userId }).update({ twofa_secret: secret.base32 });
+            // Generar QR para Google Authenticator
+            const otpauthUrl = secret.otpauth_url;
+            const qrDataUrl = await qrcode.toDataURL(otpauthUrl);
+            res.json({
+                success: true,
+                message: 'Secreto y QR generados',
+                data: {
+                    qr: qrDataUrl,
+                    secret: secret.base32
+                }
+            });
+        } catch (error) {
+            logger.error('Error generando 2FA:', error);
+            res.status(500).json({ success: false, message: 'Error generando 2FA' });
+        }
+    }
+
+    // POST /api/v1/auth/2fa/verify
+    async verify2FA(req, res) {
+        try {
+            const userId = req.user.id;
+            const { token } = req.body;
+            const user = await db('usuario').where({ id: userId }).first();
+            if (!user || !user.twofa_secret) {
+                return res.status(400).json({ success: false, message: 'No hay secreto 2FA configurado' });
+            }
+            const verified = speakeasy.totp.verify({
+                secret: user.twofa_secret,
+                encoding: 'base32',
+                token,
+                window: 1
+            });
+            if (!verified) {
+                return res.status(400).json({ success: false, message: 'Código 2FA inválido' });
+            }
+            // Activar 2FA
+            await db('usuario').where({ id: userId }).update({ twofa_enabled: true });
+            res.json({ success: true, message: '2FA activado correctamente' });
+        } catch (error) {
+            logger.error('Error verificando 2FA:', error);
+            res.status(500).json({ success: false, message: 'Error verificando 2FA' });
+        }
+    }
+
+    // POST /api/v1/auth/login/2fa
+    async login2FA(req, res) {
+        try {
+            const { tempToken, token } = req.body;
+            if (!tempToken || !token) {
+                return res.status(400).json({ success: false, message: 'Faltan datos para 2FA' });
+            }
+            // Verificar tempToken
+            let payload;
+            try {
+                payload = jwt.verify(tempToken, process.env.JWT_SECRET);
+            } catch (err) {
+                return res.status(401).json({ success: false, message: 'TempToken inválido o expirado' });
+            }
+            if (!payload.twofa || !payload.userId) {
+                return res.status(401).json({ success: false, message: 'TempToken inválido' });
+            }
+            // Buscar usuario
+            const user = await db('usuario').where({ id: payload.userId, activo: true }).first();
+            if (!user || !user.twofa_enabled || !user.twofa_secret) {
+                return res.status(401).json({ success: false, message: '2FA no está activado para este usuario' });
+            }
+            // Verificar código TOTP
+            const verified = speakeasy.totp.verify({
+                secret: user.twofa_secret,
+                encoding: 'base32',
+                token,
+                window: 1
+            });
+            if (!verified) {
+                return res.status(401).json({ success: false, message: 'Código 2FA inválido' });
+            }
+            // Generar tokens normales
+            const { accessToken, refreshToken } = generateTokens(user);
+            // Crear sesión
+            const sessionId = uuidv4();
+            const sessionData = {
+                id: sessionId,
+                userId: user.id,
+                accessToken,
+                refreshToken,
+                userAgent: req.get('User-Agent'),
+                ipAddress: req.ip,
+                createdAt: new Date(),
+                lastActivity: new Date()
+            };
+            await cache.set(`session:${sessionId}`, JSON.stringify(sessionData), 7 * 24 * 60 * 60);
+            await db('usuario').where({ id: user.id }).update({ ultima_actividad: new Date(), ultimo_login: new Date() });
+            logger.info(`Usuario ${user.username} inició sesión con 2FA desde ${req.ip}`);
+            res.json({
+                success: true,
+                message: 'Login exitoso con 2FA',
+                data: {
+                    user: {
+                        id: user.id,
+                        username: user.username,
+                        nombre: user.nombre,
+                        email: user.email,
+                        rol: user.rol,
+                        activo: user.activo,
+                        twofa_enabled: user.twofa_enabled || false
+                    },
+                    tokens: {
+                        accessToken,
+                        refreshToken
+                    },
+                    sessionId
+                }
+            });
+        } catch (error) {
+            logger.error('Error en login 2FA:', error);
+            res.status(500).json({ success: false, message: 'Error interno del servidor' });
+        }
+    }
+
+    // POST /api/v1/auth/users/:id/reset-2fa
+    async reset2FA(req, res) {
+        try {
+            const { id } = req.params;
+            // Solo admin puede usar este endpoint
+            if (!req.user || req.user.rol !== 'admin') {
+                return res.status(403).json({ success: false, message: 'Solo un administrador puede resetear el 2FA de un usuario.' });
+            }
+            // Verificar que el usuario existe
+            const user = await db('usuario').where({ id }).first();
+            if (!user) {
+                return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+            }
+            // Resetear 2FA
+            await db('usuario').where({ id }).update({ twofa_secret: null, twofa_enabled: false });
+            res.json({ success: true, message: '2FA reseteado correctamente para el usuario.' });
+        } catch (error) {
+            logger.error('Error reseteando 2FA:', error);
+            res.status(500).json({ success: false, message: 'Error reseteando 2FA' });
         }
     }
 }

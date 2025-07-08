@@ -212,6 +212,8 @@ const CreateOrden = () => {
         id_item: p.id_item,
         cantidad: p.cantidad,
         tipo_item: 'PANO',
+        largo_tomar: p.largo_tomar,
+        ancho_tomar: p.ancho_tomar,
         notas: p.notas || ''
       })),
       ...materialesSeleccionados.map(m => ({
@@ -335,7 +337,18 @@ const CreateOrden = () => {
         )}
       </Box>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error.message || error}
+          {error.details && Array.isArray(error.details) && (
+            <ul style={{ margin: 0, paddingLeft: 20 }}>
+              {error.details.map((detail, idx) => (
+                <li key={idx}>{detail}</li>
+              ))}
+            </ul>
+          )}
+        </Alert>
+      )}
       
       <Stepper activeStep={activeStep} sx={{ mb: 3 }}>
         {steps.map((label) => (
@@ -386,11 +399,43 @@ const CreateOrden = () => {
                 <Typography variant="subtitle1">Prioridad: {formData.prioridad}</Typography>
                 <Typography variant="subtitle1">Observaciones: {formData.observaciones}</Typography>
                 <Typography variant="subtitle2">Paños:</Typography>
-                <ul>{panosSeleccionados.map((p, i) => <li key={i}>{(p.nombre || p.codigo || p.id_item)} - Cantidad: {p.cantidad}</li>)}</ul>
+                <ul>
+                  {panosSeleccionados.map((p, i) => (
+                    <li key={i}>
+                      {p.tipo_red ? `${p.tipo_red.toUpperCase()} - ` : ''}
+                      {p.descripcion ? `${p.descripcion} - ` : ''}
+                      {p.largo_m && p.ancho_m ? `${p.largo_m}m x ${p.ancho_m}m` : ''}
+                      {p.cantidad ? ` - Cantidad: ${p.cantidad}` : ''}
+                      {p.calibre || p.cuadro || p.torsion || p.color || p.refuerzo ? (
+                        <>
+                          {' - Especificaciones: '}
+                          {[p.calibre && `Calibre: ${p.calibre}`, p.cuadro && `Cuadro: ${p.cuadro}`, p.torsion && `Torsión: ${p.torsion}`, p.color && `Color: ${p.color}`, p.refuerzo && `Refuerzo: ${p.refuerzo}`].filter(Boolean).join(', ')}
+                        </>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
                 <Typography variant="subtitle2">Materiales:</Typography>
-                <ul>{materialesSeleccionados.map((m, i) => <li key={i}>{(m.nombre || m.codigo || m.id_item)} - Cantidad: {m.cantidad}</li>)}</ul>
+                <ul>
+                  {materialesSeleccionados.map((m, i) => (
+                    <li key={i}>
+                      {m.descripcion ? `${m.descripcion} - ` : ''}
+                      {m.cantidad ? `Cantidad: ${m.cantidad}` : ''}
+                      {m.unidad ? ` ${m.unidad}` : ''}
+                      {m.precioxunidad ? ` - Precio unitario: $${m.precioxunidad}` : ''}
+                    </li>
+                  ))}
+                </ul>
                 <Typography variant="subtitle2">Herramientas:</Typography>
-                <ul>{herramientasSeleccionadas.map((h, i) => <li key={i}>{(h.nombre || h.codigo || h.id_item)} - Cantidad: {h.cantidad}</li>)}</ul>
+                <ul>
+                  {herramientasSeleccionadas.map((h, i) => (
+                    <li key={i}>
+                      {h.descripcion ? `${h.descripcion} - ` : ''}
+                      {h.cantidad ? `Cantidad: ${h.cantidad}` : ''}
+                      {h.estado ? ` - Estado: ${h.estado}` : ''}
+                    </li>
+                  ))}
+                </ul>
               </Box>
             )}
             

@@ -28,8 +28,6 @@ import { useSnackbar } from 'notistack';
 
 const getEstadoColor = (estado) => {
   switch (estado) {
-    case 'pendiente':
-      return 'warning';
     case 'en_proceso':
       return 'info';
     case 'completada':
@@ -45,8 +43,6 @@ const getEstadoColor = (estado) => {
 
 const getEstadoText = (estado) => {
   switch (estado) {
-    case 'pendiente':
-      return 'Pendiente';
     case 'en_proceso':
       return 'En Proceso';
     case 'completada':
@@ -96,7 +92,7 @@ const EditOrden = () => {
   const [formData, setFormData] = useState({
     cliente: '',
     observaciones: '',
-    estado: 'pendiente',
+    estado: 'en_proceso',
     prioridad: 'media',
     fecha_inicio: '',
     fecha_fin: ''
@@ -114,7 +110,7 @@ const EditOrden = () => {
       setFormData({
         cliente: ordenActual.cliente || '',
         observaciones: ordenActual.observaciones || '',
-        estado: ordenActual.estado || 'pendiente',
+        estado: ordenActual.estado || 'en_proceso',
         prioridad: ordenActual.prioridad || 'media',
         fecha_inicio: ordenActual.fecha_inicio ? 
           new Date(ordenActual.fecha_inicio).toISOString().split('T')[0] : '',
@@ -248,7 +244,7 @@ const EditOrden = () => {
                         label="Estado"
                         onChange={(e) => handleInputChange('estado', e.target.value)}
                       >
-                        <MenuItem value="pendiente">Pendiente</MenuItem>
+
                         <MenuItem value="en_proceso">En Proceso</MenuItem>
                         <MenuItem value="completada">Completada</MenuItem>
                         <MenuItem value="cancelada">Cancelada</MenuItem>

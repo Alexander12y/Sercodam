@@ -54,30 +54,25 @@ async function getMaterialData(id_item) {
             .first();
         
         if (!material) {
-            // Si no está en materiales_extras, buscar en otras tablas
-            material = await db('nylon')
-                .where('id_item', id_item)
-                .first();
+            // Buscar id_mcr en la tabla pano usando id_item
+            const pano = await db('pano').where('id_item', id_item).first();
+            if (pano && pano.id_mcr) {
+                // Buscar en nylon
+                material = await db('nylon').where('id_mcr', pano.id_mcr).first();
+                if (!material) {
+                    // Buscar en lona
+                    material = await db('lona').where('id_mcr', pano.id_mcr).first();
+                }
+                if (!material) {
+                    // Buscar en polipropileno
+                    material = await db('polipropileno').where('id_mcr', pano.id_mcr).first();
+                }
+                if (!material) {
+                    // Buscar en malla_sombra
+                    material = await db('malla_sombra').where('id_mcr', pano.id_mcr).first();
+                }
+            }
         }
-        
-        if (!material) {
-            material = await db('lona')
-                .where('id_item', id_item)
-                .first();
-        }
-        
-        if (!material) {
-            material = await db('polipropileno')
-                .where('id_item', id_item)
-                .first();
-        }
-        
-        if (!material) {
-            material = await db('malla_sombra')
-                .where('id_item', id_item)
-                .first();
-        }
-        
         return material;
     }
 }
@@ -181,11 +176,11 @@ const ordenesController = {
         }
     },
 
-    // GET /api/v1/ordenes/pendientes - Obtener órdenes pendientes
-    getOrdenesPendientes: async (req, res) => {
+    // GET /api/v1/ordenes/borradores - Obtener órdenes borrador
+    getOrdenesBorradores: async (req, res) => {
         try {
             const ordenes = await db('orden_produccion as op')
-                .where('op.estado', 'pendiente')
+                .where('op.estado', 'BORRADOR')
                 .select('op.*')
                 .orderBy('op.fecha_op', 'asc');
 
@@ -195,7 +190,7 @@ const ordenesController = {
             });
 
         } catch (error) {
-            logger.error('Error obteniendo órdenes pendientes:', error);
+            logger.error('Error obteniendo órdenes borrador:', error);
             throw error;
         }
     },
@@ -374,57 +369,84 @@ const ordenesController = {
     // POST /api/v1/ordenes - Crear nueva orden de producción
     createOrden: async (req, res) => {
         const trx = await db.transaction();
-        
         try {
-            const {
-                cliente,
-                observaciones,
-                prioridad = 'normal',
-                fecha_inicio = null,
-                fecha_fin = null,
-                materiales = [],
-                herramientas = []
-            } = req.body;
-
-            // Generar número de orden único
+            const { cliente, id_cliente, observaciones, prioridad, fecha_inicio, fecha_fin, materiales = [], herramientas = [] } = req.body;
             const fechaActual = new Date();
             const año = fechaActual.getFullYear();
             const mes = String(fechaActual.getMonth() + 1).padStart(2, '0');
             const dia = String(fechaActual.getDate()).padStart(2, '0');
-            
-            // Obtener último número de orden del día
+
+            // Validar que se proporcione el cliente
+            if (!cliente || cliente.trim().length === 0) {
+                throw new ValidationError('El cliente es requerido');
+            }
+
+            // Si se proporciona id_cliente, validar que existe
+            let clienteData = null;
+            if (id_cliente) {
+                clienteData = await trx('cliente').where('id_cliente', id_cliente).first();
+                if (!clienteData) {
+                    throw new ValidationError('El cliente seleccionado no existe');
+                }
+            } else {
+                // Si no se proporciona id_cliente, buscar por nombre (compatibilidad con versiones anteriores)
+                clienteData = await trx('cliente').where('nombre_cliente', 'ilike', cliente.trim()).first();
+                if (!clienteData) {
+                    // Si no existe, crear nuevo cliente automáticamente
+                    const [nuevoCliente] = await trx('cliente')
+                        .insert({
+                            nombre_cliente: cliente.trim(),
+                            fecha_registro: fechaActual
+                        })
+                        .returning('*');
+                    clienteData = nuevoCliente;
+                    logger.info(`Cliente creado automáticamente: ${clienteData.id_cliente} - ${clienteData.nombre_cliente}`);
+                }
+            }
+
+            // Generar número de orden único
             const ultimaOrden = await trx('orden_produccion')
                 .where('numero_op', 'like', `OP-${año}${mes}${dia}-%`)
                 .orderBy('numero_op', 'desc')
                 .first();
-
             let numeroOrden = 1;
             if (ultimaOrden) {
                 const ultimoNumero = parseInt(ultimaOrden.numero_op.split('-')[2]);
                 numeroOrden = ultimoNumero + 1;
             }
-
             const numero_op = `OP-${año}${mes}${dia}-${String(numeroOrden).padStart(3, '0')}`;
 
-            // Validar disponibilidad de materiales y herramientas
-            const materialesNoDisponibles = [];
+            // 1. Validar stock de todos los ítems antes de cualquier inserción
+            const erroresStock = [];
             for (const material of materiales) {
-                const { id_item, cantidad, tipo_item } = material;
+                const { id_item, tipo_item } = material;
                 if (tipo_item === 'PANO') {
                     const pano = await getPanoData(id_item);
                     if (!pano) {
-                        materialesNoDisponibles.push(`Paño ID ${id_item} no encontrado`);
+                        erroresStock.push(`Paño ID ${id_item} no encontrado`);
                     } else {
-                        const areaDisponible = Number(pano.area_m2) || 0;
-                        const areaSolicitada = Number(cantidad) || 0;
-                        if (areaSolicitada > areaDisponible) {
-                            materialesNoDisponibles.push(`Paño ID ${id_item}: área solicitada (${areaSolicitada.toFixed(2)} m²) excede área disponible (${areaDisponible.toFixed(2)} m²)`);
+                        const largoDisponible = Number(pano.largo_m) || 0;
+                        const anchoDisponible = Number(pano.ancho_m) || 0;
+                        // Los datos pueden venir en largo_m/ancho_m o largo_tomar/ancho_tomar
+                        const largoSolicitado = Number(material.largo_m || material.largo_tomar) || 0;
+                        const anchoSolicitado = Number(material.ancho_m || material.ancho_tomar) || 0;
+                        
+                        if (largoSolicitado > largoDisponible) {
+                            erroresStock.push(`Paño ID ${id_item}: largo solicitado (${largoSolicitado.toFixed(2)} m) excede largo disponible (${largoDisponible.toFixed(2)} m)`);
+                        }
+                        if (anchoSolicitado > anchoDisponible) {
+                            erroresStock.push(`Paño ID ${id_item}: ancho solicitado (${anchoSolicitado.toFixed(2)} m) excede ancho disponible (${anchoDisponible.toFixed(2)} m)`);
                         }
                     }
                 } else if (tipo_item === 'EXTRA') {
                     const materialData = await getMaterialData(id_item);
-                    if (!materialData || materialData.cantidad_disponible < cantidad) {
-                        materialesNoDisponibles.push(`Material ID ${id_item} no disponible o insuficiente`);
+                    if (!materialData || materialData.cantidad_disponible < material.cantidad) {
+                        erroresStock.push(`Material ID ${id_item} no disponible o insuficiente. Stock actual: ${(materialData && materialData.cantidad_disponible) || 0}, solicitado: ${material.cantidad}`);
+                    }
+                } else if (tipo_item === 'HERRAMIENTA') {
+                    const herramientaData = await getHerramientaData(id_item);
+                    if (!herramientaData || herramientaData.cantidad_disponible < material.cantidad) {
+                        erroresStock.push(`Herramienta ID ${id_item} no disponible o insuficiente. Stock actual: ${(herramientaData && herramientaData.cantidad_disponible) || 0}, solicitado: ${material.cantidad}`);
                     }
                 }
             }
@@ -432,141 +454,288 @@ const ordenesController = {
                 const { id_item, cantidad } = herramienta;
                 const herramientaData = await getHerramientaData(id_item);
                 if (!herramientaData || herramientaData.cantidad_disponible < (cantidad || 1)) {
-                    materialesNoDisponibles.push(`Herramienta ID ${id_item} no disponible o insuficiente`);
+                    erroresStock.push(`Herramienta ID ${id_item} no disponible o insuficiente. Stock actual: ${(herramientaData && herramientaData.cantidad_disponible) || 0}, solicitado: ${cantidad || 1}`);
                 }
             }
-            if (materialesNoDisponibles.length > 0) {
-                throw new ValidationError('Materiales/Herramientas no disponibles: ' + materialesNoDisponibles.join(', '));
+            if (erroresStock.length > 0) {
+                await trx.rollback();
+                return res.status(400).json({
+                    success: false,
+                    errorType: 'ValidationError',
+                    message: 'No hay suficiente stock para uno o más ítems.',
+                    details: erroresStock
+                });
             }
 
-            // Crear orden de producción
+            // 2. Crear orden de producción
             const [ordenCreada] = await trx('orden_produccion')
                 .insert({
                     numero_op,
                     fecha_op: fechaActual,
                     fecha_creacion: fechaActual,
-                    cliente,
+                    cliente: clienteData.nombre_cliente,
+                    id_cliente: clienteData.id_cliente,
                     observaciones,
                     prioridad,
                     fecha_inicio: fecha_inicio ? new Date(fecha_inicio) : null,
                     fecha_fin: fecha_fin ? new Date(fecha_fin) : null,
-                    estado: 'pendiente'
+                    estado: 'en_proceso'
                 })
                 .returning('id_op');
-
             const id_op = ordenCreada.id_op;
 
-            // Agregar materiales a la orden
+            // 3. Agregar materiales a la orden y descontar stock
             for (const material of materiales) {
-                const detalleInsert = {
-                    id_op,
-                    id_item: material.id_item,
-                    tipo_item: material.tipo_item || '',
-                    cantidad: material.cantidad,
-                    notas: material.notas || ''
-                };
-                console.log('Insertando en orden_produccion_detalle:', detalleInsert);
-                await trx('orden_produccion_detalle').insert(detalleInsert);
-
-                // Registrar movimiento de inventario y descontar stock
                 if (material.tipo_item === 'PANO') {
-                    // Para paños, descontar área en m²
-                    const pano = await getPanoData(material.id_item);
-                    if (pano) {
-                        const areaActual = Number(pano.area_m2) || 0;
-                        const areaDescontada = Number(material.cantidad) || 0;
-                        const nuevaArea = Math.max(0, areaActual - areaDescontada);
-                        
-                        // Calcular nuevas dimensiones proporcionalmente
-                        let nuevoLargo = pano.largo_m;
-                        let nuevoAncho = pano.ancho_m;
-                        
-                        if (nuevaArea > 0 && areaActual > 0) {
-                            // Calcular factor de reducción
-                            const factorReduccion = Math.sqrt(nuevaArea / areaActual);
-                            nuevoLargo = Number((pano.largo_m * factorReduccion).toFixed(3));
-                            nuevoAncho = Number((pano.ancho_m * factorReduccion).toFixed(3));
-                        } else {
-                            // Si no queda área, establecer dimensiones a 0
-                            nuevoLargo = 0;
-                            nuevoAncho = 0;
-                        }
-                        
-                        // Actualizar dimensiones del paño (el área se recalculará automáticamente)
-                        await trx('pano')
-                            .where('id_item', material.id_item)
-                            .update({ 
-                                largo_m: nuevoLargo,
-                                ancho_m: nuevoAncho,
-                                updated_at: db.fn.now()
-                            });
-
-                        // Registrar movimiento
-                        await trx('movimiento_inventario').insert({
-                            id_item: material.id_item,
-                            tipo_mov: 'CONSUMO',
-                            cantidad: areaDescontada,
-                            unidad: 'm²',
-                            notas: `Consumo para orden ${numero_op}`,
-                            fecha: new Date(),
-                            id_op: id_op,
-                            id_usuario: req.user.id
-                        });
-                    }
+                    // Usar la nueva función para procesar paños (crea dos registros: largo y ancho)
+                    // Los datos de largo y ancho vienen en las propiedades del material
+                    const largo_tomar = material.largo_m || material.largo_tomar || 0;
+                    const ancho_tomar = material.ancho_m || material.ancho_tomar || 0;
+                    
+                    await trx.raw('SELECT fn_procesar_pano_orden(?, ?, ?, ?, ?)', [
+                        id_op,
+                        material.id_item,
+                        largo_tomar,
+                        ancho_tomar,
+                        material.cantidad || 1
+                    ]);
                 } else if (material.tipo_item === 'EXTRA') {
-                    // Para materiales extras, descontar cantidad
-                    const materialData = await getMaterialData(material.id_item);
-                    if (materialData) {
-                        const cantidadActual = Number(materialData.cantidad_disponible) || 0;
-                        const cantidadDescontada = Number(material.cantidad) || 0;
-                        const nuevaCantidad = Math.max(0, cantidadActual - cantidadDescontada);
-                        
-                        // Actualizar cantidad del material
-                        await trx('materiales_extras')
-                            .where('id_item', material.id_item)
-                            .update({ 
-                                cantidad_disponible: nuevaCantidad,
-                                ultima_modificacion: db.fn.now()
-                            });
-
-                        // Registrar movimiento
-                        await trx('movimiento_inventario').insert({
-                            id_item: material.id_item,
-                            tipo_mov: 'CONSUMO',
-                            cantidad: cantidadDescontada,
-                            unidad: materialData.unidad || 'unidad',
-                            notas: `Consumo para orden ${numero_op}`,
-                            fecha: new Date(),
-                            id_op: id_op,
-                            id_usuario: req.user.id
-                        });
-                    }
+                    // Usar la nueva función para procesar materiales extras
+                    await trx.raw('SELECT fn_procesar_material_extra_orden(?, ?, ?)', [
+                        id_op,
+                        material.id_item,
+                        material.cantidad
+                    ]);
+                } else if (material.tipo_item === 'HERRAMIENTA') {
+                    // Para herramientas, insertar directamente en herramienta_ordenada
+                    await trx('herramienta_ordenada').insert({
+                        id_op,
+                        id_item: material.id_item,
+                        tipo_movimiento: 'ASIGNACION',
+                        cantidad: material.cantidad || 1,
+                        notas: material.notas || ''
+                    });
+                } else {
+                    // Para otros tipos de items
+                    await trx('orden_produccion_detalle').insert({
+                        id_op,
+                        id_item: material.id_item,
+                        tipo_item: material.tipo_item,
+                        cantidad: material.cantidad,
+                        notas: material.notas || '',
+                        estado: 'en_proceso'
+                    });
                 }
             }
 
-            // Asignar herramientas a la orden
-            for (const herramienta of herramientas) {
-                await trx('herramienta_ordenada').insert({
-                    id_op,
-                    id_item: herramienta.id_item,
-                    tipo_movimiento: 'ASIGNACION',
-                    cantidad: herramienta.cantidad || 1,
-                    notas: herramienta.notas || ''
-                });
-            }
+            // 4. Las herramientas ya se procesaron en el bucle anterior
+            // No necesitamos procesarlas por separado
 
             await trx.commit();
+            
+            // Generar PDF automáticamente en background después de crear la orden
+            setImmediate(async () => {
+                try {
+                    const pdfService = require('../services/pdfService');
+                    
+                    // Obtener datos completos de la orden recién creada
+                    const ordenCompleta = await db('orden_produccion as op')
+                        .where('op.id_op', id_op)
+                        .select('op.*')
+                        .first();
 
-            res.status(201).json({
+                    // Obtener detalles de paños
+                    const panos = await db('orden_produccion_detalle as opd')
+                        .leftJoin('pano as p', 'opd.id_item', 'p.id_item')
+                        .leftJoin('red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
+                        .leftJoin('nylon as n', 'p.id_mcr', 'n.id_mcr')
+                        .leftJoin('lona as l', 'p.id_mcr', 'l.id_mcr')
+                        .leftJoin('polipropileno as pp', 'p.id_mcr', 'pp.id_mcr')
+                        .leftJoin('malla_sombra as ms', 'p.id_mcr', 'ms.id_mcr')
+                        .where('opd.id_op', id_op)
+                        .where('opd.tipo_item', 'PANO')
+                        .select(
+                            'opd.*',
+                            'p.largo_m',
+                            'p.ancho_m',
+                            'p.area_m2',
+                            'p.precio_x_unidad',
+                            'p.estado as estado_pano',
+                            'rp.tipo_red',
+                            'rp.descripcion as descripcion_producto',
+                            // Nylon
+                            'n.calibre as nylon_calibre',
+                            'n.cuadro as nylon_cuadro',
+                            'n.torsion as nylon_torsion',
+                            'n.refuerzo as nylon_refuerzo',
+                            // Lona
+                            'l.color as lona_color',
+                            'l.presentacion as lona_presentacion',
+                            // Polipropileno
+                            'pp.grosor as polipropileno_grosor',
+                            'pp.cuadro as polipropileno_cuadro',
+                            // Malla sombra
+                            'ms.color_tipo_red as malla_color_tipo_red',
+                            'ms.presentacion as malla_presentacion'
+                        );
+
+                    // Obtener detalles de materiales
+                    const materiales = await db('orden_produccion_detalle as opd')
+                        .leftJoin('materiales_extras as me', 'opd.id_item', 'me.id_item')
+                        .where('opd.id_op', id_op)
+                        .where('opd.tipo_item', 'EXTRA')
+                        .select(
+                            'opd.*',
+                            'me.descripcion',
+                            'me.categoria',
+                            'me.unidad',
+                            'me.precioxunidad'
+                        );
+
+                    // Obtener herramientas asignadas
+                    const herramientas = await db('herramienta_ordenada as ho')
+                        .leftJoin('herramientas as h', 'ho.id_item', 'h.id_item')
+                        .where('ho.id_op', id_op)
+                        .select(
+                            'ho.*',
+                            'h.descripcion',
+                            'h.categoria',
+                            'h.marca'
+                        );
+
+                    // Preparar datos para el PDF
+                    const ordenData = {
+                        ...ordenCompleta,
+                        panos: panos.map(pano => {
+                            // Determinar campos técnicos según tipo_red
+                            let calibre, cuadro, torsion, refuerzo, color, presentacion, grosor, color_tipo_red;
+                            switch ((pano.tipo_red || '').toLowerCase()) {
+                                case 'nylon':
+                                    calibre = pano.nylon_calibre;
+                                    cuadro = pano.nylon_cuadro;
+                                    torsion = pano.nylon_torsion;
+                                    refuerzo = pano.nylon_refuerzo;
+                                    break;
+                                case 'lona':
+                                    color = pano.lona_color;
+                                    presentacion = pano.lona_presentacion;
+                                    break;
+                                case 'polipropileno':
+                                    grosor = pano.polipropileno_grosor;
+                                    cuadro = pano.polipropileno_cuadro;
+                                    break;
+                                case 'malla sombra':
+                                    color_tipo_red = pano.malla_color_tipo_red;
+                                    presentacion = pano.malla_presentacion;
+                                    break;
+                            }
+                            return {
+                                largo_m: pano.largo_m,
+                                ancho_m: pano.ancho_m,
+                                cantidad: pano.cantidad,
+                                tipo_red: pano.tipo_red || 'nylon',
+                                area_m2: pano.area_m2,
+                                // Las columnas largo_tomar, ancho_tomar, area_tomar ya no existen
+                                // Los datos se almacenan en las notas y se procesan con las nuevas funciones
+                                precio_m2: pano.precio_x_unidad,
+                                calibre,
+                                cuadro,
+                                torsion,
+                                refuerzo,
+                                color,
+                                presentacion,
+                                grosor,
+                                color_tipo_red
+                            };
+                        }),
+                        materiales: materiales.map(material => ({
+                            descripcion: material.descripcion || 'Material',
+                            categoria: material.categoria || 'General',
+                            cantidad: material.cantidad || 0,
+                            unidad: material.unidad || 'unidad',
+                            precioxunidad: material.precioxunidad || 0,
+                            precio_total: material.costo_total || 0
+                        })),
+                        herramientas: herramientas.map(herramienta => ({
+                            nombre: herramienta.descripcion || 'Herramienta',
+                            descripcion: herramienta.descripcion || '',
+                            categoria: herramienta.categoria || 'General',
+                            cantidad: herramienta.cantidad || 1
+                        }))
+                    };
+
+                    // Generar PDF
+                    const { filepath, filename } = await pdfService.generateOrdenProduccionPDF(ordenData);
+                    
+                    logger.info('PDF generado automáticamente al crear orden', {
+                        ordenId: id_op,
+                        numeroOp: numero_op,
+                        filepath,
+                        filename
+                    });
+
+                    // No necesitamos guardar referencia en BD - el archivo se maneja directamente
+                    logger.info('PDF generado y guardado en sistema de archivos', {
+                        ordenId: id_op,
+                        filename: filename
+                    });
+
+                    // Enviar webhook automáticamente al crear la orden en estado en_proceso
+                    try {
+                        const makeWebhookService = require('../services/makeWebhookService');
+                        const resultado = await makeWebhookService.enviarOrdenEnProceso(ordenData);
+                        
+                        if (resultado.success) {
+                            logger.info('Webhook enviado automáticamente al crear orden', {
+                                ordenId: id_op,
+                                numeroOp: numero_op,
+                                status: resultado.status,
+                                pdfIncluido: resultado.pdfIncluido
+                            });
+                        } else {
+                            logger.warn('Error enviando webhook automático al crear orden', {
+                                ordenId: id_op,
+                                error: resultado.error
+                            });
+                        }
+                    } catch (webhookError) {
+                        logger.error('Error crítico enviando webhook automático', {
+                            ordenId: id_op,
+                            error: webhookError.message
+                        });
+                    }
+
+                } catch (pdfError) {
+                    logger.error('Error generando PDF automático al crear orden', {
+                        ordenId: id_op,
+                        error: pdfError.message
+                    });
+                }
+            });
+
+            return res.status(201).json({
                 success: true,
                 message: 'Orden de producción creada exitosamente',
                 data: { id_op, numero_op }
             });
-
         } catch (error) {
             await trx.rollback();
             logger.error('Error creando orden:', error);
-            throw error;
+            // Si es un error de validación, devolver mensaje estructurado
+            if (error.name === 'ValidationError') {
+                return res.status(400).json({
+                    success: false,
+                    errorType: 'ValidationError',
+                    message: error.message,
+                    details: error.errors || []
+                });
+            }
+            // Otros errores
+            return res.status(500).json({
+                success: false,
+                errorType: 'InternalError',
+                message: 'Error interno del servidor. Por favor, intenta de nuevo más tarde.'
+            });
         }
     },
 
@@ -629,7 +798,7 @@ const ordenesController = {
             }
 
             // Validar estado
-            const estadosValidos = ['pendiente', 'en_proceso', 'completada', 'cancelada', 'pausada'];
+            const estadosValidos = ['en_proceso', 'completada', 'cancelada', 'pausada'];
             if (!estadosValidos.includes(estado)) {
                 throw new ValidationError('Estado inválido');
             }
@@ -637,10 +806,15 @@ const ordenesController = {
             // Guardar estado anterior para logging
             const estadoAnterior = orden.estado;
 
-            // Actualizar estado
+            // Actualizar estado en orden_produccion
             await trx('orden_produccion')
                 .where('id_op', id)
                 .update({ estado });
+
+            // Si el estado cambió a 'cancelada', restaurar inventario completo (paños + materiales extras)
+            if (estado === 'cancelada' && estadoAnterior !== 'cancelada') {
+                await trx.raw('SELECT fn_restaurar_inventario_completo_cancelada(?)', [id]);
+            }
 
             await trx.commit();
 
@@ -659,6 +833,10 @@ const ordenesController = {
                     const panos = await db('orden_produccion_detalle as opd')
                         .leftJoin('pano as p', 'opd.id_item', 'p.id_item')
                         .leftJoin('red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
+                        .leftJoin('nylon as n', 'p.id_mcr', 'n.id_mcr')
+                        .leftJoin('lona as l', 'p.id_mcr', 'l.id_mcr')
+                        .leftJoin('polipropileno as pp', 'p.id_mcr', 'pp.id_mcr')
+                        .leftJoin('malla_sombra as ms', 'p.id_mcr', 'ms.id_mcr')
                         .where('opd.id_op', id)
                         .where('opd.tipo_item', 'PANO')
                         .select(
@@ -666,7 +844,24 @@ const ordenesController = {
                             'p.largo_m',
                             'p.ancho_m',
                             'p.area_m2',
-                            'rp.tipo_red'
+                            'p.precio_x_unidad',
+                            'p.estado as estado_pano',
+                            'rp.tipo_red',
+                            'rp.descripcion as descripcion_producto',
+                            // Nylon
+                            'n.calibre as nylon_calibre',
+                            'n.cuadro as nylon_cuadro',
+                            'n.torsion as nylon_torsion',
+                            'n.refuerzo as nylon_refuerzo',
+                            // Lona
+                            'l.color as lona_color',
+                            'l.presentacion as lona_presentacion',
+                            // Polipropileno
+                            'pp.grosor as polipropileno_grosor',
+                            'pp.cuadro as polipropileno_cuadro',
+                            // Malla sombra
+                            'ms.color_tipo_red as malla_color_tipo_red',
+                            'ms.presentacion as malla_presentacion'
                         );
 
                     // Obtener detalles de materiales
@@ -695,13 +890,48 @@ const ordenesController = {
                     // Preparar datos completos para el webhook
                     const ordenData = {
                         ...ordenCompleta,
-                        panos: panos.map(pano => ({
-                            largo_m: pano.largo_m,
-                            ancho_m: pano.ancho_m,
-                            cantidad: pano.cantidad,
-                            tipo_red: pano.tipo_red || 'nylon',
-                            area_m2: pano.area_m2
-                        })),
+                        panos: panos.map(pano => {
+                            // Determinar campos técnicos según tipo_red
+                            let calibre, cuadro, torsion, refuerzo, color, presentacion, grosor, color_tipo_red;
+                            switch ((pano.tipo_red || '').toLowerCase()) {
+                                case 'nylon':
+                                    calibre = pano.nylon_calibre;
+                                    cuadro = pano.nylon_cuadro;
+                                    torsion = pano.nylon_torsion;
+                                    refuerzo = pano.nylon_refuerzo;
+                                    break;
+                                case 'lona':
+                                    color = pano.lona_color;
+                                    presentacion = pano.lona_presentacion;
+                                    break;
+                                case 'polipropileno':
+                                    grosor = pano.polipropileno_grosor;
+                                    cuadro = pano.polipropileno_cuadro;
+                                    break;
+                                case 'malla sombra':
+                                    color_tipo_red = pano.malla_color_tipo_red;
+                                    presentacion = pano.malla_presentacion;
+                                    break;
+                            }
+                            return {
+                                largo_m: pano.largo_m,
+                                ancho_m: pano.ancho_m,
+                                cantidad: pano.cantidad,
+                                tipo_red: pano.tipo_red || 'nylon',
+                                area_m2: pano.area_m2,
+                                // Las columnas largo_tomar, ancho_tomar, area_tomar ya no existen
+                                // Los datos se almacenan en las notas y se procesan con las nuevas funciones
+                                precio_m2: pano.precio_x_unidad,
+                                calibre,
+                                cuadro,
+                                torsion,
+                                refuerzo,
+                                color,
+                                presentacion,
+                                grosor,
+                                color_tipo_red
+                            };
+                        }),
                         materiales: materiales.map(material => ({
                             descripcion: material.descripcion,
                             categoria: material.categoria,
@@ -784,13 +1014,27 @@ const ordenesController = {
 
             // Agregar materiales
             for (const material of materiales) {
+                // Validar stock antes de agregar
+                const materialData = await getMaterialData(material.id_item);
+                const stockDisponible = materialData?.cantidad_disponible || 0;
+                if (material.cantidad > stockDisponible) {
+                    throw new ValidationError(`Material ID ${material.id_item} no disponible o insuficiente. Stock actual: ${stockDisponible}, solicitado: ${material.cantidad}`);
+                }
+
+                // Agregar material a la orden
                 await trx('orden_produccion_detalle').insert({
-                    id_op,
+                    id_op: id,
                     id_item: material.id_item,
-                    tipo_mov: material.tipo_mov || 'CONSUMO',
+                    tipo_item: material.tipo_item || 'EXTRA',
                     cantidad: material.cantidad,
-                    notas: material.notas || ''
+                    notas: material.notas || '',
+                    estado: 'en_proceso'
                 });
+
+                // Descontar stock
+                await trx('materiales_extras')
+                    .where('id_item', material.id_item)
+                    .decrement('cantidad_disponible', material.cantidad);
             }
 
             await trx.commit();
@@ -807,8 +1051,8 @@ const ordenesController = {
         }
     },
 
-    // POST /api/v1/ordenes/:id/herramientas - Asignar herramientas a orden
-    asignarHerramientas: async (req, res) => {
+    // POST /api/v1/ordenes/:id/herramientas - Agregar herramientas a orden
+    agregarHerramientas: async (req, res) => {
         const trx = await db.transaction();
         
         try {
@@ -824,66 +1068,111 @@ const ordenesController = {
                 throw new NotFoundError('Orden de producción no encontrada');
             }
 
-            // Asignar herramientas
+            // Agregar herramientas
             for (const herramienta of herramientas) {
+                // Validar stock antes de agregar
+                const herramientaData = await getHerramientaData(herramienta.id_item);
+                const stockDisponible = herramientaData?.cantidad_disponible || 0;
+                if (herramienta.cantidad > stockDisponible) {
+                    throw new ValidationError(`Herramienta ID ${herramienta.id_item} no disponible o insuficiente. Stock actual: ${stockDisponible}, solicitado: ${herramienta.cantidad}`);
+                }
+
+                // Agregar herramienta a la orden
                 await trx('herramienta_ordenada').insert({
                     id_op: id,
                     id_item: herramienta.id_item,
                     tipo_movimiento: 'ASIGNACION',
-                    cantidad: 1,
+                    cantidad: herramienta.cantidad,
                     notas: herramienta.notas || ''
                 });
+
+                // Descontar stock si aplica
+                // await trx('herramientas')
+                //     .where('id_item', herramienta.id_item)
+                //     .decrement('cantidad_disponible', herramienta.cantidad);
             }
 
             await trx.commit();
 
             res.json({
                 success: true,
-                message: 'Herramientas asignadas exitosamente'
+                message: 'Herramientas agregadas exitosamente'
             });
 
         } catch (error) {
             await trx.rollback();
-            logger.error('Error asignando herramientas:', error);
+            logger.error('Error agregando herramientas:', error);
             throw error;
         }
     },
 
-    // GET /api/v1/ordenes/stats/resumen - Obtener estadísticas de órdenes
-    getEstadisticasOrdenes: async (req, res) => {
-        try {
-            const stats = await db('orden_produccion')
-                .select('estado')
-                .count('* as cantidad')
-                .groupBy('estado');
-
-            const totalOrdenes = await db('orden_produccion').count('* as total').first();
-
-            res.json({
-                success: true,
-                data: {
-                    por_estado: stats,
-                    total: parseInt(totalOrdenes.total)
-                }
-            });
-
-        } catch (error) {
-            logger.error('Error obteniendo estadísticas:', error);
-            throw error;
-        }
+    // POST /api/v1/ordenes/:id/herramientas - Asignar herramientas a orden (alias)
+    asignarHerramientas: async (req, res) => {
+        // Redirigir a la función agregarHerramientas
+        return await ordenesController.agregarHerramientas(req, res);
     },
 
-    // GET /api/v1/ordenes/:id/pdf - Generar PDF de orden de producción
-    generarPDF: async (req, res) => {
-        let filepath = null;
+    // DELETE /api/v1/ordenes/:id - Eliminar orden
+    deleteOrden: async (req, res) => {
+        const trx = await db.transaction();
         
         try {
             const { id } = req.params;
-            const pdfService = require('../services/pdfService');
 
-            logger.info('Solicitud de generación de PDF', { ordenId: id });
+            // Verificar que la orden existe
+            const orden = await trx('orden_produccion')
+                .where('id_op', id)
+                .first();
 
-            // Obtener orden con todos sus detalles
+            if (!orden) {
+                throw new NotFoundError('Orden de producción no encontrada');
+            }
+
+            // Verificar que la orden no esté en proceso
+            if (orden.estado === 'en_proceso') {
+                throw new ValidationError('No se puede eliminar una orden en proceso');
+            }
+
+            // Eliminar detalles de la orden
+            await trx('orden_produccion_detalle')
+                .where('id_op', id)
+                .del();
+
+            // Eliminar herramientas asignadas
+            await trx('herramienta_ordenada')
+                .where('id_op', id)
+                .del();
+
+            // Eliminar movimientos de inventario
+            await trx('movimiento_inventario')
+                .where('id_op', id)
+                .del();
+
+            // Eliminar la orden
+            await trx('orden_produccion')
+                .where('id_op', id)
+                .del();
+
+            await trx.commit();
+
+            res.json({
+                success: true,
+                message: 'Orden eliminada exitosamente'
+            });
+
+        } catch (error) {
+            await trx.rollback();
+            logger.error('Error eliminando orden:', error);
+            throw error;
+        }
+    },
+
+    // POST /api/v1/ordenes/:id/pdf - Generar PDF de orden
+    generarPDF: async (req, res) => {
+        try {
+            const { id } = req.params;
+
+            // Obtener orden básica
             const orden = await db('orden_produccion as op')
                 .where('op.id_op', id)
                 .select('op.*')
@@ -893,16 +1182,14 @@ const ordenesController = {
                 throw new NotFoundError('Orden de producción no encontrada');
             }
 
-            logger.info('Orden encontrada para PDF', { 
-                ordenId: id, 
-                numeroOp: orden.numero_op,
-                cliente: orden.cliente 
-            });
-
             // Obtener detalles de paños
             const panos = await db('orden_produccion_detalle as opd')
                 .leftJoin('pano as p', 'opd.id_item', 'p.id_item')
                 .leftJoin('red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
+                .leftJoin('nylon as n', 'p.id_mcr', 'n.id_mcr')
+                .leftJoin('lona as l', 'p.id_mcr', 'l.id_mcr')
+                .leftJoin('polipropileno as pp', 'p.id_mcr', 'pp.id_mcr')
+                .leftJoin('malla_sombra as ms', 'p.id_mcr', 'ms.id_mcr')
                 .where('opd.id_op', id)
                 .where('opd.tipo_item', 'PANO')
                 .select(
@@ -910,9 +1197,24 @@ const ordenesController = {
                     'p.largo_m',
                     'p.ancho_m',
                     'p.area_m2',
+                    'p.precio_x_unidad',
                     'p.estado as estado_pano',
                     'rp.tipo_red',
-                    'rp.descripcion as descripcion_producto'
+                    'rp.descripcion as descripcion_producto',
+                    // Nylon
+                    'n.calibre as nylon_calibre',
+                    'n.cuadro as nylon_cuadro',
+                    'n.torsion as nylon_torsion',
+                    'n.refuerzo as nylon_refuerzo',
+                    // Lona
+                    'l.color as lona_color',
+                    'l.presentacion as lona_presentacion',
+                    // Polipropileno
+                    'pp.grosor as polipropileno_grosor',
+                    'pp.cuadro as polipropileno_cuadro',
+                    // Malla sombra
+                    'ms.color_tipo_red as malla_color_tipo_red',
+                    'ms.presentacion as malla_presentacion'
                 );
 
             // Obtener detalles de materiales
@@ -939,34 +1241,57 @@ const ordenesController = {
                     'h.marca'
                 );
 
-            logger.info('Datos obtenidos para PDF', {
-                ordenId: id,
-                panosCount: panos.length,
-                materialesCount: materiales.length,
-                herramientasCount: herramientas.length
-            });
-
             // Preparar datos para el PDF
             const ordenData = {
                 ...orden,
-                panos: panos.map(pano => ({
-                    largo_m: pano.largo_m || 0,
-                    ancho_m: pano.ancho_m || 0,
-                    cantidad: pano.cantidad || 1,
-                    tipo_red: pano.tipo_red || 'nylon',
-                    calibre: '18', // Valor por defecto
-                    cuadro: '1"', // Valor por defecto
-                    torsion: 'torcida', // Valor por defecto
-                    refuerzo: 'con refuerzo', // Valor por defecto
-                    color: 'teñida', // Valor por defecto
-                    precio_m2: pano.costo_unitario || 0
-                })),
+                panos: panos.map(pano => {
+                    // Determinar campos técnicos según tipo_red
+                    let calibre, cuadro, torsion, refuerzo, color, presentacion, grosor, color_tipo_red;
+                    switch ((pano.tipo_red || '').toLowerCase()) {
+                        case 'nylon':
+                            calibre = pano.nylon_calibre;
+                            cuadro = pano.nylon_cuadro;
+                            torsion = pano.nylon_torsion;
+                            refuerzo = pano.nylon_refuerzo;
+                            break;
+                        case 'lona':
+                            color = pano.lona_color;
+                            presentacion = pano.lona_presentacion;
+                            break;
+                        case 'polipropileno':
+                            grosor = pano.polipropileno_grosor;
+                            cuadro = pano.polipropileno_cuadro;
+                            break;
+                        case 'malla sombra':
+                            color_tipo_red = pano.malla_color_tipo_red;
+                            presentacion = pano.malla_presentacion;
+                            break;
+                    }
+                    return {
+                        largo_m: pano.largo_m,
+                        ancho_m: pano.ancho_m,
+                        cantidad: pano.cantidad,
+                        tipo_red: pano.tipo_red || 'nylon',
+                        area_m2: pano.area_m2,
+                        // Las columnas largo_tomar, ancho_tomar, area_tomar ya no existen
+                        // Los datos se almacenan en las notas y se procesan con las nuevas funciones
+                        precio_m2: pano.precio_x_unidad,
+                        calibre,
+                        cuadro,
+                        torsion,
+                        refuerzo,
+                        color,
+                        presentacion,
+                        grosor,
+                        color_tipo_red
+                    };
+                }),
                 materiales: materiales.map(material => ({
                     descripcion: material.descripcion || 'Material',
                     categoria: material.categoria || 'General',
                     cantidad: material.cantidad || 0,
                     unidad: material.unidad || 'unidad',
-                    precio_unitario: material.precioxunidad || 0,
+                    precioxunidad: material.precioxunidad || 0,
                     precio_total: material.costo_total || 0
                 })),
                 herramientas: herramientas.map(herramienta => ({
@@ -977,89 +1302,191 @@ const ordenesController = {
                 }))
             };
 
-            logger.info('Generando PDF con datos preparados', { ordenId: id });
-
             // Generar PDF
-            const { filepath: generatedFilepath, filename } = await pdfService.generateOrdenProduccionPDF(ordenData);
-            filepath = generatedFilepath;
+            const pdfService = require('../services/pdfService');
+            const { filepath, filename } = await pdfService.generateOrdenProduccionPDF(ordenData);
 
-            logger.info('PDF generado exitosamente', { 
-                ordenId: id, 
-                filepath, 
-                filename 
-            });
-
-            // Verificar que el archivo existe
-            if (!fs.existsSync(filepath)) {
-                throw new Error('El archivo PDF no se generó correctamente');
-            }
-
-            // Obtener estadísticas del archivo
-            const stats = fs.statSync(filepath);
-            logger.info('Archivo PDF listo para descarga', {
+            // No necesitamos guardar referencia en BD - el archivo se maneja directamente
+            logger.info('PDF generado y guardado en sistema de archivos', {
                 ordenId: id,
-                filename,
-                size: stats.size,
-                filepath
+                filename: filename
             });
 
-            // Configurar headers para descarga
-            res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-            res.setHeader('Content-Length', stats.size);
-
-            // Enviar archivo
-            res.download(filepath, filename, (err) => {
-                if (err) {
-                    logger.error('Error enviando PDF:', err);
-                    if (!res.headersSent) {
-                        res.status(500).json({
-                            success: false,
-                            message: 'Error enviando archivo PDF',
-                            error: err.message
-                        });
-                    }
-                } else {
-                    logger.info('PDF enviado exitosamente', { ordenId: id, filename });
+            res.json({
+                success: true,
+                message: 'PDF generado exitosamente',
+                data: {
+                    filepath,
+                    filename,
+                    downloadUrl: `/api/v1/ordenes/${id}/pdf/download`
                 }
-
-                // Limpiar archivo temporal después de enviarlo
-                setTimeout(() => {
-                    try {
-                        if (fs.existsSync(filepath)) {
-                            fs.unlinkSync(filepath);
-                            logger.info('Archivo PDF temporal eliminado:', filename);
-                        }
-                    } catch (cleanupError) {
-                        logger.error('Error eliminando archivo temporal:', cleanupError);
-                    }
-                }, 1000);
             });
 
         } catch (error) {
             logger.error('Error generando PDF:', error);
-            
-            // Limpiar archivo temporal si existe
-            if (filepath && fs.existsSync(filepath)) {
+            throw error;
+        }
+    },
+
+    // GET /api/v1/ordenes/:id/pdf/download - Descargar PDF
+    descargarPDF: async (req, res) => {
+        try {
+            const { id } = req.params;
+
+            logger.info('Iniciando descarga de PDF', { ordenId: id });
+
+            const pdfService = require('../services/pdfService');
+            const fs = require('fs');
+
+            // Buscar el archivo PDF existente
+            const pdfInfo = pdfService.findPDFByOrderId(id);
+
+            if (!pdfInfo) {
+                logger.error('Archivo PDF no encontrado para la orden', { 
+                    ordenId: id 
+                });
+                
+                // Intentar generar el PDF si no existe
                 try {
-                    fs.unlinkSync(filepath);
-                    logger.info('Archivo temporal eliminado después de error:', filepath);
-                } catch (cleanupError) {
-                    logger.error('Error eliminando archivo temporal después de error:', cleanupError);
+                    logger.info('Intentando generar PDF para la orden', { ordenId: id });
+                    
+                    // Obtener datos de la orden
+                    const orden = await db('orden_produccion')
+                        .where('id_op', id)
+                        .first();
+                    
+                    if (!orden) {
+                        throw new NotFoundError('Orden de producción no encontrada');
+                    }
+
+                    // Obtener detalles completos de la orden
+                    const ordenCompleta = await ordenesController.getOrdenDetalle({ params: { id } }, { 
+                        json: (data) => data,
+                        status: () => ({ json: (data) => data })
+                    });
+
+                    if (!ordenCompleta.success) {
+                        throw new Error('Error obteniendo datos de la orden');
+                    }
+
+                    // Generar PDF
+                    const { filepath, filename } = await pdfService.generateOrdenProduccionPDF(ordenCompleta.data);
+                    
+                    logger.info('PDF generado exitosamente para descarga', { 
+                        ordenId: id, 
+                        filename, 
+                        filepath 
+                    });
+                    
+                    // Descargar el archivo recién generado
+                    return res.download(filepath, filename);
+                    
+                } catch (genError) {
+                    logger.error('Error generando PDF para descarga:', genError);
+                    throw new NotFoundError('No se pudo generar ni encontrar el PDF de la orden');
                 }
             }
 
-            // Enviar respuesta de error
+            logger.info('Archivo PDF encontrado', { 
+                ordenId: id, 
+                filename: pdfInfo.filename, 
+                filepath: pdfInfo.filepath 
+            });
+
+            // Verificar que el archivo no esté vacío
+            const stats = fs.statSync(pdfInfo.filepath);
+            if (stats.size === 0) {
+                logger.error('Archivo PDF está vacío', { 
+                    ordenId: id, 
+                    filepath: pdfInfo.filepath, 
+                    size: stats.size 
+                });
+                throw new Error('El archivo PDF está vacío o corrupto');
+            }
+
+            logger.info('Enviando archivo PDF', { 
+                ordenId: id, 
+                filename: pdfInfo.filename, 
+                size: stats.size 
+            });
+
+            // Usar res.download() que es más simple y robusto
+            res.download(pdfInfo.filepath, pdfInfo.filename, (err) => {
+                if (err) {
+                    logger.error('Error enviando archivo PDF', { 
+                        ordenId: id, 
+                        error: err.message 
+                    });
+                    if (!res.headersSent) {
+                        res.status(500).json({
+                            success: false,
+                            message: 'Error enviando el archivo PDF'
+                        });
+                    }
+                } else {
+                    logger.info('PDF enviado exitosamente', { 
+                        ordenId: id, 
+                        filename: pdfInfo.filename 
+                    });
+                }
+            });
+
+        } catch (error) {
+            logger.error('Error descargando PDF:', error);
             if (!res.headersSent) {
                 res.status(500).json({
                     success: false,
-                    message: 'Error generando PDF',
-                    error: error.message,
-                    ordenId: req.params.id
+                    message: error.message || 'Error descargando PDF'
                 });
             }
+        }
+    },
+
+    // GET /api/v1/ordenes/clientes/search - Buscar clientes para autocompletado
+    searchClientes: async (req, res) => {
+        try {
+            const { q } = req.query;
+            
+            logger.info('Búsqueda de clientes solicitada', { query: q });
+            
+            if (!q || q.trim().length < 2) {
+                logger.info('Consulta muy corta, retornando lista vacía', { query: q });
+                return res.json({
+                    success: true,
+                    clientes: []
+                });
+            }
+
+            const searchTerm = q.trim();
+            logger.info('Ejecutando búsqueda de clientes', { searchTerm });
+
+            // Log del SQL que se va a ejecutar
+            const query = db('cliente')
+                .select('id_cliente', 'nombre_cliente', 'email', 'telefono')
+                .where('nombre_cliente', 'ilike', `%${searchTerm}%`)
+                .orderBy('nombre_cliente', 'asc')
+                .limit(10);
+            
+            logger.info('SQL Query a ejecutar:', { sql: query.toString() });
+            
+            const clientes = await query;
+
+            logger.info('Resultados de búsqueda de clientes', { 
+                searchTerm, 
+                resultados: clientes.length,
+                clientes: clientes.map(c => c.nombre_cliente)
+            });
+
+            res.json({
+                success: true,
+                clientes: clientes
+            });
+
+        } catch (error) {
+            logger.error('Error buscando clientes:', error);
+            throw error;
         }
     }
 };
 
-module.exports = ordenesController; 
+module.exports = ordenesController;
