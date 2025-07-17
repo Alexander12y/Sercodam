@@ -31,8 +31,6 @@ const validateInventarioUpdate = [
     body('ubicacion')
         .optional()
         .trim()
-        .escape()
-        .stripLow()
         .isLength({ min: 2, max: 100 })
         .withMessage('Ubicación debe tener entre 2 y 100 caracteres'),
     
@@ -61,7 +59,6 @@ const validateInventarioUpdate = [
     body('marca')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ min: 1, max: 50 })
         .withMessage('Marca debe tener entre 1 y 50 caracteres'),
@@ -71,6 +68,19 @@ const validateInventarioUpdate = [
         .isIn(['bueno', 'regular', 'malo', '50%'])
         .withMessage('Estado de calidad debe ser: bueno, regular, malo, 50%'),
     
+    // Validar stock_minimo (opcional) - admite decimales
+    body('stock_minimo')
+        .optional()
+        .custom((value, { req }) => {
+            if (value !== undefined && value !== null && value !== '') {
+                const num = parseFloat(value);
+                if (isNaN(num) || num < 0) {
+                    throw new Error('Stock mínimo debe ser un número mayor o igual a 0');
+                }
+            }
+            return true;
+        }),
+    
     handleValidationErrors
 ];
 
@@ -79,7 +89,6 @@ const validateMaterialUpdate = [
     body('descripcion')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ min: 2, max: 200 })
         .withMessage('Descripción debe tener entre 2 y 200 caracteres'),
@@ -87,7 +96,6 @@ const validateMaterialUpdate = [
     body('categoria')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ min: 2, max: 100 })
         .withMessage('Categoría debe tener entre 2 y 100 caracteres'),
@@ -95,15 +103,12 @@ const validateMaterialUpdate = [
     body('presentacion')
         .optional()
         .trim()
-        .escape()
-        .stripLow()
         .isLength({ max: 100 })
         .withMessage('Presentación no puede exceder 100 caracteres'),
     
     body('unidad')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ min: 1, max: 20 })
         .withMessage('Unidad debe tener entre 1 y 20 caracteres'),
@@ -132,10 +137,22 @@ const validateMaterialUpdate = [
             return true;
         }),
     
+    // Validar stock_minimo opcional (permite decimales)
+    body('stock_minimo')
+        .optional()
+        .custom((value) => {
+            if (value !== undefined && value !== null && value !== '') {
+                const num = parseFloat(value);
+                if (isNaN(num) || num < 0) {
+                    throw new Error('Stock mínimo debe ser un número mayor o igual a 0');
+                }
+            }
+            return true;
+        }),
+    
     body('marca')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ min: 1, max: 50 })
         .withMessage('Marca debe tener entre 1 y 50 caracteres'),
@@ -168,7 +185,6 @@ const validateMaterialUpdate = [
     body('uso_principal')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ max: 200 })
         .withMessage('Uso principal no puede exceder 200 caracteres'),
@@ -205,7 +221,6 @@ const validateMovimiento = [
     body('notas')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ max: 500 })
         .withMessage('Notas no pueden exceder 500 caracteres'),
@@ -226,7 +241,6 @@ const validateMaterialCreacion = [
         .notEmpty()
         .withMessage('Descripción es requerida')
         .trim()
-        .escape()
         .stripLow()
         .isLength({ min: 2, max: 200 })
         .withMessage('Descripción debe tener entre 2 y 200 caracteres'),
@@ -235,7 +249,6 @@ const validateMaterialCreacion = [
         .notEmpty()
         .withMessage('Categoría es requerida')
         .trim()
-        .escape()
         .stripLow()
         .isLength({ min: 2, max: 100 })
         .withMessage('Categoría debe tener entre 2 y 100 caracteres'),
@@ -244,7 +257,6 @@ const validateMaterialCreacion = [
         .notEmpty()
         .withMessage('Unidad es requerida')
         .trim()
-        .escape()
         .stripLow()
         .isLength({ min: 1, max: 20 })
         .withMessage('Unidad debe tener entre 1 y 20 caracteres'),
@@ -266,6 +278,26 @@ const validateMaterialCreacion = [
         .isBoolean()
         .withMessage('Permite decimales debe ser verdadero o falso'),
     
+    // Validar stock_minimo (opcional, admite decimales)
+    body('stock_minimo')
+        .optional()
+        .custom((value) => {
+            if (value !== undefined && value !== null && value !== '') {
+                const num = parseFloat(value);
+                if (isNaN(num) || num < 0) {
+                    throw new Error('Stock mínimo debe ser un número mayor o igual a 0');
+                }
+            }
+            return true;
+        }),
+
+    body('uso_principal')
+        .optional()
+        .trim()
+        .stripLow()
+        .isLength({ max: 200 })
+        .withMessage('Uso principal no puede exceder 200 caracteres'),
+    
     handleValidationErrors
 ];
 
@@ -282,7 +314,6 @@ const validateHerramientaCreacion = [
         .notEmpty()
         .withMessage('Categoría es requerida')
         .trim()
-        .escape()
         .stripLow()
         .isLength({ min: 2, max: 100 })
         .withMessage('Categoría debe tener entre 2 y 100 caracteres'),
@@ -291,7 +322,6 @@ const validateHerramientaCreacion = [
         .notEmpty()
         .withMessage('Descripción es requerida')
         .trim()
-        .escape()
         .stripLow()
         .isLength({ min: 2, max: 200 })
         .withMessage('Descripción debe tener entre 2 y 200 caracteres'),
@@ -299,7 +329,6 @@ const validateHerramientaCreacion = [
     body('presentacion')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ max: 100 })
         .withMessage('Presentación no puede exceder 100 caracteres'),
@@ -307,7 +336,6 @@ const validateHerramientaCreacion = [
     body('unidad')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ max: 20 })
         .withMessage('Unidad no puede exceder 20 caracteres'),
@@ -323,10 +351,15 @@ const validateHerramientaCreacion = [
             return true;
         }),
     
+    // Validar stock_minimo entero opcional
+    body('stock_minimo')
+        .optional()
+        .isInt({ min: 0 })
+        .withMessage('Stock mínimo debe ser un número entero mayor o igual a 0'),
+    
     body('marca')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ max: 50 })
         .withMessage('Marca no puede exceder 50 caracteres'),
@@ -339,7 +372,6 @@ const validateHerramientaCreacion = [
     body('ubicacion')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ max: 100 })
         .withMessage('Ubicación no puede exceder 100 caracteres'),
@@ -358,7 +390,6 @@ const validateHerramientaCreacion = [
     body('uso_principal')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ max: 200 })
         .withMessage('Uso principal no puede exceder 200 caracteres'),
@@ -371,7 +402,6 @@ const validateHerramientaUpdate = [
     body('categoria')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ min: 2, max: 100 })
         .withMessage('Categoría debe tener entre 2 y 100 caracteres'),
@@ -379,7 +409,6 @@ const validateHerramientaUpdate = [
     body('descripcion')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ min: 2, max: 200 })
         .withMessage('Descripción debe tener entre 2 y 200 caracteres'),
@@ -387,7 +416,6 @@ const validateHerramientaUpdate = [
     body('presentacion')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ max: 100 })
         .withMessage('Presentación no puede exceder 100 caracteres'),
@@ -395,7 +423,6 @@ const validateHerramientaUpdate = [
     body('unidad')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ max: 20 })
         .withMessage('Unidad no puede exceder 20 caracteres'),
@@ -411,10 +438,15 @@ const validateHerramientaUpdate = [
             return true;
         }),
     
+    // Validar stock_minimo entero opcional
+    body('stock_minimo')
+        .optional()
+        .isInt({ min: 0 })
+        .withMessage('Stock mínimo debe ser un número entero mayor o igual a 0'),
+    
     body('marca')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ max: 50 })
         .withMessage('Marca no puede exceder 50 caracteres'),
@@ -427,7 +459,6 @@ const validateHerramientaUpdate = [
     body('ubicacion')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ max: 100 })
         .withMessage('Ubicación no puede exceder 100 caracteres'),
@@ -446,7 +477,6 @@ const validateHerramientaUpdate = [
     body('uso_principal')
         .optional()
         .trim()
-        .escape()
         .stripLow()
         .isLength({ max: 200 })
         .withMessage('Uso principal no puede exceder 200 caracteres'),

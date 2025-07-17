@@ -7,6 +7,7 @@ import {
   CardContent,
   Grid,
   TextField,
+  Autocomplete,
   Button,
   CircularProgress,
   Alert,
@@ -25,6 +26,7 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchOrdenById, updateOrden } from '../store/slices/ordenesSlice';
 import { useSnackbar } from 'notistack';
+import { clientesApi } from '../services/api';
 
 const getEstadoColor = (estado) => {
   switch (estado) {
@@ -99,6 +101,14 @@ const EditOrden = () => {
   });
   const [saving, setSaving] = useState(false);
 
+  // Estados para Autocomplete de Cliente
+  const [clientesOptions, setClientesOptions] = useState([]);
+  const [loadingClientes, setLoadingClientes] = useState(false);
+  const [inputClienteValue, setInputClienteValue] = useState('');
+  const [openClienteDropdown, setOpenClienteDropdown] = useState(false);
+  const [selectedCliente, setSelectedCliente] = useState(null);
+  const [searchTimeout, setSearchTimeout] = useState(null);
+
   useEffect(() => {
     if (id) {
       dispatch(fetchOrdenById(id));
@@ -107,18 +117,35 @@ const EditOrden = () => {
 
   useEffect(() => {
     if (ordenActual) {
+      const orden = ordenActual.orden || ordenActual; // Fallback por si cambia estructura
       setFormData({
-        cliente: ordenActual.cliente || '',
-        observaciones: ordenActual.observaciones || '',
-        estado: ordenActual.estado || 'en_proceso',
-        prioridad: ordenActual.prioridad || 'media',
-        fecha_inicio: ordenActual.fecha_inicio ? 
-          new Date(ordenActual.fecha_inicio).toISOString().split('T')[0] : '',
-        fecha_fin: ordenActual.fecha_fin ? 
-          new Date(ordenActual.fecha_fin).toISOString().split('T')[0] : ''
+        cliente: orden.cliente || orden.nombre_cliente || '',
+        observaciones: orden.observaciones || '',
+        estado: orden.estado || 'en_proceso',
+        prioridad: orden.prioridad || 'media',
+        fecha_inicio: orden.fecha_inicio ? 
+          new Date(orden.fecha_inicio).toISOString().split('T')[0] : '',
+        fecha_fin: orden.fecha_fin ? 
+          new Date(orden.fecha_fin).toISOString().split('T')[0] : ''
       });
+      // Si tenemos datos del cliente al cargar, seleccionarlo por defecto en Autocomplete
+      if (orden.id_cliente) {
+        setSelectedCliente({ id_cliente: orden.id_cliente, nombre_cliente: orden.nombre_cliente || orden.cliente || '' });
+      }
     }
   }, [ordenActual]);
+
+  // Sincronizar input del Autocomplete con formData.cliente
+  useEffect(() => {
+    setInputClienteValue(formData.cliente || '');
+  }, [formData.cliente]);
+
+  // Limpiar timeout al desmontar
+  useEffect(() => {
+    return () => {
+      if (searchTimeout) clearTimeout(searchTimeout);
+    };
+  }, [searchTimeout]);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
@@ -126,6 +153,69 @@ const EditOrden = () => {
       [field]: value
     }));
   };
+
+  /* ------------------------ Funciones Autocomplete Cliente ------------------------ */
+  const searchClientes = async (query) => {
+    setLoadingClientes(true);
+    try {
+      const response = await clientesApi.searchClientes(query);
+      setClientesOptions(response.data.clientes || []);
+    } catch (error) {
+      console.error('Error buscando clientes:', error);
+      setClientesOptions([]);
+    } finally {
+      setLoadingClientes(false);
+    }
+  };
+
+  const debouncedSearchClientes = (query) => {
+    if (searchTimeout) clearTimeout(searchTimeout);
+    const newTimeout = setTimeout(() => {
+      searchClientes(query);
+    }, 300);
+    setSearchTimeout(newTimeout);
+  };
+
+  const handleClienteInputChange = (event, newInputValue, reason) => {
+    if (reason === 'input') {
+      setInputClienteValue(newInputValue);
+      handleInputChange('cliente', newInputValue);
+
+      if (!newInputValue) {
+        setClientesOptions([]);
+        return;
+      }
+
+      if (!openClienteDropdown) setOpenClienteDropdown(true);
+
+      if (newInputValue.length >= 2) {
+        setLoadingClientes(true);
+        debouncedSearchClientes(newInputValue);
+      }
+    } else if (reason === 'clear') {
+      setInputClienteValue('');
+      setSelectedCliente(null);
+      handleInputChange('cliente', '');
+      setClientesOptions([]);
+      setOpenClienteDropdown(true);
+      searchClientes('');
+    }
+  };
+
+  const handleClienteSelect = (event, cliente) => {
+    if (cliente && typeof cliente === 'object' && cliente.id_cliente) {
+      setSelectedCliente(cliente);
+      setInputClienteValue(cliente.nombre_cliente);
+      handleInputChange('cliente', cliente.nombre_cliente);
+      setOpenClienteDropdown(false);
+    } else if (cliente === null) {
+      setSelectedCliente(null);
+      setInputClienteValue('');
+      handleInputChange('cliente', '');
+    }
+  };
+
+  /* ------------------------------------------------------------------------------ */
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -188,7 +278,7 @@ const EditOrden = () => {
           Volver
         </Button>
         <Typography variant="h4" component="h1">
-          Editar Orden: {ordenActual.numero_op}
+          Editar Orden: {ordenActual.orden ? ordenActual.orden.numero_op : ordenActual.numero_op}
         </Typography>
       </Box>
 
@@ -207,20 +297,56 @@ const EditOrden = () => {
                     <TextField
                       fullWidth
                       label="Número OP"
-                      value={ordenActual.numero_op}
+                      value={ordenActual.orden ? ordenActual.orden.numero_op : ordenActual.numero_op}
                       disabled
                       variant="outlined"
                     />
                   </Grid>
                   
                   <Grid item xs={12}>
-                    <TextField
+                    <Autocomplete
                       fullWidth
-                      label="Cliente"
-                      value={formData.cliente}
-                      onChange={(e) => handleInputChange('cliente', e.target.value)}
-                      required
-                      variant="outlined"
+                      options={clientesOptions}
+                      value={selectedCliente}
+                      inputValue={inputClienteValue}
+                      open={openClienteDropdown}
+                      onOpen={() => {
+                        setOpenClienteDropdown(true);
+                        if (!inputClienteValue) {
+                          // Cargar todos los clientes al abrir sin texto
+                          searchClientes('');
+                        }
+                      }}
+                      onClose={() => setOpenClienteDropdown(false)}
+                      onChange={handleClienteSelect}
+                      onInputChange={handleClienteInputChange}
+                      getOptionLabel={(option) => option?.nombre_cliente || ''}
+                      isOptionEqualToValue={(option, value) => option?.id_cliente === value?.id_cliente}
+                      loading={loadingClientes}
+                      loadingText="Buscando clientes..."
+                      noOptionsText={
+                        loadingClientes
+                          ? 'Buscando clientes...'
+                          : !inputClienteValue || inputClienteValue.length === 0
+                            ? 'Haz clic aquí para ver todos los clientes'
+                            : inputClienteValue.length === 1
+                              ? 'Escribe al menos 2 caracteres para buscar'
+                              : clientesOptions.length === 0 && inputClienteValue.length >= 2
+                                ? `No se encontraron clientes para "${inputClienteValue}"`
+                                : 'No se encontraron clientes'
+                      }
+                      filterOptions={(x) => x}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="Cliente *"
+                          required
+                          placeholder="Haz clic para ver clientes o escribe para buscar"
+                        />
+                      )}
+                      autoHighlight
+                      selectOnFocus
+                      clearOnBlur={false}
                     />
                   </Grid>
                   
@@ -334,14 +460,14 @@ const EditOrden = () => {
                     Fecha de Creación
                   </Typography>
                   <Typography variant="body1">
-                    {ordenActual.fecha_creacion ? 
-                      new Date(ordenActual.fecha_creacion).toLocaleDateString('es-ES', {
+                    {ordenActual.orden?.fecha_creacion ? 
+                      new Date(ordenActual.orden.fecha_creacion).toLocaleDateString('es-ES', {
                         year: 'numeric',
                         month: 'long',
                         day: 'numeric'
                       }) : 
-                      (ordenActual.fecha_op ? 
-                        new Date(ordenActual.fecha_op).toLocaleDateString('es-ES', {
+                      (ordenActual.orden?.fecha_op ? 
+                        new Date(ordenActual.orden.fecha_op).toLocaleDateString('es-ES', {
                           year: 'numeric',
                           month: 'long',
                           day: 'numeric'

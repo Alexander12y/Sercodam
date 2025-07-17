@@ -18,53 +18,83 @@ import {
 } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { createHerramienta, updateHerramienta, clearError } from '../../store/slices/herramientasSlice';
+import { SUBGRUPOS_CATEGORIAS_HERRAMIENTAS } from '../../constants/herramientasConstants';
+
+// Función para encontrar el subgrupo de una categoría dada
+const findSubgrupo = (categoria) => {
+  for (const subgrupo in SUBGRUPOS_CATEGORIAS_HERRAMIENTAS) {
+    if (SUBGRUPOS_CATEGORIAS_HERRAMIENTAS[subgrupo].includes(categoria)) {
+      return subgrupo;
+    }
+  }
+  return '';
+};
 
 const HerramientaModal = ({ open, onClose, herramienta, onSuccess }) => {
   const dispatch = useDispatch();
   const { loading, error } = useSelector((state) => state.herramientas);
+  const [formError, setFormError] = useState('');
   
   const [formData, setFormData] = useState({
     id_herramienta: '',
-    categoria: '',
     descripcion: '',
+    categoria: '',
     presentacion: '',
-    unidad: 'unidad',
-    cantidad_disponible: 0,
+    unidad: '',
+    cantidad_disponible: '',
+    stock_minimo: '',
     marca: '',
     estado_calidad: 'Bueno',
-    ubicacion: '',
+    ubicacion: 'Bodega CDMX',
     precioxunidad: '',
     uso_principal: ''
   });
+  const [selectedSubgrupo, setSelectedSubgrupo] = useState('');
+  const [availableCategorias, setAvailableCategorias] = useState([]);
+
+  const estadosValidos = ['Bueno', 'Regular', 'Usado 50%', 'Malo'];
+  const ubicacionesValidas = ['Bodega CDMX', 'Querétaro', 'Oficina', 'Instalación'];
 
   const isEditing = !!herramienta;
 
   useEffect(() => {
     if (herramienta) {
+      const initialSubgrupo = findSubgrupo(herramienta.categoria);
+      setSelectedSubgrupo(initialSubgrupo);
+      if (initialSubgrupo) {
+        setAvailableCategorias(SUBGRUPOS_CATEGORIAS_HERRAMIENTAS[initialSubgrupo]);
+      } else {
+        setAvailableCategorias([]);
+      }
       setFormData({
         id_herramienta: herramienta.id_herramienta || '',
         categoria: herramienta.categoria || '',
         descripcion: herramienta.descripcion || '',
         presentacion: herramienta.presentacion || '',
-        unidad: herramienta.unidad || 'unidad',
-        cantidad_disponible: herramienta.cantidad_disponible || 0,
+        unidad: herramienta.unidad || '',
+        cantidad_disponible: herramienta.cantidad_disponible || '',
+        stock_minimo: herramienta.stock_minimo || '',
         marca: herramienta.marca || '',
         estado_calidad: herramienta.estado_calidad || 'Bueno',
-        ubicacion: herramienta.ubicacion || '',
+        ubicacion: herramienta.ubicacion || 'Bodega CDMX',
         precioxunidad: herramienta.precioxunidad || '',
         uso_principal: herramienta.uso_principal || ''
       });
     } else {
+      // Resetear para un formulario nuevo
+      setSelectedSubgrupo('');
+      setAvailableCategorias([]);
       setFormData({
         id_herramienta: '',
         categoria: '',
         descripcion: '',
         presentacion: '',
-        unidad: 'unidad',
-        cantidad_disponible: 0,
+        unidad: '',
+        cantidad_disponible: '',
+        stock_minimo: '',
         marca: '',
         estado_calidad: 'Bueno',
-        ubicacion: '',
+        ubicacion: 'Bodega CDMX',
         precioxunidad: '',
         uso_principal: ''
       });
@@ -87,17 +117,42 @@ const HerramientaModal = ({ open, onClose, herramienta, onSuccess }) => {
     }));
   };
 
+  const handleSubgrupoChange = (event) => {
+    const subgrupo = event.target.value;
+    setSelectedSubgrupo(subgrupo);
+    if (subgrupo) {
+      setAvailableCategorias(SUBGRUPOS_CATEGORIAS_HERRAMIENTAS[subgrupo]);
+      // Resetear la categoría al cambiar de subgrupo
+      setFormData(prev => ({ ...prev, categoria: '' }));
+    } else {
+      setAvailableCategorias([]);
+      setFormData(prev => ({ ...prev, categoria: '' }));
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     try {
+      if (formData.precioxunidad === '' || formData.precioxunidad === null) {
+        setFormError('Debes ingresar un precio por unidad');
+        return;
+      }
+
+      const dataToSend = { ...formData };
+      if (dataToSend.stock_minimo === '' || dataToSend.stock_minimo === null) {
+        delete dataToSend.stock_minimo;
+      }
+      if (dataToSend.precioxunidad === '' || dataToSend.precioxunidad === null) {
+        delete dataToSend.precioxunidad; // ya validamos antes, pero por seguridad
+      }
       if (isEditing) {
         await dispatch(updateHerramienta({ 
           id: herramienta.id_item, 
-          data: formData 
+          data: dataToSend 
         })).unwrap();
       } else {
-        await dispatch(createHerramienta(formData)).unwrap();
+        await dispatch(createHerramienta(dataToSend)).unwrap();
       }
       
       onSuccess();
@@ -109,6 +164,7 @@ const HerramientaModal = ({ open, onClose, herramienta, onSuccess }) => {
 
   const handleClose = () => {
     if (!loading) {
+      setFormError('');
       onClose();
     }
   };
@@ -120,9 +176,9 @@ const HerramientaModal = ({ open, onClose, herramienta, onSuccess }) => {
       </DialogTitle>
       <form onSubmit={handleSubmit}>
         <DialogContent>
-          {error && (
+          {(error || formError) && (
             <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
+              {formError || error}
             </Alert>
           )}
           
@@ -140,13 +196,35 @@ const HerramientaModal = ({ open, onClose, herramienta, onSuccess }) => {
             </Grid>
             
             <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Categoría"
-                value={formData.categoria}
-                onChange={handleInputChange('categoria')}
-                required
-              />
+              <FormControl fullWidth>
+                <InputLabel>Subgrupo</InputLabel>
+                <Select
+                  value={selectedSubgrupo}
+                  label="Subgrupo"
+                  onChange={handleSubgrupoChange}
+                  required
+                >
+                  {Object.keys(SUBGRUPOS_CATEGORIAS_HERRAMIENTAS).map(subgrupo => (
+                    <MenuItem key={subgrupo} value={subgrupo}>{subgrupo}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth disabled={!selectedSubgrupo}>
+                <InputLabel>Categoría</InputLabel>
+                <Select
+                  value={formData.categoria}
+                  label="Categoría"
+                  onChange={handleInputChange('categoria')}
+                  required
+                >
+                  {availableCategorias.map(categoria => (
+                    <MenuItem key={categoria} value={categoria}>{categoria}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Grid>
             
             <Grid item xs={12}>
@@ -195,6 +273,18 @@ const HerramientaModal = ({ open, onClose, herramienta, onSuccess }) => {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
+                label="Stock Mínimo"
+                type="number"
+                inputProps={{ min: 0, step: 1 }}
+                value={formData.stock_minimo}
+                onChange={handleInputChange('stock_minimo')}
+                helperText="Cantidad mínima antes de alerta"
+              />
+            </Grid>
+            
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
                 label="Marca"
                 value={formData.marca}
                 onChange={handleInputChange('marca')}
@@ -218,13 +308,19 @@ const HerramientaModal = ({ open, onClose, herramienta, onSuccess }) => {
             </Grid>
             
             <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Ubicación"
-                value={formData.ubicacion}
-                onChange={handleInputChange('ubicacion')}
-                placeholder="Ej: Bodega CDMX, Querétaro"
-              />
+              <FormControl fullWidth>
+                <InputLabel>Ubicación</InputLabel>
+                <Select
+                  value={formData.ubicacion}
+                  label="Ubicación"
+                  onChange={handleInputChange('ubicacion')}
+                  required
+                >
+                  {ubicacionesValidas.map(ubicacion => (
+                    <MenuItem key={ubicacion} value={ubicacion}>{ubicacion}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Grid>
             
             <Grid item xs={12} sm={6}>

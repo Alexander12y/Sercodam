@@ -150,6 +150,21 @@ const validateUserUpdate = [
         .withMessage('El email debe tener un formato válido')
         .normalizeEmail(),
     
+    body('password')
+        .optional()
+        .custom((value) => {
+            // Solo validar si se proporciona una contraseña
+            if (value && value.trim()) {
+                if (value.length < 8) {
+                    throw new Error('La contraseña debe tener al menos 8 caracteres');
+                }
+                if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(value)) {
+                    throw new Error('La contraseña debe contener al menos una letra minúscula, una mayúscula y un número');
+                }
+            }
+            return true;
+        }),
+    
     body('rol')
         .optional()
         .isIn(['admin', 'supervisor', 'usuario', 'operador'])

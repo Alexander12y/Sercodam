@@ -82,6 +82,9 @@ export const ordenesApi = {
   // Cambiar estado de orden
   cambiarEstadoOrden: (id, data) => api.patch(`/ordenes/${id}/estado`, data),
   
+  // Aprobar orden
+  approveOrden: (id) => api.post(`/ordenes/${id}/approve`),
+  
   // Agregar materiales a orden
   agregarMateriales: (id, data) => api.post(`/ordenes/${id}/materiales`, data),
   

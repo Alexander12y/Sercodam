@@ -20,6 +20,7 @@ import HerramientasList from './pages/HerramientasList';
 import Profile from './pages/Profile';
 import ChangePassword from './pages/ChangePassword';
 import Configuracion from './pages/Configuracion';
+import EjecutarCorte from './pages/EjecutarCorte';
 import Login from './pages/Login';
 
 function RequireAuth({ children }) {
@@ -71,6 +72,14 @@ function App() {
                   <Route path="/inventario/panos" element={<PanosList />} />
                   <Route path="/inventario/materiales" element={<MaterialesList />} />
                   <Route path="/inventario/herramientas" element={<HerramientasList />} />
+                  <Route 
+                    path="/ejecutar-corte" 
+                    element={
+                      <RequireRole roles={['operador', 'admin']}>
+                        <EjecutarCorte />
+                      </RequireRole>
+                    } 
+                  />
                   <Route path="/perfil" element={<Profile />} />
                   <Route path="/cambiar-contraseña" element={<ChangePassword />} />
                   <Route 

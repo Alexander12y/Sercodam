@@ -115,7 +115,7 @@ const validateOrdenesClienteQuery = [
         .withMessage('El ID del cliente debe ser un número entero positivo'),
     
     query('estado')
-        .optional()
+        .optional({ checkFalsy: true }) // Ignorar si es una cadena vacía
         .isIn(['en_proceso', 'completada', 'cancelada', 'pausada'])
         .withMessage('El estado debe ser: en_proceso, completada, cancelada o pausada'),
     

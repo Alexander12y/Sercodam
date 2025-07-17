@@ -23,7 +23,8 @@ const materialesController = {
     // GET /api/v1/inventario/materiales - Obtener materiales con filtros
     getMateriales: async (req, res) => {
         try {
-            const {
+            let {
+                categorias, // Nuevo parámetro para array de categorías
                 categoria,
                 estado_calidad,
                 ubicacion,
@@ -31,6 +32,10 @@ const materialesController = {
                 page = 1,
                 limit = 50
             } = req.query;
+
+            if (categoria) {
+                categoria = categoria.trim();
+            }
 
             let query = db('materiales_extras as me')
                 .select(
@@ -42,8 +47,30 @@ const materialesController = {
                 .where('ii.tipo_item', 'MATERIAL EXTRA');
 
             // Aplicar filtros
-            if (categoria) {
-                query = query.whereRaw('LOWER(me.categoria) = ?', [categoria.toLowerCase()]);
+            if (categorias && Array.isArray(categorias) && categorias.length > 0) {
+                // Limpiar y validar el array de categorías
+                const categoriasLimpias = categorias.map(c => c.trim()).filter(Boolean);
+                if (categoriasLimpias.length > 0) {
+                    query = query.whereIn('me.categoria', categoriasLimpias);
+                }
+            } else if (categoria) {
+                // Normalizar apostrophes tipográficos (U+2019) a normales (U+0027)
+                const apostropheTipografico = String.fromCharCode(8217); // '
+                const apostropheNormal = String.fromCharCode(39);       // '
+                
+                // Crear variantes con ambos tipos de apostrophes
+                const categoriaConTipografico = categoria.replace(new RegExp(apostropheNormal, 'g'), apostropheTipografico);
+                const categoriaConNormal = categoria.replace(new RegExp(apostropheTipografico, 'g'), apostropheNormal);
+                
+                // Búsqueda que incluye ambas variantes de apostrophes
+                query = query.where(function() {
+                    this.where('me.categoria', categoria)
+                        .orWhere('me.categoria', categoriaConTipografico)
+                        .orWhere('me.categoria', categoriaConNormal)
+                        .orWhereRaw('LOWER(me.categoria) = LOWER(?)', [categoria])
+                        .orWhereRaw('LOWER(me.categoria) = LOWER(?)', [categoriaConTipografico])
+                        .orWhereRaw('LOWER(me.categoria) = LOWER(?)', [categoriaConNormal]);
+                });
             }
             if (estado_calidad) {
                 query = query.where('me.estado_calidad', estado_calidad);
@@ -157,7 +184,8 @@ const materialesController = {
                 estado_calidad,
                 ubicacion,
                 precioxunidad,
-                uso_principal
+                uso_principal,
+                stock_minimo
             } = req.body;
 
             // Validaciones
@@ -206,6 +234,7 @@ const materialesController = {
                 ubicacion,
                 precioxunidad: parseFloat(precioxunidad || 0),
                 uso_principal,
+                stock_minimo: parseFloat(stock_minimo || 0),
                 ultima_modificacion: db.fn.now()
             });
 
@@ -247,7 +276,8 @@ const materialesController = {
                 estado_calidad,
                 ubicacion,
                 precioxunidad,
-                uso_principal
+                uso_principal,
+                stock_minimo
             } = req.body;
 
             // Verificar que el material existe
@@ -282,6 +312,7 @@ const materialesController = {
             if (estado_calidad !== undefined) updateData.estado_calidad = estado_calidad;
             if (ubicacion !== undefined) updateData.ubicacion = ubicacion;
             if (precioxunidad !== undefined) updateData.precioxunidad = parseFloat(precioxunidad);
+            if (stock_minimo !== undefined) updateData.stock_minimo = parseFloat(stock_minimo);
             if (uso_principal !== undefined) updateData.uso_principal = uso_principal;
 
             updateData.ultima_modificacion = db.fn.now();

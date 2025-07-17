@@ -36,8 +36,9 @@ import {
   Person as PersonIcon,
   Security as SecurityIcon,
   People as PeopleIcon,
+  ContentCutOutlined as ScissorsIcon,
 } from '@mui/icons-material';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { toggleSidebar } from '../store/slices/uiSlice';
 import { logout } from '../store/slices/authSlice';
@@ -60,6 +61,7 @@ const menuItems = [
       { text: 'Herramientas', icon: <BuildIcon />, path: '/inventario/herramientas' },
     ]
   },
+  { text: 'Ejecutar un Corte', icon: <ScissorsIcon />, path: '/ejecutar-corte', roles: ['operador', 'admin'] },
   { text: 'Configuración', icon: <SettingsIcon />, path: '/configuracion' },
 ];
 
@@ -241,7 +243,13 @@ const Layout = ({ children }) => {
       {/* Menú de navegación */}
       <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
         <List sx={{ pt: 1 }}>
-          {menuItems.map((item) => renderMenuItem(item))}
+          {menuItems.map((item) => {
+            // Check if user has required role for this menu item
+            if (item.roles && user && !item.roles.includes(user.rol)) {
+              return null;
+            }
+            return renderMenuItem(item);
+          })}
         </List>
       </Box>
       

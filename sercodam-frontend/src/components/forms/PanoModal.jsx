@@ -25,7 +25,7 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
     largo_m: '',
     ancho_m: '',
     estado: '',
-    ubicacion: '',
+    ubicacion: 'Bodega CDMX',
     precio_x_unidad: '',
     descripcion: '',
     calibre: '',
@@ -35,7 +35,8 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
     color: '',
     presentacion: '',
     grosor: '',
-    color_tipo_red: ''
+    color_tipo_red: '',
+    stock_minimo: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -59,6 +60,7 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
 
   const tiposValidos = ['lona', 'nylon', 'polipropileno', 'malla sombra'];
   const estadosValidos = ['bueno', 'regular', 'malo', '50%'];
+  const ubicacionesValidas = ['Bodega CDMX', 'Querétaro', 'Oficina', 'Instalación'];
 
   const isEditing = !!pano;
 
@@ -133,7 +135,8 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
         color: pano.color || '',
         presentacion: pano.presentacion || '',
         grosor: pano.grosor || '',
-        color_tipo_red: pano.color_tipo_red || ''
+        color_tipo_red: pano.color_tipo_red || '',
+        stock_minimo: pano.stock_minimo || ''
       });
     } else {
       setFormData({
@@ -141,7 +144,7 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
         largo_m: '',
         ancho_m: '',
         estado: '',
-        ubicacion: '',
+        ubicacion: 'Bodega CDMX',
         precio_x_unidad: '',
         descripcion: '',
         calibre: '',
@@ -151,7 +154,8 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
         color: '',
         presentacion: '',
         grosor: '',
-        color_tipo_red: ''
+        color_tipo_red: '',
+        stock_minimo: ''
       });
     }
     setError('');
@@ -194,6 +198,12 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
     setLoading(true);
     setError('');
 
+    if (formData.precio_x_unidad === '' || formData.precio_x_unidad === null) {
+      setLoading(false);
+      setError('Debes ingresar un precio por unidad');
+      return;
+    }
+
     try {
       const submitData = {
         ...formData,
@@ -202,6 +212,15 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
         precio_x_unidad: parseFloat(formData.precio_x_unidad || 0),
         refuerzo: formData.refuerzo === 'Sí'
       };
+
+      // Eliminar stock_minimo si está vacío
+      if (submitData.stock_minimo === '' || submitData.stock_minimo === null) {
+        delete submitData.stock_minimo;
+      }
+
+      if (submitData.precio_x_unidad === '' || submitData.precio_x_unidad === null) {
+        delete submitData.precio_x_unidad; // ya validado antes
+      }
 
       console.log('🔍 Datos que se van a enviar:', submitData);
       console.log('🔍 ID del paño a editar:', pano?.id_item);
@@ -563,14 +582,20 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
           </Grid>
 
           <Grid item xs={12} md={6}>
-            <TextField
-              fullWidth
-              required
-              label="Ubicación"
-              value={formData.ubicacion}
-              onChange={handleChange('ubicacion')}
-              placeholder="Ej: Almacén A, Estante 1"
-            />
+            <FormControl fullWidth required>
+              <InputLabel>Ubicación</InputLabel>
+              <Select
+                value={formData.ubicacion}
+                onChange={handleChange('ubicacion')}
+                label="Ubicación"
+              >
+                {ubicacionesValidas.map(ubicacion => (
+                  <MenuItem key={ubicacion} value={ubicacion}>
+                    {ubicacion}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           </Grid>
 
           <Grid item xs={12} md={6}>
@@ -594,6 +619,18 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
               value={formData.descripcion}
               onChange={handleChange('descripcion')}
               placeholder="Descripción adicional del paño..."
+            />
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="Stock Mínimo (Área m²)"
+              type="number"
+              inputProps={{ min: 0, step: 'any' }}
+              value={formData.stock_minimo}
+              onChange={handleChange('stock_minimo')}
+              helperText="Área mínima antes de alerta"
             />
           </Grid>
 

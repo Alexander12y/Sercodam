@@ -36,25 +36,10 @@ import {
   Category as CategoryIcon
 } from '@mui/icons-material';
 import { inventarioApi } from '../../services/api';
+import { SUBGRUPOS_CATEGORIAS_MATERIALES } from '../../constants/materialesConstants';
 
-// Mapeo de subgrupos a categorías
-const SUBGRUPOS_CATEGORIAS = {
-  'Cintas y cintillos': ['Cintas', 'Banda aislante', 'Cinchos de nylon y cinchos hechos con piola'],
-  'Piolas, cuerdas y lazos': ['Piolas', 'Cuerdas', 'Hilos de Nylon', 'Cables de acero', 'Cables marinos y cabos marinos'],
-  'Ojillos, remaches y herrajes menores': ['Ojillos de Metal', 'Moldes para prensar ojillos', 'Hebillas', 'Ganchos'],
-  'Plásticos, emplayes y adhesivos': ['Plastico para emplayado', 'Pegamento', 'Sellador', 'Thinner', 'Estopas'],
-  'Taquetes, tornillos y sujetadores': ['Taquetes', 'Tornillos', 'Pijas', 'Tuercas', 'Rondanas de acero', 'Espárragos de acero'],
-  'Herramientas desechables o limitadas': ['Agujas', 'Discos', 'Lijas para agua', 'Espátulas de plástico', 'Broquero de acero'],
-  'Etiquetas y consumibles de señalización': ['Etiquetas', 'Esmalte en aerosol'],
-  'Materiales de embalaje y sujeción temporal': ['Algodón industrial', 'Rafia de material plástico', 'Tapetes', 'Tablas'],
-  'Herrajes y conexiones': ['Abrazaderas', 'Bisagra de acero', 'Candados', 'Cerrojos', 'Casquillos', 'Perro de acero'],
-  'Cadenas y tensores': ['Cadenas de acero', 'Tensores', 'Poleas', 'Grifa de acero'],
-  'Material eléctrico': ['Material Eléctrico', 'Cable pot (doble)', 'Caja de plástico de 14 x 6 cms con seguro'],
-  'Aceites y lubricantes': ['Aceites', 'Ácido muriático'],
-  'Anclajes y armellas': ['Ancla de acero', 'Armaderas'],
-  'Placas y protectores': ['Placas de acero', 'Hojas de acero', 'Protectores de goma'],
-  'Otros materiales': ['ÁCople para conexiones y mangueras', 'Clavos', 'Kit de supervivencia', 'Red de Nylon para Racks de LOréal', 'Redes Deportivas Terminadas', 'Rodillos', 'Tubos PVC', 'Zoclos', 'Tapas']
-};
+// Usar la constante centralizada
+const SUBGRUPOS_CATEGORIAS = SUBGRUPOS_CATEGORIAS_MATERIALES;
 
 const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionados, onDraftSave }) => {
   const [modalOpen, setModalOpen] = useState(false);
@@ -97,22 +82,43 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
     setCategoria('');
     
     if (selectedSubgrupo) {
-      const categoriasDelSubgrupo = SUBGRUPOS_CATEGORIAS[selectedSubgrupo] || [];
-      setCategorias(categoriasDelSubgrupo);
+      setCategorias(SUBGRUPOS_CATEGORIAS[selectedSubgrupo] || []);
     } else {
-      loadAllMateriales();
+      setCategorias([]);
     }
+    // Limpiar resultados al cambiar subgrupo
+    setMateriales([]); 
   };
 
   const handleBuscar = async () => {
     setLoading(true);
+    setErrorStock("");
+    
+    const params = {
+      limit: 1000 // Traer todos los resultados que coincidan
+    };
+
+    if (categoria) {
+      params.categoria = categoria;
+    } else if (subgrupo) {
+      params.categorias = SUBGRUPOS_CATEGORIAS[subgrupo] || [];
+    }
+    
+    if (busqueda) {
+      params.search = busqueda;
+    }
+
+    // No hacer búsqueda si no hay filtros
+    if (!params.categoria && !params.categorias && !params.search) {
+      setMateriales([]);
+      setLoading(false);
+      return;
+    }
+
     try {
-      const params = { limit: 1000 };
-      if (categoria) params.categoria = categoria;
-      if (busqueda) params.search = busqueda;
-      
       const response = await inventarioApi.getMateriales(params);
-      const materialesOrdenados = (response.data?.materiales || []).sort((a, b) => 
+      const materialesResult = response.data?.materiales || [];
+      const materialesOrdenados = materialesResult.sort((a, b) => 
         (a.descripcion || '').localeCompare(b.descripcion || '')
       );
       setMateriales(materialesOrdenados);
@@ -129,7 +135,6 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
     setCategoria('');
     setBusqueda('');
     setMateriales([]);
-    loadAllMateriales();
   };
 
   const handleAgregar = () => {

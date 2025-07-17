@@ -21,14 +21,25 @@ import { useDispatch, useSelector } from 'react-redux';
 import { 
   createMaterial, 
   updateMaterial, 
-  fetchCategorias,
   clearError,
   clearSuccessMessage 
 } from '../../store/slices/materialesSlice';
+import { SUBGRUPOS_CATEGORIAS_MATERIALES } from '../../constants/materialesConstants';
+
+// Función para encontrar el subgrupo de una categoría de material
+const findSubgrupo = (categoria) => {
+  for (const subgrupo in SUBGRUPOS_CATEGORIAS_MATERIALES) {
+    if (SUBGRUPOS_CATEGORIAS_MATERIALES[subgrupo].includes(categoria)) {
+      return subgrupo;
+    }
+  }
+  return '';
+};
 
 const MaterialModal = ({ open, onClose, material, onSuccess }) => {
   const dispatch = useDispatch();
-  const { loading, error, successMessage, categorias } = useSelector((state) => state.materiales);
+  const { loading, error, successMessage } = useSelector((state) => state.materiales);
+  const [formError, setFormError] = useState('');
   
   const [formData, setFormData] = useState({
     id_material_extra: '',
@@ -38,20 +49,25 @@ const MaterialModal = ({ open, onClose, material, onSuccess }) => {
     unidad: '',
     permite_decimales: false,
     cantidad_disponible: '',
+    stock_minimo: '',
     marca: '',
     estado_calidad: 'Bueno',
     ubicacion: 'Bodega CDMX',
     precioxunidad: '',
     uso_principal: ''
   });
+  const [selectedSubgrupo, setSelectedSubgrupo] = useState('');
+  const [availableCategorias, setAvailableCategorias] = useState([]);
 
   const estadosValidos = ['Bueno', 'Regular', 'Usado 50%', 'Malo'];
   const ubicacionesValidas = ['Bodega CDMX', 'Querétaro', 'Oficina', 'Instalación'];
 
   useEffect(() => {
     if (open) {
-      dispatch(fetchCategorias());
       if (material) {
+        const initialSubgrupo = findSubgrupo(material.categoria);
+        setSelectedSubgrupo(initialSubgrupo);
+        setAvailableCategorias(initialSubgrupo ? SUBGRUPOS_CATEGORIAS_MATERIALES[initialSubgrupo] : []);
         setFormData({
           id_material_extra: material.id_material_extra || '',
           descripcion: material.descripcion || '',
@@ -60,6 +76,7 @@ const MaterialModal = ({ open, onClose, material, onSuccess }) => {
           unidad: material.unidad || '',
           permite_decimales: material.permite_decimales || false,
           cantidad_disponible: material.cantidad_disponible || '',
+          stock_minimo: material.stock_minimo || '',
           marca: material.marca || '',
           estado_calidad: material.estado_calidad || 'Bueno',
           ubicacion: material.ubicacion || 'Bodega CDMX',
@@ -67,6 +84,9 @@ const MaterialModal = ({ open, onClose, material, onSuccess }) => {
           uso_principal: material.uso_principal || ''
         });
       } else {
+        // Resetear para formulario nuevo
+        setSelectedSubgrupo('');
+        setAvailableCategorias([]);
         setFormData({
           id_material_extra: '',
           descripcion: '',
@@ -75,6 +95,7 @@ const MaterialModal = ({ open, onClose, material, onSuccess }) => {
           unidad: '',
           permite_decimales: false,
           cantidad_disponible: '',
+          stock_minimo: '',
           marca: '',
           estado_calidad: 'Bueno',
           ubicacion: 'Bodega CDMX',
@@ -83,7 +104,7 @@ const MaterialModal = ({ open, onClose, material, onSuccess }) => {
         });
       }
     }
-  }, [open, material, dispatch]);
+  }, [open, material]);
 
   useEffect(() => {
     if (successMessage) {
@@ -104,16 +125,31 @@ const MaterialModal = ({ open, onClose, material, onSuccess }) => {
     }));
   };
 
+  const handleSubgrupoChange = (event) => {
+    const subgrupo = event.target.value;
+    setSelectedSubgrupo(subgrupo);
+    setAvailableCategorias(subgrupo ? SUBGRUPOS_CATEGORIAS_MATERIALES[subgrupo] : []);
+    setFormData(prev => ({ ...prev, categoria: '' }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const dataToSend = { ...formData };
-    // Si precioxunidad es vacío, bórralo del objeto
+    if (formData.precioxunidad === '' || formData.precioxunidad === null) {
+      setFormError('Debes ingresar un precio por unidad');
+      return;
+    }
+
     if (dataToSend.precioxunidad === '' || dataToSend.precioxunidad === null) {
       delete dataToSend.precioxunidad;
     }
     // Si cantidad_disponible es vacío, bórralo del objeto
     if (dataToSend.cantidad_disponible === '' || dataToSend.cantidad_disponible === null) {
       delete dataToSend.cantidad_disponible;
+    }
+    // Si stock_minimo es vacío, bórralo del objeto
+    if (dataToSend.stock_minimo === '' || dataToSend.stock_minimo === null) {
+      delete dataToSend.stock_minimo;
     }
     // Si permite_decimales es null, bórralo
     if (dataToSend.permite_decimales === null) {
@@ -124,10 +160,12 @@ const MaterialModal = ({ open, onClose, material, onSuccess }) => {
     } else {
       await dispatch(createMaterial(dataToSend));
     }
+    setFormError('');
   };
 
   const handleClose = () => {
     dispatch(clearError());
+    setFormError('');
     onClose();
   };
 
@@ -139,9 +177,9 @@ const MaterialModal = ({ open, onClose, material, onSuccess }) => {
       
       <form onSubmit={handleSubmit}>
         <DialogContent>
-          {error && (
+          {(error || formError) && (
             <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
+              {formError || error}
             </Alert>
           )}
           
@@ -171,17 +209,17 @@ const MaterialModal = ({ open, onClose, material, onSuccess }) => {
             
             <Grid item xs={12} sm={6}>
               <FormControl fullWidth required>
+                <InputLabel>Subgrupo</InputLabel>
+                <Select value={selectedSubgrupo} label="Subgrupo" onChange={handleSubgrupoChange}>
+                  {Object.keys(SUBGRUPOS_CATEGORIAS_MATERIALES).map(sub => <MenuItem key={sub} value={sub}>{sub}</MenuItem>)}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth required disabled={!selectedSubgrupo}>
                 <InputLabel>Categoría</InputLabel>
-                <Select
-                  value={formData.categoria}
-                  onChange={handleInputChange('categoria')}
-                  label="Categoría"
-                >
-                  {categorias.map((categoria) => (
-                    <MenuItem key={categoria} value={categoria}>
-                      {categoria}
-                    </MenuItem>
-                  ))}
+                <Select value={formData.categoria} label="Categoría" onChange={handleInputChange('categoria')}>
+                  {availableCategorias.map(cat => <MenuItem key={cat} value={cat}>{cat}</MenuItem>)}
                 </Select>
               </FormControl>
             </Grid>
@@ -296,6 +334,18 @@ const MaterialModal = ({ open, onClose, material, onSuccess }) => {
                   />
                 }
                 label="Permite decimales en cantidades"
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Stock Mínimo"
+                type="number"
+                inputProps={{ min: 0, step: 'any' }}
+                value={formData.stock_minimo}
+                onChange={handleInputChange('stock_minimo')}
+                helperText="Cantidad mínima antes de generar alerta"
               />
             </Grid>
           </Grid>

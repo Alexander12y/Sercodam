@@ -41,6 +41,7 @@ const CreateOrden = () => {
   const [activeStep, setActiveStep] = useState(0);
   const [formData, setFormData] = useState({
     cliente: '',
+    id_cliente: '',
     observaciones: '',
     prioridad: 'media',
     fecha_inicio: '',
@@ -154,7 +155,9 @@ const CreateOrden = () => {
   };
 
   const handleInputChange = (field) => (event) => {
-    const newFormData = { ...formData, [field]: event.target.value };
+    const value = event.target.value;
+    const newFormData = { ...formData, [field]: value };
+    
     setFormData(newFormData);
     setHasStartedEditing(true);
     
@@ -168,9 +171,31 @@ const CreateOrden = () => {
     }
   };
 
+  // Función específica para manejar la selección de cliente
+  const handleClienteChange = (clienteData) => {
+    setFormData(prevFormData => ({
+      ...prevFormData,
+      cliente: clienteData.nombre || '',
+      id_cliente: clienteData.id || ''
+    }));
+    
+    setHasStartedEditing(true);
+    
+    // Limpiar errores de cliente si los hay
+    if (formErrors.cliente) {
+      setFormErrors({ ...formErrors, cliente: '' });
+    }
+  };
+
   const validateForm = () => {
     const errors = {};
-    if (!formData.cliente.trim()) errors.cliente = 'El cliente es requerido';
+    
+    if (!formData.cliente || !formData.cliente.trim()) {
+      errors.cliente = 'Debe seleccionar un cliente del listado';
+    } else if (!formData.id_cliente) {
+      errors.cliente = 'Debe seleccionar un cliente válido del listado desplegable';
+    }
+    
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -206,32 +231,37 @@ const CreateOrden = () => {
       return;
     }
     
-    // Preparar payload
-    const materialesPayload = [
-      ...panosSeleccionados.map(p => ({
-        id_item: p.id_item,
-        cantidad: p.cantidad,
-        tipo_item: 'PANO',
-        largo_tomar: p.largo_tomar,
-        ancho_tomar: p.ancho_tomar,
+    // Preparar panos payload
+    const panosPayload = panosSeleccionados.map(p => ({
+      id_item: p.id_item,  // Esto podría no ser necesario si el backend selecciona el pano
+      altura_req: p.largo_tomar || p.largo_m,
+      ancho_req: p.ancho_tomar || p.ancho_m,
+      tipo_red: p.tipo_red || 'nylon',  // Asumir default si no hay
+      umbral_sobrante_m2: p.umbral_sobrante_m2 || 5.0,
+      cantidad: p.cantidad || 1,
         notas: p.notas || ''
-      })),
-      ...materialesSeleccionados.map(m => ({
+    }));
+    
+    // Preparar materiales payload (solo extras)
+    const materialesPayload = materialesSeleccionados.map(m => ({
         id_item: m.id_item,
         cantidad: m.cantidad,
         tipo_item: 'EXTRA',
         notas: m.notas || ''
-      }))
-    ];
+    }));
+    
+    // Preparar herramientas payload
+    const herramientasPayload = herramientasSeleccionadas.map(h => ({
+      id_item: h.id_item,
+      cantidad: h.cantidad,
+      notas: h.notas || ''
+    }));
     
     const payload = {
       ...formData,
+      panos: panosPayload,
       materiales: materialesPayload,
-      herramientas: herramientasSeleccionadas.map(h => ({
-        id_item: h.id_item,
-        cantidad: h.cantidad,
-        notas: h.notas || ''
-      })),
+      herramientas: herramientasPayload
     };
     
     try {
@@ -271,6 +301,7 @@ const CreateOrden = () => {
     setIsRestoringDraft(false);
     setFormData({
       cliente: '',
+      id_cliente: '',
       observaciones: '',
       prioridad: 'media',
       fecha_inicio: '',
@@ -360,7 +391,12 @@ const CreateOrden = () => {
         <CardContent>
           <form onSubmit={handleSubmit}>
             {activeStep === 0 && (
-              <OrdenFormMain formData={formData} formErrors={formErrors} handleInputChange={handleInputChange} />
+              <OrdenFormMain 
+                formData={formData} 
+                formErrors={formErrors} 
+                handleInputChange={handleInputChange}
+                handleClienteChange={handleClienteChange}
+              />
             )}
             {activeStep === 1 && (
               <OrdenFormPanos 
@@ -404,7 +440,9 @@ const CreateOrden = () => {
                     <li key={i}>
                       {p.tipo_red ? `${p.tipo_red.toUpperCase()} - ` : ''}
                       {p.descripcion ? `${p.descripcion} - ` : ''}
-                      {p.largo_m && p.ancho_m ? `${p.largo_m}m x ${p.ancho_m}m` : ''}
+                      {p.largo_tomar && p.ancho_tomar 
+                        ? `${p.largo_tomar}m x ${p.ancho_tomar}m` 
+                        : (p.largo_m && p.ancho_m ? `${p.largo_m}m x ${p.ancho_m}m` : '')}
                       {p.cantidad ? ` - Cantidad: ${p.cantidad}` : ''}
                       {p.calibre || p.cuadro || p.torsion || p.color || p.refuerzo ? (
                         <>

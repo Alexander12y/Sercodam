@@ -189,41 +189,45 @@ const inventarioController = {
         }
     },
 
-    // GET /api/v1/inventario/alertas - Obtener alertas de stock
+    // GET /api/v1/inventario/alertas - Obtener alertas de stock bajo
     getAlertas: async (req, res) => {
         try {
-            // Materiales con stock bajo o sin stock
-            const materialesBajos = await db('mv_materiales_resumen')
-                .where('nivel_stock', 'in', ['Sin Stock', 'Stock Bajo'])
-                .orderBy('nivel_stock')
+            // 1. Materiales cuyo stock disponible es menor o igual al mínimo
+            const materialesBajos = await db('materiales_extras')
+                .whereRaw('cantidad_disponible <= stock_minimo')
+                .orderBy('categoria')
                 .orderBy('descripcion');
 
-            // Paños que necesitan mantenimiento
-            const panosMantenimiento = await db('mv_panos_resumen')
-                .where('estado', 'in', ['usado', 'dañado'])
-                .orderBy('estado')
-                .orderBy('area_m2', 'desc');
+            // 2. Herramientas con cantidad disponible menor o igual al mínimo
+            const herramientasBajas = await db('herramientas')
+                .whereRaw('cantidad_disponible <= stock_minimo')
+                .orderBy('categoria')
+                .orderBy('descripcion');
 
-            // Herramientas que han estado mucho tiempo en uso
-            const herramientasUso = await db('mv_herramientas_resumen')
-                .where('disponibilidad', 'En Uso')
-                .orderBy('nombre');
+            // 3. Paños con área disponible menor o igual al mínimo configurado
+            const panosBajos = await db('pano as p')
+                .leftJoin('red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
+                .select('p.*', 'rp.tipo_red', 'rp.descripcion')
+                .whereRaw('p.stock_minimo > 0')
+                .andWhereRaw('p.area_m2 <= p.stock_minimo')
+                .orderBy('p.area_m2', 'asc');
+
+            const resumen = {
+                totalAlertas: materialesBajos.length + herramientasBajas.length + panosBajos.length,
+                materialesStock: materialesBajos.length,
+                herramientasStock: herramientasBajas.length,
+                panosStock: panosBajos.length
+            };
 
             res.json({
                 success: true,
                 data: {
                     materialesBajos,
-                    panosMantenimiento,
-                    herramientasUso,
-                    resumen: {
-                        totalAlertas: materialesBajos.length + panosMantenimiento.length + herramientasUso.length,
-                        materialesStock: materialesBajos.length,
-                        panosMantenimiento: panosMantenimiento.length,
-                        herramientasUso: herramientasUso.length
-                    }
+                    herramientasBajas,
+                    panosBajos,
+                    resumen
                 }
             });
-
         } catch (error) {
             logger.error('Error obteniendo alertas:', error);
             throw error;

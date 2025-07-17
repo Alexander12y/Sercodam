@@ -22,8 +22,8 @@ class MakeWebhookService {
 
             // Preparar datos para Make.com
             const webhookData = {
-                evento: 'orden_en_proceso',
-                timestamp: new Date().toISOString(),
+                evento: ordenData.webhook_event || 'orden_en_proceso',
+                timestamp: ordenData.webhook_timestamp || new Date().toISOString(),
                 orden: {
                     id_op: ordenData.id_op,
                     numero_op: ordenData.numero_op,
@@ -40,7 +40,9 @@ class MakeWebhookService {
                     estado: ordenData.estado,
                     panos: ordenData.panos || [],
                     materiales: ordenData.materiales || [],
-                    herramientas: ordenData.herramientas || []
+                    herramientas: ordenData.herramientas || [],
+                    cuts: ordenData.cuts || [],
+                    sobrantes: ordenData.sobrantes || []
                 }
             };
 
@@ -48,33 +50,60 @@ class MakeWebhookService {
             let pdfFilePath = null;
             let pdfFileName = null;
             
-            try {
-                // Buscar PDF en la base de datos
-                const db = require('../config/database');
-                const ordenConPDF = await db('orden_produccion')
-                    .where('id_op', ordenData.id_op)
-                    .select('pdf_filename')
-                    .first();
+            // Primero intentar usar el PDF que se acaba de generar
+            if (ordenData.pdf_filename) {
+                pdfFileName = ordenData.pdf_filename;
                 
-                if (ordenConPDF && ordenConPDF.pdf_filename) {
-                    pdfFileName = ordenConPDF.pdf_filename;
+                // Si se proporciona la ruta completa del archivo, usarla directamente
+                if (ordenData.pdf_filepath && fs.existsSync(ordenData.pdf_filepath)) {
+                    pdfFilePath = ordenData.pdf_filepath;
+                } else {
+                    // Construir la ruta del archivo basada en el nombre del archivo
                     pdfFilePath = path.join(__dirname, '../../temp', pdfFileName);
-                    
-                    // Verificar que el archivo existe
-                    if (!fs.existsSync(pdfFilePath)) {
-                        logger.warn('PDF no encontrado en el sistema de archivos', {
-                            ordenId: ordenData.id_op,
-                            expectedPath: pdfFilePath
-                        });
-                        pdfFilePath = null;
-                        pdfFileName = null;
-                    }
                 }
-            } catch (pdfError) {
-                logger.warn('Error verificando PDF de la orden', {
-                    ordenId: ordenData.id_op,
-                    error: pdfError.message
-                });
+                
+                // Verificar que el archivo existe
+                if (!fs.existsSync(pdfFilePath)) {
+                    logger.warn('PDF recién generado no encontrado en el sistema de archivos', {
+                        ordenId: ordenData.id_op,
+                        expectedPath: pdfFilePath,
+                        pdfFilename: pdfFileName,
+                        providedFilepath: ordenData.pdf_filepath
+                    });
+                    pdfFilePath = null;
+                    pdfFileName = null;
+                }
+            }
+            
+            // Si no se encontró el PDF recién generado, intentar buscar en la base de datos (fallback)
+            if (!pdfFilePath) {
+                try {
+                    const db = require('../config/database');
+                    const ordenConPDF = await db('orden_produccion')
+                        .where('id_op', ordenData.id_op)
+                        .select('pdf_filename')
+                        .first();
+                    
+                    if (ordenConPDF && ordenConPDF.pdf_filename) {
+                        pdfFileName = ordenConPDF.pdf_filename;
+                        pdfFilePath = path.join(__dirname, '../../temp', pdfFileName);
+                        
+                        // Verificar que el archivo existe
+                        if (!fs.existsSync(pdfFilePath)) {
+                            logger.warn('PDF no encontrado en el sistema de archivos', {
+                                ordenId: ordenData.id_op,
+                                expectedPath: pdfFilePath
+                            });
+                            pdfFilePath = null;
+                            pdfFileName = null;
+                        }
+                    }
+                } catch (pdfError) {
+                    logger.warn('Error verificando PDF de la orden en base de datos', {
+                        ordenId: ordenData.id_op,
+                        error: pdfError.message
+                    });
+                }
             }
 
             let response;

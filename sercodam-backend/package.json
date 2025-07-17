@@ -11,18 +11,7 @@
     "migrate": "knex migrate:latest",
     "migrate:rollback": "knex migrate:rollback",
     "seed": "knex seed:run",
-    "build": "npm run migrate && npm run seed",
-    "setup-webhook": "node setup-webhook-config.js",
-    "test-webhook": "node test-pdf-and-webhook.js",
-    "test-webhook-only": "node test-webhook-only.js",
-    "test-pdf": "node -e \"require('./test-pdf-and-webhook.js').testPDFGeneration().catch(console.error)\"",
-    "test-make": "node -e \"require('./test-pdf-and-webhook.js').testMakeWebhook().catch(console.error)\"",
-    "test-orden-completa": "node test-orden-completa.js",
-    "test-pdf-automatico": "node test-pdf-webhook-automatico.js",
-    "test-pdf-download": "node test-pdf-download.js",
-    "test-pdf-api": "node test-pdf-api-download.js",
-    "cleanup-pdfs": "node cleanup-pdfs.js",
-    "reset-migrations": "node reset-migrations.js"
+    "build": "npm run migrate && npm run seed"
   },
   "keywords": [
     "express",

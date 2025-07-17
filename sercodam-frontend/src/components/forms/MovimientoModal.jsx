@@ -14,11 +14,20 @@ import {
   Chip
 } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
-import { entradaHerramienta, salidaHerramienta, clearError } from '../../store/slices/herramientasSlice';
+import { entradaHerramienta, salidaHerramienta, clearError as clearHerramientaError } from '../../store/slices/herramientasSlice';
+import { entradaMaterial, salidaMaterial, clearError as clearMaterialError } from '../../store/slices/materialesSlice';
 
-const MovimientoModal = ({ open, onClose, item, tipo, onSuccess, tipoItem = 'herramienta' }) => {
+const MovimientoModal = ({ open, onClose, item, tipo, onSuccess, tipoItem = 'herramienta', apiEndpoint }) => {
   const dispatch = useDispatch();
-  const { loading, error } = useSelector((state) => state.herramientas);
+  const herramientasState = useSelector((state) => state.herramientas);
+  const materialesState = useSelector((state) => state.materiales);
+  
+  // Determinar el estado y funciones a usar según el tipo de item
+  const isHerramienta = tipoItem === 'herramienta' || (!apiEndpoint || apiEndpoint.includes('Herramienta'));
+  const isMaterial = tipoItem === 'material' || (apiEndpoint && apiEndpoint.includes('Material'));
+  
+  const currentState = isHerramienta ? herramientasState : materialesState;
+  const { loading, error } = currentState;
   
   const [formData, setFormData] = useState({
     cantidad: '',
@@ -39,11 +48,15 @@ const MovimientoModal = ({ open, onClose, item, tipo, onSuccess, tipoItem = 'her
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => {
-        dispatch(clearError());
+        if (isHerramienta) {
+          dispatch(clearHerramientaError());
+        } else {
+          dispatch(clearMaterialError());
+        }
       }, 5000);
       return () => clearTimeout(timer);
     }
-  }, [error, dispatch]);
+  }, [error, dispatch, isHerramienta]);
 
   const handleInputChange = (field) => (event) => {
     setFormData(prev => ({
@@ -66,10 +79,20 @@ const MovimientoModal = ({ open, onClose, item, tipo, onSuccess, tipoItem = 'her
         notas: formData.notas || `${isEntrada ? 'Entrada' : 'Salida'} de ${tipoItem}`
       };
 
-      if (isEntrada) {
-        await dispatch(entradaHerramienta(movimientoData)).unwrap();
-      } else {
-        await dispatch(salidaHerramienta(movimientoData)).unwrap();
+      if (isHerramienta) {
+        // Usar funciones de herramientas
+        if (isEntrada) {
+          await dispatch(entradaHerramienta(movimientoData)).unwrap();
+        } else {
+          await dispatch(salidaHerramienta(movimientoData)).unwrap();
+        }
+      } else if (isMaterial) {
+        // Usar funciones de materiales
+        if (isEntrada) {
+          await dispatch(entradaMaterial(movimientoData)).unwrap();
+        } else {
+          await dispatch(salidaMaterial(movimientoData)).unwrap();
+        }
       }
       
       onSuccess();
@@ -87,6 +110,9 @@ const MovimientoModal = ({ open, onClose, item, tipo, onSuccess, tipoItem = 'her
 
   if (!item) return null;
 
+  // Obtener el nombre del tipo de item para mostrar
+  const itemTypeLabel = isHerramienta ? 'herramienta' : isMaterial ? 'material' : tipoItem;
+
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>
@@ -103,7 +129,7 @@ const MovimientoModal = ({ open, onClose, item, tipo, onSuccess, tipoItem = 'her
           {/* Información del item */}
           <Box sx={{ mb: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Información del {tipoItem}
+              Información del {itemTypeLabel}
             </Typography>
             <Grid container spacing={1}>
               <Grid item xs={6}>
@@ -111,7 +137,7 @@ const MovimientoModal = ({ open, onClose, item, tipo, onSuccess, tipoItem = 'her
                   Código:
                 </Typography>
                 <Typography variant="body1" fontFamily="monospace">
-                  {item.id_herramienta || item.id_material || item.id_pano}
+                  {item.id_herramienta || item.id_material_extra || item.id_pano || item.id_item}
                 </Typography>
               </Grid>
               <Grid item xs={6}>

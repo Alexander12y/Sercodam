@@ -66,6 +66,18 @@ export const fetchMovimientos = createAsyncThunk(
   }
 );
 
+export const deletePano = createAsyncThunk(
+  'panos/deletePano',
+  async (id_item, { rejectWithValue }) => {
+    try {
+      await panosApi.deletePano(id_item);
+      return id_item; // Devolver el ID en caso de éxito
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || 'Error al eliminar paño');
+    }
+  }
+);
+
 const panosSlice = createSlice({
   name: 'panos',
   initialState: {
@@ -77,6 +89,7 @@ const panosSlice = createSlice({
     movimientos: [],
     movimientosLoading: false,
     movimientosError: null,
+    successMessage: null, // Para notificaciones
   },
   reducers: {
     clearSeleccionado(state) {
@@ -88,6 +101,9 @@ const panosSlice = createSlice({
     },
     clearError(state) {
       state.error = null;
+    },
+    clearSuccessMessage(state) {
+      state.successMessage = null;
     }
   },
   extraReducers: (builder) => {
@@ -164,9 +180,22 @@ const panosSlice = createSlice({
       .addCase(fetchMovimientos.rejected, (state, action) => {
         state.movimientosLoading = false;
         state.movimientosError = action.payload;
+      })
+      .addCase(deletePano.pending, (state) => {
+        state.loading = true; // O un `deleting: true` específico
+      })
+      .addCase(deletePano.fulfilled, (state, action) => {
+        state.loading = false;
+        state.successMessage = "Paño eliminado con éxito";
+        // Opcional: remover el paño de la lista sin recargar
+        state.lista = state.lista.filter(pano => pano.id_item !== action.payload);
+      })
+      .addCase(deletePano.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
       });
   }
 });
 
-export const { clearSeleccionado, clearMovimientos, clearError } = panosSlice.actions;
+export const { clearSeleccionado, clearMovimientos, clearError, clearSuccessMessage } = panosSlice.actions;
 export default panosSlice.reducer;

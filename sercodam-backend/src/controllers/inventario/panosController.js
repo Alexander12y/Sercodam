@@ -79,6 +79,7 @@ const panosController = {
                         'rp.descripcion'
                     )
                     .leftJoin('red_producto as rp', 'p.id_mcr', 'rp.id_mcr');
+                    // Removed the whereNotExists clause to show all panos in inventory
 
                 // Aplicar filtros básicos
                 if (tipo_red) {
@@ -186,7 +187,9 @@ const panosController = {
                     tipo_red: pano.tipo_red,
                     unidad: pano.unidad,
                     marca: pano.marca,
-                    descripcion: pano.descripcion
+                    descripcion: pano.descripcion,
+                    stock_minimo: pano.stock_minimo,
+                    estado_trabajo: pano.estado_trabajo
                 };
 
                 // Obtener datos específicos según el tipo
@@ -325,7 +328,8 @@ const panosController = {
                 refuerzo,
                 color,
                 presentacion,
-                grosor
+                grosor,
+                stock_minimo
             } = req.body;
 
             // Validaciones
@@ -408,7 +412,8 @@ const panosController = {
                 ubicacion,
                 precio_x_unidad: parseFloat(precio_x_unidad || 0),
                 created_at: db.fn.now(),
-                updated_at: db.fn.now()
+                updated_at: db.fn.now(),
+                stock_minimo: parseFloat(stock_minimo || 0)
             }).returning('id_item');
 
             await trx.commit();
@@ -447,7 +452,8 @@ const panosController = {
                 refuerzo,
                 color,
                 presentacion,
-                grosor
+                grosor,
+                stock_minimo
             } = req.body;
 
             console.log('🔍 Backend - Datos recibidos para actualizar paño ID:', id);
@@ -498,6 +504,7 @@ const panosController = {
             if (estado) updatePanoData.estado = estado;
             if (ubicacion !== undefined) updatePanoData.ubicacion = ubicacion;
             if (precio_x_unidad !== undefined) updatePanoData.precio_x_unidad = parseFloat(precio_x_unidad);
+            if (stock_minimo !== undefined) updatePanoData.stock_minimo = parseFloat(stock_minimo);
             updatePanoData.updated_at = db.fn.now();
 
             await trx('pano')
@@ -684,10 +691,19 @@ const panosController = {
 
             // Actualizar área del paño
             const nuevaArea = (pano.area_m2 || 0) + parseFloat(cantidad);
+            // Calculate new dimensions keeping proportions
+            let nuevoLargo = pano.largo_m;
+            let nuevoAncho = pano.ancho_m;
+            if (pano.area_m2 > 0) {
+                const factor = Math.sqrt(nuevaArea / pano.area_m2);
+                nuevoLargo = pano.largo_m * factor;
+                nuevoAncho = pano.ancho_m * factor;
+            }
             await trx('pano')
                 .where({ id_item })
                 .update({
-                    area_m2: nuevaArea,
+                    largo_m: nuevoLargo,
+                    ancho_m: nuevoAncho,
                     updated_at: db.fn.now()
                 });
 
@@ -762,10 +778,19 @@ const panosController = {
 
             // Actualizar área del paño
             const nuevaArea = stockActual - parseFloat(cantidad);
+            // Calculate new dimensions keeping proportions
+            let nuevoLargo = pano.largo_m;
+            let nuevoAncho = pano.ancho_m;
+            if (pano.area_m2 > 0) {
+                const factor = Math.sqrt(nuevaArea / pano.area_m2);
+                nuevoLargo = pano.largo_m * factor;
+                nuevoAncho = pano.ancho_m * factor;
+            }
             await trx('pano')
                 .where({ id_item })
                 .update({
-                    area_m2: nuevaArea,
+                    largo_m: nuevoLargo,
+                    ancho_m: nuevoAncho,
                     updated_at: db.fn.now()
                 });
 
@@ -975,6 +1000,165 @@ const panosController = {
 
         } catch (error) {
             logger.error('Error obteniendo catálogos de malla sombra:', error);
+            throw error;
+        }
+    },
+
+    // Nueva función: Encontrar paños adecuados para dimensiones requeridas
+    findSuitablePanos: async (altura_req, ancho_req, tipo_red = null, min_area_threshold = 0) => {
+        // Estandarizar: asegurar altura >= ancho
+        if (altura_req < ancho_req) {
+            [altura_req, ancho_req] = [ancho_req, altura_req];
+        }
+
+        let query = db('pano as p')
+            .select('p.*', 'rp.tipo_red')
+            .leftJoin('red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
+            .where('p.estado_trabajo', 'Libre')
+            .whereRaw('(GREATEST(p.largo_m, p.ancho_m) >= ? AND LEAST(p.largo_m, p.ancho_m) >= ?)', [altura_req, ancho_req])
+            .whereRaw('p.area_m2 >= ?', [min_area_threshold])
+            // Excluir panos que están en órdenes aprobadas (en_proceso o completada)
+            .whereNotExists(function() {
+                this.select('*')
+                    .from('trabajo_corte as tc')
+                    .join('orden_produccion as op', 'tc.id_op', 'op.id_op')
+                    .whereRaw('tc.id_item = p.id_item')
+                    .whereIn('op.estado', ['en_proceso', 'completada']);
+            });
+
+        if (tipo_red) {
+            query = query.where('rp.tipo_red', tipo_red.toLowerCase());
+        }
+
+        // Ordenar por área ascendente (preferir más pequeños para minimizar desperdicio)
+        const panos = await query.orderBy('p.area_m2', 'asc');
+
+        return panos;
+    },
+
+    // Nueva función: Computar cortes guillotine y generar remanentes
+    computeGuillotineCuts: (pano, altura_req, ancho_req) => {
+        // Permitir rotación: asignar dimensiones para mejor fit
+        let pano_h = Math.max(pano.largo_m, pano.ancho_m);
+        let pano_w = Math.min(pano.largo_m, pano.ancho_m);
+        let req_h = Math.max(altura_req, ancho_req);
+        let req_w = Math.min(altura_req, ancho_req);
+
+        if (req_h > pano_h || req_w > pano_w) {
+            // Intentar rotar requerimiento
+            [req_h, req_w] = [req_w, req_h];
+            if (req_h > pano_h || req_w > pano_w) {
+                throw new Error('No fit possible even with rotation');
+            }
+        }
+
+        const remnants = [];
+
+        // Determinar número de remanentes basado en coincidencias
+        const match_h = req_h === pano_h;
+        const match_w = req_w === pano_w;
+
+        if (match_h && match_w) {
+            // Coincidencia perfecta: 0 remanentes, consumir entero
+            return { remnants: [], waste: 0, consume_full: true };
+        } else if (match_h || match_w) {
+            // Coincidencia en una dimensión: 1 remanente
+            if (match_h) {
+                remnants.push({ altura_m: req_h, ancho_m: pano_w - req_w });
+            } else {
+                remnants.push({ altura_m: pano_h - req_h, ancho_m: req_w });
+            }
+        } else {
+            // Sin coincidencias: 2 remanentes (corte en esquina)
+            remnants.push({ altura_m: req_h, ancho_m: pano_w - req_w }); // Remanente horizontal
+            remnants.push({ altura_m: pano_h - req_h, ancho_m: pano_w }); // Remanente vertical (L-shape, but split)
+        }
+
+        // Calcular desperdicio (áreas <=0)
+        const waste = remnants.reduce((sum, r) => (r.altura_m > 0 && r.ancho_m > 0 ? sum : sum + Math.abs(r.altura_m * r.ancho_m)), 0);
+
+        // Filtrar remanentes válidos (dimensiones >0)
+        const validRemnants = remnants.filter(r => r.altura_m > 0 && r.ancho_m > 0);
+
+        return { remnants: validRemnants, waste, consume_full: validRemnants.length === 0 };
+    },
+
+    // Nueva función: Crear trabajo de corte y plan de piezas
+    createCutJob: async (trx, id_op, id_item, altura_req, ancho_req, umbral_sobrante_m2 = 5.0, order_seq = 1, id_operador) => {
+        try {
+            // NO cambiar el estado del paño aquí - se cambiará cuando se apruebe la orden
+            // await trx('pano').where('id_item', id_item).update({ estado_trabajo: 'En progreso' });
+
+            // Computar cortes
+            const pano = await trx('pano').where('id_item', id_item).first();
+            const { remnants, waste, consume_full } = panosController.computeGuillotineCuts(pano, altura_req, ancho_req);
+
+            // Insertar remanentes temporales si hay
+            for (const remnant of remnants) {
+                if (remnant.altura_m * remnant.ancho_m >= umbral_sobrante_m2) {
+                    await trx('panos_sobrantes').insert({
+                        id_item_padre: id_item,
+                        altura_m: remnant.altura_m,
+                        ancho_m: remnant.ancho_m,
+                        id_op,
+                        estado: 'Pendiente'
+                    });
+                } else {
+                    // Log desperdicio
+                    await trx('movimiento_inventario').insert({
+                        tipo_mov: 'AJUSTE_OUT',
+                        cantidad: remnant.altura_m * remnant.ancho_m,
+                        unidad: 'm²',
+                        notas: 'Desperdicio por debajo del umbral',
+                        id_item,
+                        id_op,
+                        id_usuario: id_operador
+                    });
+                }
+            }
+
+            // Crear trabajo_corte
+            const job = await trx('trabajo_corte').insert({
+                id_item,
+                altura_req,
+                ancho_req,
+                estado: 'Planeado',
+                id_operador,
+                id_op,
+                umbral_sobrante_m2,
+                order_seq
+            }).returning('job_id');
+            const job_id = job[0].job_id;
+
+            // Poblar plan_corte_pieza (principal + remanentes)
+            await trx('plan_corte_pieza').insert({
+                job_id,
+                seq: 0,
+                rol_pieza: 'Objetivo',
+                altura_plan: altura_req,
+                ancho_plan: ancho_req
+            });
+
+            // Insertar remanentes en plan_corte_pieza
+            for (let idx = 0; idx < remnants.length; idx++) {
+                const remnant = remnants[idx];
+                if (remnant.altura_m > 0 && remnant.ancho_m > 0) {
+                    await trx('plan_corte_pieza').insert({
+                        job_id,
+                        seq: idx + 1,
+                        rol_pieza: 'Sobrante',
+                        altura_plan: remnant.altura_m,
+                        ancho_plan: remnant.ancho_m
+                    });
+                }
+            }
+
+            if (consume_full) {
+                await trx('pano').where('id_item', id_item).update({ estado_trabajo: 'Consumido' });
+            }
+
+            return job_id;
+        } catch (error) {
             throw error;
         }
     },

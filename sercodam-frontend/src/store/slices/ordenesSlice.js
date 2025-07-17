@@ -4,17 +4,31 @@ import { ordenesApi } from '../../services/api';
 // Async thunks
 export const fetchOrdenes = createAsyncThunk(
   'ordenes/fetchOrdenes',
-  async (params = {}) => {
-    const response = await ordenesApi.getOrdenes(params);
-    return response.data;
+  async (params = {}, { rejectWithValue }) => {
+    try {
+      const response = await ordenesApi.getOrdenes(params);
+      return response.data;
+    } catch (err) {
+      if (err.response && err.response.data) {
+        return rejectWithValue(err.response.data);
+      }
+      throw err;
+    }
   }
 );
 
 export const fetchOrdenById = createAsyncThunk(
   'ordenes/fetchOrdenById',
-  async (id) => {
-    const response = await ordenesApi.getOrdenById(id);
-    return response.data;
+  async (id, { rejectWithValue }) => {
+    try {
+      const response = await ordenesApi.getOrdenDetalle(id);
+      return response.data;
+    } catch (err) {
+      if (err.response && err.response.data) {
+        return rejectWithValue(err.response.data);
+      }
+      throw err;
+    }
   }
 );
 
@@ -35,17 +49,46 @@ export const createOrden = createAsyncThunk(
 
 export const updateOrden = createAsyncThunk(
   'ordenes/updateOrden',
-  async ({ id, data }) => {
-    const response = await ordenesApi.updateOrden(id, data);
-    return response.data;
+  async ({ id, data }, { rejectWithValue }) => {
+    try {
+      const response = await ordenesApi.updateOrden(id, data);
+      return response.data;
+    } catch (err) {
+      if (err.response && err.response.data) {
+        return rejectWithValue(err.response.data);
+      }
+      throw err;
+    }
   }
 );
 
 export const cambiarEstadoOrden = createAsyncThunk(
   'ordenes/cambiarEstadoOrden',
-  async ({ id, estado }) => {
-    const response = await ordenesApi.cambiarEstadoOrden(id, { estado });
-    return response.data;
+  async ({ id, estado }, { rejectWithValue }) => {
+    try {
+      const response = await ordenesApi.cambiarEstadoOrden(id, { estado });
+      return response.data;
+    } catch (err) {
+      if (err.response && err.response.data) {
+        return rejectWithValue(err.response.data);
+      }
+      throw err;
+    }
+  }
+);
+
+export const approveOrden = createAsyncThunk(
+  'ordenes/approveOrden',
+  async (id, { rejectWithValue }) => {
+    try {
+      const response = await ordenesApi.approveOrden(id);
+      return response.data;
+    } catch (err) {
+      if (err.response && err.response.data) {
+        return rejectWithValue(err.response.data);
+      }
+      throw err;
+    }
   }
 );
 
@@ -96,7 +139,7 @@ const ordenesSlice = createSlice({
       })
       .addCase(fetchOrdenes.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message;
+        state.error = action.payload?.message || action.error.message;
       })
       // fetchOrdenById
       .addCase(fetchOrdenById.pending, (state) => {
@@ -109,7 +152,7 @@ const ordenesSlice = createSlice({
       })
       .addCase(fetchOrdenById.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message;
+        state.error = action.payload?.message || action.error.message;
       })
       // createOrden
       .addCase(createOrden.pending, (state) => {
@@ -152,7 +195,7 @@ const ordenesSlice = createSlice({
       })
       .addCase(updateOrden.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message;
+        state.error = action.payload?.message || action.error.message;
       })
       // cambiarEstadoOrden
       .addCase(cambiarEstadoOrden.pending, (state) => {
@@ -178,7 +221,33 @@ const ordenesSlice = createSlice({
       })
       .addCase(cambiarEstadoOrden.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message;
+        state.error = action.payload?.message || action.error.message;
+      })
+      // approveOrden
+      .addCase(approveOrden.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(approveOrden.fulfilled, (state, action) => {
+        state.loading = false;
+        const ordenActualizada = action.payload.data || action.payload;
+        if (ordenActualizada) {
+          // Actualizar estado en la lista
+          const index = state.ordenes.findIndex(
+            (orden) => orden.id_op === ordenActualizada.id_op
+          );
+          if (index !== -1) {
+            state.ordenes[index].estado = 'en_proceso';
+          }
+          // Actualizar orden actual si es la misma
+          if (state.ordenActual && state.ordenActual.id_op === ordenActualizada.id_op) {
+            state.ordenActual.estado = 'en_proceso';
+          }
+        }
+      })
+      .addCase(approveOrden.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload?.message || action.error.message;
       });
   },
 });

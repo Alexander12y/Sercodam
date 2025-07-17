@@ -28,7 +28,8 @@ import {
   Paper,
   Tooltip,
   Fab,
-  Divider
+  Divider,
+  Pagination
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -38,20 +39,21 @@ import {
   Refresh as RefreshIcon
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchPanos } from '../store/slices/panosSlice';
+import { fetchPanos, deletePano } from '../store/slices/panosSlice';
 import PanoModal from '../components/forms/PanoModal';
 import { panosApi } from '../services/api';
 
 const PanosList = () => {
   const dispatch = useDispatch();
-  const { lista: panos, loading, error } = useSelector((state) => state.panos);
+  const { lista: panos, loading, error, pagination } = useSelector((state) => state.panos);
   
   const [filters, setFilters] = useState({
     tipo_red: '',
     estado: '',
-    area_min: '',
-    area_max: ''
+    search: '' // Añadido para consistencia
   });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const [modalOpen, setModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedPano, setSelectedPano] = useState(null);
@@ -59,19 +61,18 @@ const PanosList = () => {
   const [panoToDelete, setPanoToDelete] = useState(null);
 
   const tiposValidos = ['lona', 'nylon', 'polipropileno', 'malla sombra'];
-  const estadosValidos = ['bueno', 'regular', 'malo', '50%'];
+  const estadosValidos = ['Bueno', 'Regular', 'Malo', '50%'];
 
   useEffect(() => {
     loadPanos();
-  }, []);
+  }, [currentPage, pageSize]);
 
   const loadPanos = () => {
-    const params = {};
-    if (filters.tipo_red) params.tipo_red = filters.tipo_red;
-    if (filters.estado) params.estado = filters.estado;
-    if (filters.area_min) params.area_min = filters.area_min;
-    if (filters.area_max) params.area_max = filters.area_max;
-    
+    const params = {
+      page: currentPage,
+      limit: pageSize,
+      ...filters
+    };
     dispatch(fetchPanos(params));
   };
 
@@ -83,17 +84,14 @@ const PanosList = () => {
   };
 
   const handleApplyFilters = () => {
+      setCurrentPage(1);
       loadPanos();
   };
 
   const handleClearFilters = () => {
-    setFilters({
-      tipo_red: '',
-      estado: '',
-      area_min: '',
-      area_max: ''
-    });
-    dispatch(fetchPanos());
+    setFilters({ tipo_red: '', estado: '', search: '' });
+    setCurrentPage(1);
+    dispatch(fetchPanos({ page: 1, limit: pageSize }));
   };
 
   const handleCreate = () => {
@@ -117,14 +115,17 @@ const PanosList = () => {
   };
 
   const confirmDelete = async () => {
+    if (!panoToDelete) return;
     try {
-      await panosApi.deletePano(panoToDelete.id_item);
-      loadPanos();
+      // Usar la acción de Redux en lugar de la llamada directa a la API
+      await dispatch(deletePano(panoToDelete.id_item)).unwrap();
+      // Ya no es necesario llamar a loadPanos() aquí, porque el slice se encarga de actualizar el estado.
+    } catch (error) {
+      // El error ya se maneja en el slice y se guarda en el estado de Redux
+      console.error('Fallo al eliminar paño:', error);
+    } finally {
       setDeleteDialogOpen(false);
       setPanoToDelete(null);
-    } catch (error) {
-      console.error('Error eliminando paño:', error);
-      alert(error.response?.data?.message || 'Error al eliminar el paño');
     }
   };
 
@@ -133,25 +134,39 @@ const PanosList = () => {
   };
 
   const getEstadoColor = (estado) => {
+    if (!estado) return 'default';
+    const normalized = estado.toString().toLowerCase();
     const colors = {
       'bueno': 'success',
       'regular': 'warning',
       'malo': 'error',
       '50%': 'info',
     };
-    return colors[estado] || 'default';
+    return colors[normalized] || 'default';
   };
 
-  // Asegurar que panos sea un array
-  const panosArray = Array.isArray(panos) ? panos : [];
-  
-  const filteredPanos = panosArray.filter(pano => {
-    if (filters.tipo_red && pano.tipo_red !== filters.tipo_red) return false;
-    if (filters.estado && pano.estado !== filters.estado) return false;
-    if (filters.area_min && pano.area_m2 < parseFloat(filters.area_min)) return false;
-    if (filters.area_max && pano.area_m2 > parseFloat(filters.area_max)) return false;
-    return true;
-  });
+  const getUbicacionColor = (ubicacion) => {
+    const colors = {
+      'Bodega CDMX': 'primary',
+      'Querétaro': 'secondary',
+      'Oficina': 'info',
+      'Instalación': 'warning',
+    };
+    return colors[ubicacion] || 'default';
+  };
+
+  const getEstadoTrabajoColor = (estadoTrabajo) => {
+    const colors = {
+      'Libre': 'success',
+      'Reservado': 'warning',
+      'En progreso': 'info',
+      'Consumido': 'error',
+    };
+    return colors[estadoTrabajo] || 'default';
+  };
+
+  // Eliminar el array filtrado, ya que ahora confiamos en los datos de Redux
+  // const filteredPanos = panosArray.filter(pano => { ... });
 
   const renderSpecifications = (pano) => {
     switch (pano.tipo_red) {
@@ -288,115 +303,54 @@ const PanosList = () => {
     }
   };
 
+  const handlePageChange = (event, newPage) => {
+    setCurrentPage(newPage);
+  };
+
   return (
     <Container maxWidth="xl">
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h4" component="h1">
-          Catálogo de Paños
-      </Typography>
-        <Box>
-          <Button
-            variant="outlined"
-            startIcon={<RefreshIcon />}
-            onClick={loadPanos}
-            sx={{ mr: 1 }}
-          >
+          Inventario de Paños
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button variant="outlined" startIcon={<RefreshIcon />} onClick={loadPanos}>
             Actualizar
           </Button>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleCreate}
-          >
+          <Button variant="contained" startIcon={<AddIcon />} onClick={handleCreate}>
             Nuevo Paño
           </Button>
         </Box>
       </Box>
 
-      {/* Filtros */}
+      {/* Filtros consistentes */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
-          <Typography variant="h6" gutterBottom>
-              Filtros
-            </Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControl fullWidth size="small">
-                <InputLabel id="tipo-red-filter-label">Tipo de Red</InputLabel>
-                <Select
-                  labelId="tipo-red-filter-label"
-                  value={filters.tipo_red}
-                  onChange={handleFilterChange('tipo_red')}
-                  label="Tipo de Red"
-                >
-                  <MenuItem value="">Todos</MenuItem>
-                  {tiposValidos.map(tipo => (
-                    <MenuItem key={tipo} value={tipo}>
-                      {tipo.charAt(0).toUpperCase() + tipo.slice(1)}
-                    </MenuItem>
-                  ))}
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} sm={4} md={2}>
+              <FormControl fullWidth>
+                <InputLabel>Tipo de Red</InputLabel>
+                <Select value={filters.tipo_red} label="Tipo de Red" onChange={handleFilterChange('tipo_red')}>
+                  <MenuItem value=""><em>Todos</em></MenuItem>
+                  {tiposValidos.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControl fullWidth size="small">
-                <InputLabel id="estado-filter-label">Estado</InputLabel>
-                <Select
-                  labelId="estado-filter-label"
-                  value={filters.estado}
-                  onChange={handleFilterChange('estado')}
-                  label="Estado"
-                >
-                  <MenuItem value="">Todos</MenuItem>
-                  {estadosValidos.map(estado => (
-                    <MenuItem key={estado} value={estado}>
-                      <Chip label={estado} color={getEstadoColor(estado)} size="small" />
-                    </MenuItem>
-                  ))}
+            <Grid item xs={12} sm={4} md={2}>
+              <FormControl fullWidth>
+                <InputLabel>Estado</InputLabel>
+                <Select value={filters.estado} label="Estado" onChange={handleFilterChange('estado')}>
+                  <MenuItem value=""><em>Todos</em></MenuItem>
+                  {estadosValidos.map(e => <MenuItem key={e} value={e}>{e}</MenuItem>)}
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <TextField
-                fullWidth
-                size="small"
-                label="Área mínima (m²)"
-                type="number"
-                value={filters.area_min}
-                onChange={handleFilterChange('area_min')}
-                inputProps={{ min: 0, step: 0.01 }}
-              />
+            <Grid item xs={12} sm={4} md={3}>
+              <TextField fullWidth label="Buscar..." value={filters.search} onChange={handleFilterChange('search')} placeholder="Código, color, etc." />
             </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <TextField
-                fullWidth
-                size="small"
-                label="Área máxima (m²)"
-                type="number"
-                value={filters.area_max}
-                onChange={handleFilterChange('area_max')}
-                inputProps={{ min: 0, step: 0.01 }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6} md={1}>
-              <Button
-                fullWidth
-                variant="contained"
-                onClick={handleApplyFilters}
-                size="small"
-              >
-                Filtrar
-              </Button>
-            </Grid>
-            <Grid item xs={12} sm={6} md={1}>
-              <Button
-                fullWidth
-                variant="outlined"
-                onClick={handleClearFilters}
-                size="small"
-              >
-                Limpiar
-              </Button>
+            <Grid item xs={12} sm={12} md={3} sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+              <Button onClick={handleClearFilters} fullWidth>Limpiar</Button>
+              <Button variant="contained" onClick={handleApplyFilters} fullWidth>Aplicar</Button>
             </Grid>
           </Grid>
         </CardContent>
@@ -406,7 +360,7 @@ const PanosList = () => {
       <Card>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            Paños ({filteredPanos.length})
+            Paños ({panos?.length || 0})
           </Typography>
           
       {error && (
@@ -419,10 +373,12 @@ const PanosList = () => {
             <Table>
             <TableHead>
               <TableRow>
-                <TableCell>ID</TableCell>
+                <TableCell>Código</TableCell>
                   <TableCell>Tipo</TableCell>
                   <TableCell>Área (m²)</TableCell>
+                  <TableCell>Mínimo</TableCell>
                 <TableCell>Estado</TableCell>
+                <TableCell>Estado Trabajo</TableCell>
                 <TableCell>Ubicación</TableCell>
                   <TableCell>Especificaciones</TableCell>
                   <TableCell>Precio ($)</TableCell>
@@ -432,22 +388,29 @@ const PanosList = () => {
             <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} align="center">
+                    <TableCell colSpan={10} align="center">
                       Cargando...
                     </TableCell>
                   </TableRow>
-                ) : filteredPanos.length === 0 ? (
+                ) : (panos || []).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} align="center">
+                    <TableCell colSpan={10} align="center">
                       No se encontraron paños
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredPanos.map((pano) => (
+                  (panos || []).map((pano) => (
                     <TableRow key={pano.id_item}>
-                  <TableCell>{pano.id_item}</TableCell>
+                  <TableCell>
+                    <Typography variant="body2" fontFamily="monospace">
+                      {pano.id_item}
+                    </Typography>
+                  </TableCell>
                       <TableCell>{pano.tipo_red || 'N/A'}</TableCell>
-                      <TableCell>{pano.area_m2 || 0}</TableCell>
+                      <TableCell style={{ color: (pano.area_m2 || 0) <= (pano.stock_minimo || 0) ? '#d32f2f' : 'inherit', fontWeight: 'bold' }}>
+                        {pano.area_m2 || 0}
+                      </TableCell>
+                      <TableCell>{pano.stock_minimo ?? 0}</TableCell>
                   <TableCell>
                     <Chip
                           label={pano.estado || 'N/A'} 
@@ -455,13 +418,26 @@ const PanosList = () => {
                       size="small"
                     />
                   </TableCell>
-                      <TableCell>{pano.ubicacion || 'N/A'}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={pano.estado_trabajo || 'Libre'} 
+                          color={getEstadoTrabajoColor(pano.estado_trabajo)}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={pano.ubicacion || 'N/A'} 
+                          color={getUbicacionColor(pano.ubicacion)}
+                          size="small"
+                        />
+                      </TableCell>
                       <TableCell>
                         {renderSpecifications(pano)}
                       </TableCell>
                       <TableCell>${pano.precio_x_unidad || 0}</TableCell>
                   <TableCell>
-                        <Box>
+                        <Box sx={{ display: 'flex', gap: 0.5 }}>
                           <Tooltip title="Ver detalles">
                             <span>
                               <IconButton
@@ -505,6 +481,41 @@ const PanosList = () => {
         </TableContainer>
         </CardContent>
       </Card>
+      
+      {/* Paginación */}
+      {pagination && pagination.totalPages > 1 && (
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              Mostrando {((pagination.page - 1) * pagination.limit) + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)} de {pagination.total} paños
+            </Typography>
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <InputLabel>Por página</InputLabel>
+              <Select
+                value={pageSize}
+                onChange={(event) => {
+                  setPageSize(event.target.value);
+                  setCurrentPage(1);
+                }}
+                label="Por página"
+              >
+                <MenuItem value={25}>25</MenuItem>
+                <MenuItem value={50}>50</MenuItem>
+                <MenuItem value={100}>100</MenuItem>
+                <MenuItem value={200}>200</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+          <Pagination
+            count={pagination.totalPages}
+            page={pagination.page}
+            onChange={handlePageChange}
+            color="primary"
+            showFirstButton
+            showLastButton
+          />
+        </Box>
+      )}
 
       {/* Modal para crear/editar */}
       <PanoModal
@@ -517,7 +528,7 @@ const PanosList = () => {
       {/* Modal de detalles */}
       <Dialog open={detailModalOpen} onClose={() => setDetailModalOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>
-          Detalles del Paño - ID: {selectedPano?.id_item}
+          Detalles del Paño - Código: {selectedPano?.id_item}
         </DialogTitle>
         <DialogContent>
           {selectedPano && (
@@ -528,7 +539,7 @@ const PanosList = () => {
                 </Typography>
               </Grid>
               <Grid item xs={12} md={6}>
-                <Typography variant="subtitle2" color="text.secondary">ID:</Typography>
+                <Typography variant="subtitle2" color="text.secondary">Código:</Typography>
                 <Typography variant="body2">{selectedPano.id_item}</Typography>
               </Grid>
               <Grid item xs={12} md={6}>
@@ -548,8 +559,20 @@ const PanosList = () => {
                 />
               </Grid>
               <Grid item xs={12} md={6}>
+                <Typography variant="subtitle2" color="text.secondary">Estado Trabajo:</Typography>
+                <Chip 
+                  label={selectedPano.estado_trabajo || 'Libre'} 
+                  color={getEstadoTrabajoColor(selectedPano.estado_trabajo)} 
+                  size="small" 
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" color="text.secondary">Ubicación:</Typography>
-                <Typography variant="body2">{selectedPano.ubicacion || 'N/A'}</Typography>
+                <Chip 
+                  label={selectedPano.ubicacion || 'N/A'} 
+                  color={getUbicacionColor(selectedPano.ubicacion)} 
+                  size="small" 
+                />
               </Grid>
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" color="text.secondary">Precio por Unidad:</Typography>
@@ -591,7 +614,7 @@ const PanosList = () => {
         <DialogTitle>Confirmar Eliminación</DialogTitle>
         <DialogContent>
           <Typography>
-            ¿Está seguro de que desea eliminar el paño ID: {panoToDelete?.id_item}?
+            ¿Está seguro de que desea eliminar el paño Código: {panoToDelete?.id_item}?
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             Esta acción no se puede deshacer.

@@ -134,10 +134,19 @@ const webhookController = {
 
                 // Actualizar área del paño
                 const nuevaArea = Math.max(0, panoDisponible.area_m2 - (panoData.largo_m * panoData.ancho_m * panoData.cantidad));
+                // Calculate new dimensions keeping proportions
+                let nuevoLargo = panoDisponible.largo_m;
+                let nuevoAncho = panoDisponible.ancho_m;
+                if (panoDisponible.area_m2 > 0) {
+                    const factor = Math.sqrt(nuevaArea / panoDisponible.area_m2);
+                    nuevoLargo = panoDisponible.largo_m * factor;
+                    nuevoAncho = panoDisponible.ancho_m * factor;
+                }
                 await trx('pano')
                     .where('id_item', panoDisponible.id_item)
                     .update({
-                        area_m2: nuevaArea,
+                        largo_m: nuevoLargo,
+                        ancho_m: nuevoAncho,
                         updated_at: db.fn.now()
                     });
             }

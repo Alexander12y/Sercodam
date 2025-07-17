@@ -41,23 +41,18 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import { 
   fetchHerramientas, 
-  fetchCategorias, 
-  fetchEstados,
-  fetchUbicaciones,
   deleteHerramienta,
   clearError,
   clearSuccessMessage 
 } from '../store/slices/herramientasSlice';
 import HerramientaModal from '../components/forms/HerramientaModal';
 import MovimientoModal from '../components/forms/MovimientoModal';
+import { SUBGRUPOS_CATEGORIAS_HERRAMIENTAS } from '../constants/herramientasConstants';
 
 const HerramientasList = () => {
   const dispatch = useDispatch();
   const { 
     lista: herramientas, 
-    categorias,
-    estados,
-    ubicaciones,
     loading, 
     error,
     successMessage,
@@ -65,11 +60,13 @@ const HerramientasList = () => {
   } = useSelector((state) => state.herramientas);
   
   const [filters, setFilters] = useState({
+    subgrupo: '',
     categoria: '',
     estado_calidad: '',
     ubicacion: '',
     search: ''
   });
+  const [categoriasFiltradas, setCategoriasFiltradas] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [modalOpen, setModalOpen] = useState(false);
@@ -81,6 +78,7 @@ const HerramientasList = () => {
   const [tipoMovimiento, setTipoMovimiento] = useState('entrada');
 
   const estadosValidos = ['Bueno', 'Regular', 'Usado 50%', 'Malo'];
+  const ubicacionesValidas = ['Bodega CDMX', 'Querétaro', 'Oficina', 'Instalación'];
 
   useEffect(() => {
     loadHerramientas();
@@ -88,9 +86,9 @@ const HerramientasList = () => {
 
   useEffect(() => {
     // Cargar datos estáticos solo una vez al montar el componente
-    loadCategorias();
-    loadEstados();
-    loadUbicaciones();
+    // loadCategorias(); // Removed as per new logic
+    // loadEstados(); // Removed as per new logic
+    // loadUbicaciones(); // Removed as per new logic
   }, []); // Solo se ejecuta al montar el componente
 
   useEffect(() => {
@@ -116,7 +114,14 @@ const HerramientasList = () => {
       page: currentPage,
       limit: pageSize
     };
-    if (filters.categoria) params.categoria = filters.categoria;
+    if (filters.categoria) {
+      params.categoria = filters.categoria;
+    } else if (filters.subgrupo) {
+      const categoriasDelSubgrupo = SUBGRUPOS_CATEGORIAS_HERRAMIENTAS[filters.subgrupo] || [];
+      if (categoriasDelSubgrupo.length > 0) {
+        params.categorias = categoriasDelSubgrupo;
+      }
+    }
     if (filters.estado_calidad) params.estado_calidad = filters.estado_calidad;
     if (filters.ubicacion) params.ubicacion = filters.ubicacion;
     if (filters.search) params.search = filters.search;
@@ -124,23 +129,24 @@ const HerramientasList = () => {
     dispatch(fetchHerramientas(params));
   };
 
-  const loadCategorias = () => {
-    dispatch(fetchCategorias());
-  };
-
-  const loadEstados = () => {
-    dispatch(fetchEstados());
-  };
-
-  const loadUbicaciones = () => {
-    dispatch(fetchUbicaciones());
-  };
+  // Removed loadCategorias, loadEstados, loadUbicaciones as they are no longer used
 
   const handleFilterChange = (field) => (event) => {
+    const value = event.target.value;
     setFilters(prev => ({
       ...prev,
-      [field]: event.target.value
+      [field]: value
     }));
+
+    if (field === 'subgrupo') {
+      if (value) {
+        setCategoriasFiltradas(SUBGRUPOS_CATEGORIAS_HERRAMIENTAS[value] || []);
+        // Resetear la categoría específica al cambiar de subgrupo
+        setFilters(prev => ({ ...prev, categoria: '' }));
+      } else {
+        setCategoriasFiltradas([]);
+      }
+    }
   };
 
   const handleApplyFilters = () => {
@@ -150,11 +156,13 @@ const HerramientasList = () => {
 
   const handleClearFilters = () => {
     setFilters({
+      subgrupo: '',
       categoria: '',
       estado_calidad: '',
       ubicacion: '',
       search: ''
     });
+    setCategoriasFiltradas([]); // Clear filtered categories
     setCurrentPage(1);
     dispatch(fetchHerramientas({ page: 1, limit: pageSize }));
   };
@@ -274,33 +282,41 @@ const HerramientasList = () => {
             Filtros
           </Typography>
           <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} sm={6} md={3}>
-              <TextField
-                fullWidth
-                label="Buscar"
-                value={filters.search}
-                onChange={handleFilterChange('search')}
-                placeholder="Código, descripción, categoría..."
-              />
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid item xs={12} sm={4} md={2}>
               <FormControl fullWidth>
-                <InputLabel>Categoría</InputLabel>
+                <InputLabel>Subgrupo</InputLabel>
                 <Select
-                  value={filters.categoria}
-                  onChange={handleFilterChange('categoria')}
-                  label="Categoría"
+                  value={filters.subgrupo}
+                  label="Subgrupo"
+                  onChange={handleFilterChange('subgrupo')}
                 >
-                  <MenuItem value="">Todas</MenuItem>
-                  {categorias.map((categoria) => (
-                    <MenuItem key={categoria} value={categoria}>
-                      {categoria}
-                    </MenuItem>
+                  <MenuItem value="">
+                    <em>Todos</em>
+                  </MenuItem>
+                  {Object.keys(SUBGRUPOS_CATEGORIAS_HERRAMIENTAS).map(subgrupo => (
+                    <MenuItem key={subgrupo} value={subgrupo}>{subgrupo}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={6} md={2}>
+            <Grid item xs={12} sm={4} md={2}>
+              <FormControl fullWidth disabled={!filters.subgrupo}>
+                <InputLabel>Categoría</InputLabel>
+                <Select
+                  value={filters.categoria}
+                  label="Categoría"
+                  onChange={handleFilterChange('categoria')}
+                >
+                  <MenuItem value="">
+                    <em>Todas en el subgrupo</em>
+                  </MenuItem>
+                  {categoriasFiltradas.map(categoria => (
+                    <MenuItem key={categoria} value={categoria}>{categoria}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={4} md={2}>
               <FormControl fullWidth>
                 <InputLabel>Estado</InputLabel>
                 <Select
@@ -317,7 +333,7 @@ const HerramientasList = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={6} md={2}>
+            <Grid item xs={12} sm={4} md={2}>
               <FormControl fullWidth>
                 <InputLabel>Ubicación</InputLabel>
                 <Select
@@ -326,7 +342,7 @@ const HerramientasList = () => {
                   label="Ubicación"
                 >
                   <MenuItem value="">Todas</MenuItem>
-                  {ubicaciones.map((ubicacion) => (
+                  {ubicacionesValidas.map((ubicacion) => (
                     <MenuItem key={ubicacion} value={ubicacion}>
                       {ubicacion}
                     </MenuItem>
@@ -334,25 +350,17 @@ const HerramientasList = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={6} md={1}>
-              <Button
+            <Grid item xs={12} sm={4} md={3}>
+              <TextField
                 fullWidth
-                variant="contained"
-                onClick={handleApplyFilters}
-                size="small"
-              >
-                Filtrar
-              </Button>
+                label="Buscar..."
+                value={filters.search}
+                onChange={handleFilterChange('search')}
+              />
             </Grid>
-            <Grid item xs={12} sm={6} md={1}>
-              <Button
-                fullWidth
-                variant="outlined"
-                onClick={handleClearFilters}
-                size="small"
-              >
-                Limpiar
-              </Button>
+            <Grid item xs={12} sm={12} md={2} sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+              <Button onClick={handleClearFilters} fullWidth>Limpiar</Button>
+              <Button variant="contained" onClick={handleApplyFilters} fullWidth>Aplicar</Button>
             </Grid>
           </Grid>
         </CardContent>
@@ -374,6 +382,7 @@ const HerramientasList = () => {
                   <TableCell>Categoría</TableCell>
                   <TableCell>Marca</TableCell>
                   <TableCell>Stock</TableCell>
+                  <TableCell>Mínimo</TableCell>
                   <TableCell>Unidad</TableCell>
                   <TableCell>Estado</TableCell>
                   <TableCell>Ubicación</TableCell>
@@ -384,13 +393,13 @@ const HerramientasList = () => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={10} align="center">
+                    <TableCell colSpan={11} align="center">
                       Cargando...
                     </TableCell>
                   </TableRow>
                 ) : herramientasArray.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} align="center">
+                    <TableCell colSpan={11} align="center">
                       No se encontraron herramientas
                     </TableCell>
                   </TableRow>
@@ -426,10 +435,13 @@ const HerramientasList = () => {
                         <Typography 
                           variant="body2" 
                           fontWeight="bold"
-                          color={herramienta.cantidad_disponible <= 0 ? 'error' : 'inherit'}
+                          color={herramienta.cantidad_disponible <= herramienta.stock_minimo ? 'error' : 'inherit'}
                         >
-                          {herramienta.cantidad_disponible || 0}
+                          {herramienta.cantidad_disponible ?? 0}
                         </Typography>
+                      </TableCell>
+                      <TableCell>
+                        {herramienta.stock_minimo ?? 0}
                       </TableCell>
                       <TableCell>
                         {herramienta.unidad || 'unidad'}
@@ -455,49 +467,59 @@ const HerramientasList = () => {
                       <TableCell>
                         <Box sx={{ display: 'flex', gap: 0.5 }}>
                           <Tooltip title="Ver detalles">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleView(herramienta)}
-                              color="primary"
-                            >
-                              <ViewIcon />
-                            </IconButton>
+                            <span>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleView(herramienta)}
+                                color="primary"
+                              >
+                                <ViewIcon />
+                              </IconButton>
+                            </span>
                           </Tooltip>
                           <Tooltip title="Editar">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleEdit(herramienta)}
-                              color="warning"
-                            >
-                              <EditIcon />
-                            </IconButton>
+                            <span>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleEdit(herramienta)}
+                                color="warning"
+                              >
+                                <EditIcon />
+                              </IconButton>
+                            </span>
                           </Tooltip>
                           <Tooltip title="Entrada">
-                            <IconButton
-                              size="small"
-                              color="success"
-                              onClick={() => handleMovimiento(herramienta, 'entrada')}
-                            >
-                              <InputIcon />
-                            </IconButton>
+                            <span>
+                              <IconButton
+                                size="small"
+                                color="success"
+                                onClick={() => handleMovimiento(herramienta, 'entrada')}
+                              >
+                                <InputIcon />
+                              </IconButton>
+                            </span>
                           </Tooltip>
                           <Tooltip title="Salida">
-                            <IconButton
-                              size="small"
-                              color="warning"
-                              onClick={() => handleMovimiento(herramienta, 'salida')}
-                            >
-                              <OutputIcon />
-                            </IconButton>
+                            <span>
+                              <IconButton
+                                size="small"
+                                color="warning"
+                                onClick={() => handleMovimiento(herramienta, 'salida')}
+                              >
+                                <OutputIcon />
+                              </IconButton>
+                            </span>
                           </Tooltip>
                           <Tooltip title="Eliminar">
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => handleDelete(herramienta)}
-                            >
-                              <DeleteIcon />
-                            </IconButton>
+                            <span>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => handleDelete(herramienta)}
+                              >
+                                <DeleteIcon />
+                              </IconButton>
+                            </span>
                           </Tooltip>
                         </Box>
                       </TableCell>
@@ -617,9 +639,12 @@ const HerramientasList = () => {
                 <Typography variant="body2" color="text.secondary">
                   Ubicación
                 </Typography>
-                <Typography variant="body1">
-                  {selectedHerramienta.ubicacion || 'N/A'}
-                </Typography>
+                <Chip 
+                  label={selectedHerramienta.ubicacion || 'N/A'} 
+                  size="small" 
+                  color={getUbicacionColor(selectedHerramienta.ubicacion)}
+                  variant="outlined"
+                />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <Typography variant="body2" color="text.secondary">

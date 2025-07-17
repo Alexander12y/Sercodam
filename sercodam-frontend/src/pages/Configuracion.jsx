@@ -155,14 +155,48 @@ const Configuracion = () => {
   const validateForm = () => {
     const errors = {};
     
-    if (!form.username.trim()) errors.username = 'El nombre de usuario es requerido';
-    if (userModal.mode === 'create' && !form.password.trim()) {
-      errors.password = 'La contraseña es requerida';
+    // Validar nombre de usuario
+    if (!form.username.trim()) {
+      errors.username = 'El nombre de usuario es requerido';
+    } else {
+      if (form.username.length < 3) {
+        errors.username = 'El nombre de usuario debe tener al menos 3 caracteres';
+      } else if (!/^[a-zA-Z0-9_]+$/.test(form.username)) {
+        errors.username = 'El nombre de usuario solo puede contener letras, números y guiones bajos';
+      }
     }
-    if (!form.nombre.trim()) errors.nombre = 'El nombre es requerido';
-    if (!form.email.trim()) errors.email = 'El email es requerido';
-    if (form.email && !/\S+@\S+\.\S+/.test(form.email)) {
+
+    // Validar contraseña (obligatoria al crear y opcional al editar)
+    if (userModal.mode === 'create' || form.password.trim()) {
+      if (!form.password.trim()) {
+        errors.password = 'La contraseña es requerida';
+      } else {
+        if (form.password.length < 8) {
+          errors.password = 'La contraseña debe tener al menos 8 caracteres';
+        } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(form.password)) {
+          errors.password = 'La contraseña debe contener al menos una letra minúscula, una mayúscula y un número';
+        }
+      }
+    }
+
+    // Validar nombre
+    if (!form.nombre.trim()) {
+      errors.nombre = 'El nombre es requerido';
+    } else if (form.nombre.length < 2) {
+      errors.nombre = 'El nombre debe tener al menos 2 caracteres';
+    }
+
+    // Validar email
+    if (!form.email.trim()) {
+      errors.email = 'El email es requerido';
+    } else if (!/^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$/.test(form.email)) {
       errors.email = 'El email debe tener un formato válido';
+    }
+
+    // Validar rol
+    const validRoles = ['admin', 'supervisor', 'usuario', 'operador'];
+    if (form.rol && !validRoles.includes(form.rol)) {
+      errors.rol = 'El rol seleccionado no es válido';
     }
     
     setFormErrors(errors);
@@ -209,7 +243,10 @@ const Configuracion = () => {
         response = await authApi.createUser(form);
       } else {
         const updateData = { ...form };
-        if (!updateData.password) delete updateData.password;
+        // Solo eliminar password si está vacío o solo contiene espacios
+        if (!updateData.password || !updateData.password.trim()) {
+          delete updateData.password;
+        }
         response = await authApi.updateUser(userModal.user.id, updateData);
       }
       
@@ -662,14 +699,14 @@ const Configuracion = () => {
           </Card>
         </Grid>
 
-        {/* Panel de información del sistema */}
+        {/* Panel de configuración de seguridad */}
         <Grid item xs={12} md={6}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                <SettingsIcon sx={{ mr: 1, color: 'primary.main' }} />
+                <SecurityIcon sx={{ mr: 1, color: 'primary.main' }} />
                 <Typography variant="h6" fontWeight={600}>
-                  Información del Sistema
+                  Configuración de Seguridad
                 </Typography>
               </Box>
               
@@ -677,41 +714,68 @@ const Configuracion = () => {
                 <Grid item xs={12}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1 }}>
                     <Typography variant="body2" color="text.secondary">
-                      Versión del Sistema
-                    </Typography>
-                    <Chip label="v1.0.0" size="small" color="primary" />
-                  </Box>
-                </Grid>
-                <Grid item xs={12}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Base de Datos
-                    </Typography>
-                    <Typography variant="body2" fontWeight={500}>
-                      PostgreSQL
-                    </Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={12}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Entorno
+                      Política de Contraseñas
                     </Typography>
                     <Chip 
-                      label={import.meta.env.MODE === 'production' ? 'Producción' : 'Desarrollo'} 
+                      label="8+ caracteres, mayús/min/núm" 
                       size="small" 
-                      color={import.meta.env.MODE === 'production' ? 'error' : 'success'} 
+                      color="success" 
+                      variant="outlined"
                     />
                   </Box>
                 </Grid>
                 <Grid item xs={12}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1 }}>
                     <Typography variant="body2" color="text.secondary">
-                      Última Actualización
+                      Autenticación 2FA
+                    </Typography>
+                    <Chip 
+                      label="Disponible" 
+                      size="small" 
+                      color="info" 
+                      variant="outlined"
+                    />
+                  </Box>
+                </Grid>
+                <Grid item xs={12}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Sesiones Activas
                     </Typography>
                     <Typography variant="body2" fontWeight={500}>
-                      {new Date().toLocaleDateString()}
+                      {allUsers.filter(u => u.activo && u.ultima_actividad).length} usuarios
                     </Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={12}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Último Acceso
+                    </Typography>
+                    <Typography variant="body2" fontWeight={500}>
+                      {user?.ultima_actividad 
+                        ? new Date(user.ultima_actividad).toLocaleString()
+                        : 'Primera sesión'
+                      }
+                    </Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={12}>
+                  <Box sx={{ pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                    <Typography variant="body2" fontWeight={600} gutterBottom>
+                      Recomendaciones de Seguridad
+                    </Typography>
+                    <Box sx={{ ml: 2 }}>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        • Cambiar contraseñas periódicamente
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        • Activar 2FA para administradores
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        • Revisar usuarios inactivos regularmente
+                      </Typography>
+                    </Box>
                   </Box>
                 </Grid>
               </Grid>

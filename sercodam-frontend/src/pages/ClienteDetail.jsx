@@ -69,15 +69,17 @@ const ClienteDetail = () => {
   // Cargar datos del cliente y sus órdenes
   useEffect(() => {
     if (id) {
+      const params = {
+        page: page + 1,
+        limit: rowsPerPage,
+      };
+
+      if (estadoFilter) {
+        params.estado = estadoFilter;
+      }
+
       dispatch(fetchClienteById(id));
-      dispatch(fetchOrdenesCliente({
-        id,
-        params: {
-          page: page + 1,
-          limit: rowsPerPage,
-          estado: estadoFilter
-        }
-      }));
+      dispatch(fetchOrdenesCliente({ id, params }));
     }
   }, [dispatch, id, page, rowsPerPage, estadoFilter]);
 

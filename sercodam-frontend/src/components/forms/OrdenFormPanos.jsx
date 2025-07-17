@@ -45,6 +45,7 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
   const [anchoTomar, setAnchoTomar] = useState(0);
   const [panoSeleccionado, setPanoSeleccionado] = useState(null);
   const [errorStock, setErrorStock] = useState("");
+  const [umbralSobrante, setUmbralSobrante] = useState(0.5); // Default to 0.5, user can change
   
   // Filtros
   const [filtros, setFiltros] = useState({
@@ -84,6 +85,11 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
       
       const response = await panosApi.getPanos(params);
       let panosFiltrados = response.data?.panos || response.data || [];
+      
+      // NUEVO: Filtrar solo paños disponibles para nuevas órdenes (estado_trabajo = 'Libre')
+      panosFiltrados = panosFiltrados.filter(p => 
+        p.estado_trabajo === 'Libre' || p.estado_trabajo === null || p.estado_trabajo === undefined
+      );
       
       // Filtros adicionales en el frontend
       if (filtros.largo_min) {
@@ -171,7 +177,8 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
           largo_tomar: largoTomar,
           ancho_tomar: anchoTomar,
           cantidad: 1,
-          area_tomar: areaTomar
+          area_tomar: areaTomar,
+          umbral_sobrante_m2: umbralSobrante // Include threshold
         }
       ];
       setPanosSeleccionados(newPanosSeleccionados);
@@ -179,6 +186,7 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
       setPanoSeleccionado(null);
       setLargoTomar(0);
       setAnchoTomar(0);
+      setUmbralSobrante(0.5); // Reset
       setModalOpen(false);
     }
   };
@@ -206,6 +214,16 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
     }
   };
 
+  const getEstadoTrabajoColor = (estadoTrabajo) => {
+    switch (estadoTrabajo?.toLowerCase()) {
+      case 'libre': return 'success';
+      case 'reservado': return 'warning'; 
+      case 'en progreso': return 'info';
+      case 'consumido': return 'error';
+      default: return 'success'; // Default to success for null/undefined (treated as Libre)
+    }
+  };
+
   // Calcular estadísticas
   const panosArray = Array.isArray(panosSeleccionados) ? panosSeleccionados : [];
   const totalArea = panosArray.reduce((sum, p) => sum + (Number(p.cantidad) || 0), 0);
@@ -218,11 +236,20 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
       <Grid item xs={12}>
         <Card>
           <CardContent>
-            <Box display="flex" alignItems="center" mb={2}>
-              <InventoryIcon sx={{ mr: 1, color: 'primary.main' }} />
-              <Typography variant="h6" component="h2">
-                Gestión de Paños para la Orden
-              </Typography>
+            <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+              <Box display="flex" alignItems="center">
+                <InventoryIcon sx={{ mr: 1, color: 'primary.main' }} />
+                <Typography variant="h6" component="h2">
+                  Gestión de Paños para la Orden
+                </Typography>
+              </Box>
+              <Chip 
+                label="Solo Paños Disponibles" 
+                color="success" 
+                variant="outlined"
+                size="small"
+                sx={{ fontWeight: 'bold' }}
+              />
             </Box>
             
             <Grid container spacing={2}>
@@ -306,6 +333,7 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                       <TableCell><strong>Dimensiones Disponibles</strong></TableCell>
                       <TableCell><strong>Dimensiones a Tomar</strong></TableCell>
                       <TableCell><strong>Área a Tomar (m²)</strong></TableCell>
+                      <TableCell><strong>Umbral Remanente (m²)</strong></TableCell> {/* New column */}
                       <TableCell><strong>Estado</strong></TableCell>
                       <TableCell><strong>Ubicación</strong></TableCell>
                       <TableCell><strong>Acciones</strong></TableCell>
@@ -340,6 +368,11 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                         <TableCell>
                           <Typography variant="body2" fontWeight="medium" color="success.main">
                             {(Number(p.cantidad) || 0).toFixed(2)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" color="secondary">
+                            {p.umbral_sobrante_m2 !== undefined ? Number(p.umbral_sobrante_m2).toFixed(2) : '-'}
                           </Typography>
                         </TableCell>
                         <TableCell>
@@ -393,6 +426,16 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
           {errorStock && (
             <Alert severity="error" sx={{ mb: 2 }}>{errorStock}</Alert>
           )}
+          
+          {/* Información general */}
+          <Alert severity="info" sx={{ mb: 3 }}>
+            <Typography variant="body2">
+              <strong>🔍 Filtrado automático aplicado:</strong> Solo se muestran paños con estado de trabajo "Libre" 
+              (disponibles para nuevas órdenes). Los paños "Reservado", "En progreso" o "Consumido" no aparecen 
+              porque ya están asignados a otras órdenes.
+            </Typography>
+          </Alert>
+          
           {/* Filtros */}
           <Card sx={{ mb: 3 }}>
             <CardContent>
@@ -551,12 +594,31 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
           {/* Tabla de paños */}
           <Card>
             <CardContent>
-              <Box display="flex" alignItems="center" mb={2}>
-                <InfoIcon sx={{ mr: 1, color: 'info.main' }} />
-                <Typography variant="h6">
-                  Paños Disponibles ({panos.length} encontrados)
-                </Typography>
+              <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+                <Box display="flex" alignItems="center">
+                  <InfoIcon sx={{ mr: 1, color: 'info.main' }} />
+                  <Typography variant="h6">
+                    Paños Disponibles ({panos.length} encontrados)
+                  </Typography>
+                </Box>
+                <Chip 
+                  label="Solo Estado: Libre" 
+                  color="success" 
+                  size="small"
+                  variant="outlined"
+                />
               </Box>
+              
+              {panos.length === 0 && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="body2">
+                    <strong>No hay paños disponibles</strong> con los filtros aplicados.
+                    <br />
+                    Los paños mostrados están filtrados para incluir únicamente aquellos con estado de trabajo "Libre" 
+                    (no asignados a órdenes en proceso).
+                  </Typography>
+                </Alert>
+              )}
               
               <TableContainer component={Paper} sx={{ maxHeight: 400 }}>
                 <Table stickyHeader size="small">
@@ -568,6 +630,7 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                       <TableCell><strong>Dimensiones</strong></TableCell>
                       <TableCell><strong>Área (m²)</strong></TableCell>
                       <TableCell><strong>Estado</strong></TableCell>
+                      <TableCell><strong>Estado Trabajo</strong></TableCell>
                       <TableCell><strong>Ubicación</strong></TableCell>
                       <TableCell><strong>Especificaciones</strong></TableCell>
                     </TableRow>
@@ -621,6 +684,14 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                             label={pano.estado} 
                             size="small" 
                             color={getEstadoColor(pano.estado)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Chip 
+                            label={pano.estado_trabajo || 'Libre'} 
+                            size="small" 
+                            color={getEstadoTrabajoColor(pano.estado_trabajo)}
+                            variant="outlined"
                           />
                         </TableCell>
                         <TableCell>
@@ -733,6 +804,18 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                             InputLabelProps={{
                               style: { color: 'black', fontWeight: 'bold' }
                             }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={4}>
+                          <TextField
+                            label="Umbral Remanente (m²)"
+                            type="number"
+                            value={umbralSobrante}
+                            onChange={e => setUmbralSobrante(Number(e.target.value))}
+                            inputProps={{ min: 0, step: 0.01 }}
+                            size="small"
+                            fullWidth
+                            helperText="Remanentes menores a este valor serán descartados como desperdicio."
                           />
                         </Grid>
                       </Grid>

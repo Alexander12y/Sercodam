@@ -35,47 +35,10 @@ import {
   Info as InfoIcon
 } from '@mui/icons-material';
 import { herramientasApi } from '../../services/api';
+import { SUBGRUPOS_CATEGORIAS_HERRAMIENTAS } from '../../constants/herramientasConstants';
 
-// Mapeo de subgrupos a categorías de herramientas
-const SUBGRUPOS_CATEGORIAS = {
-  'Herramientas de corte y sujeción': [
-    'Pinzas', 'Llaves', 'Sierras', 'Seguetas', 'Navajas', 'Serruchos', 'Limas', 'Brocas', 
-    'Hachas', 'Machetes', 'Cinceles de acero', 'Desarmadores', 'Cutters', 'Tijeras', 
-    'Destorcedores', 'Taladros', 'Perforadoras', 'Mazos'
-  ],
-  'Cajas y organizadores': [
-    'Cajas', 'Estuches', 'Charolas', 'Javas', 'Cestos', 'Huacales', 'Bancos plegables', 
-    'Mesas', 'Burros', 'Macetas', 'Tablones', 'Palos Madera', 'Postes', 'Tubos de acero  y accesorios'
-  ],
-  'Equipo de seguridad personal (EPI)': [
-    'Chalecos', 'Gabardinas', 'Guantes', 'Rodilleras', 'Cascos', 'Esponjas', 'Proteccion de Caucho'
-  ],
-  'Arneses, mosquetones y anticaídas': [
-    'ArnΘses', 'Mosquetones', 'Anticaidas', 'Fajas', 'Eslingas', 'Bandas de Delimitacion'
-  ],
-  'Poleas, garruchas y tecles': [
-    'Poleas', 'Garruchas', 'Tecle de Cadenas', 'Grifas', 'Cadenas de acero', 'Resortes'
-  ],
-  'Iluminación y eléctricas menores': [
-    'Luminarias', 'Lamparas', 'Baterφas para vehiculos', 'Probadoresá Electricos', 
-    'Reguladores Electricos', 'Extensiones Electricas', 'Extension para matraca', 
-    'Equipo de Radio Comunicacion Portatil', 'Encendedores'
-  ],
-  'Medición y trazado': [
-    'Juego de Reglas para Corte', 'Niveles', 'Cintas Metricas', 'Cinta'
-  ],
-  'Repuestos y accesorios técnicos': [
-    'Moldes', 'Dados', 'Puntal hexagonal', 'Punos de acero', 'Pistolas', 'Agujas', 
-    'Deshebradores', 'Brochas', 'Llanas', 'Espatulas', 'Columpios'
-  ],
-  'Material de carga / elevación': [
-    'Sapos', 'Matracas', 'Maneral extension', 'Pedestal de varilla', 'Barreta de acero'
-  ],
-  'Herramientas especiales o maquinaria ligera': [
-    'Resonadores', 'Kit para instalacion', 'Asap', 'Carda para lijar metal', 'Aidis para Deslizar Cuerda',
-    'Seguros', 'Candados', 'Palas', 'Otros'
-  ]
-};
+// Mapeo de subgrupos a categorías de herramientas (AHORA IMPORTADO)
+const SUBGRUPOS_CATEGORIAS = SUBGRUPOS_CATEGORIAS_HERRAMIENTAS;
 
 const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSeleccionadas, onDraftSave }) => {
   const [modalOpen, setModalOpen] = useState(false);
@@ -128,15 +91,38 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
   const handleBuscar = async () => {
     setLoading(true);
     try {
+      let herramientasResult = [];
       const params = { limit: 1000 };
-      if (categoria) params.categoria = categoria;
-      if (busqueda) params.search = busqueda;
+
+      if (categoria) {
+        console.log('🔍 Buscando por categoría específica:', categoria);
+        params.categoria = categoria;
+      } else if (subgrupo) {
+        console.log('🔍 Buscando por subgrupo:', subgrupo);
+        const categoriasDelSubgrupo = SUBGRUPOS_CATEGORIAS[subgrupo] || [];
+        if (categoriasDelSubgrupo.length > 0) {
+          params.categorias = categoriasDelSubgrupo;
+          console.log('📂 Enviando categorías al backend:', params.categorias);
+        }
+      } else if (busqueda) {
+        console.log('🔍 Buscando por texto libre:', busqueda);
+        params.search = busqueda;
+      } else {
+        console.log('⚠️ Sin filtros, cargando una muestra limitada.');
+        params.limit = 50;
+      }
+
+      const response = await herramientasApi.getHerramientas(params);
+      herramientasResult = response.data?.data?.herramientas || response.data?.herramientas || [];
       
-      const res = await herramientasApi.getHerramientas(params);
-      const herramientasOrdenadas = (res.data?.data?.herramientas || res.data?.herramientas || []).sort((a, b) => 
+      console.log(`📊 Búsqueda encontró: ${herramientasResult.length} herramientas`);
+
+      const herramientasOrdenadas = herramientasResult.sort((a, b) => 
         (a.descripcion || a.id_herramienta || '').localeCompare(b.descripcion || b.id_herramienta || '')
       );
       setHerramientas(herramientasOrdenadas);
+      
+      console.log('✅ Búsqueda de herramientas completada. Total:', herramientasOrdenadas.length);
     } catch (error) {
       console.error('Error buscando herramientas:', error);
       setHerramientas([]);
@@ -192,8 +178,8 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
   // Calcular estadísticas
   const totalHerramientas = herramientasSeleccionadas.reduce((sum, h) => sum + h.cantidad, 0);
   const subgruposUnicos = [...new Set(herramientasSeleccionadas.map(h => h.categoria))];
-  const herramientasDisponibles = herramientasSeleccionadas.filter(h => h.cantidad_disponible > 0).length;
-  const herramientasEnUso = herramientasSeleccionadas.filter(h => h.cantidad_disponible === 0).length;
+  const herramientasDisponibles = herramientas.filter(h => h.cantidad_disponible > 0).length;
+  const herramientasEnUso = herramientas.filter(h => h.cantidad_disponible === 0).length;
 
   return (
     <Grid container spacing={3}>

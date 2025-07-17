@@ -6,16 +6,21 @@ const herramientasController = {
     // GET /api/v1/inventario/herramientas - Obtener herramientas
     getHerramientas: async (req, res) => {
         try {
-            const { 
-                page = 1, 
-                limit = 50, 
-                search, 
+            let {
+                page = 1,
+                limit = 50,
+                search,
                 categoria,
+                categorias, // Nuevo parámetro para aceptar un array de categorías
                 estado_calidad,
                 ubicacion,
                 sortBy = 'descripcion',
                 sortOrder = 'asc'
             } = req.query;
+
+            if (categoria) {
+                categoria = categoria.trim();
+            }
 
             let query = db('herramientas as h')
                 .select('h.*');
@@ -30,9 +35,31 @@ const herramientasController = {
                 });
             }
 
-            // Filtro por categoría
+            // Filtro por categoría individual (si se provee)
             if (categoria) {
-                query = query.where('h.categoria', categoria);
+                // Normalizar apostrophes tipográficos (U+2019) a normales (U+0027)
+                const apostropheTipografico = String.fromCharCode(8217); // '
+                const apostropheNormal = String.fromCharCode(39);       // '
+
+                // Crear variantes con ambos tipos de apostrophes
+                const categoriaConTipografico = categoria.replace(new RegExp(apostropheNormal, 'g'), apostropheTipografico);
+                const categoriaConNormal = categoria.replace(new RegExp(apostropheTipografico, 'g'), apostropheNormal);
+
+                // Búsqueda que incluye ambas variantes de apostrophes
+                query = query.where(function() {
+                    this.where('h.categoria', categoria)
+                        .orWhere('h.categoria', categoriaConTipografico)
+                        .orWhere('h.categoria', categoriaConNormal)
+                        .orWhereRaw('LOWER(h.categoria) = LOWER(?)', [categoria])
+                        .orWhereRaw('LOWER(h.categoria) = LOWER(?)', [categoriaConTipografico])
+                        .orWhereRaw('LOWER(h.categoria) = LOWER(?)', [categoriaConNormal]);
+                });
+            }
+
+            // Filtro por MÚLTIPLES categorías (para subgrupos)
+            if (categorias && Array.isArray(categorias) && categorias.length > 0) {
+                const categoriasLimpias = categorias.map(cat => cat.trim());
+                query = query.whereIn('h.categoria', categoriasLimpias);
             }
 
             // Filtro por estado de calidad
@@ -58,7 +85,7 @@ const herramientasController = {
             } else {
                 // Contar total para paginación
                 const countQuery = db('herramientas as h');
-                
+
                 // Aplicar los mismos filtros al query de conteo
                 if (search) {
                     countQuery.where(function() {
@@ -69,7 +96,29 @@ const herramientasController = {
                     });
                 }
                 if (categoria) {
-                    countQuery.where('h.categoria', categoria);
+                    categoria = categoria.trim();
+                    // Normalizar apostrophes tipográficos (U+2019) a normales (U+0027)
+                    const apostropheTipografico = String.fromCharCode(8217); // '
+                    const apostropheNormal = String.fromCharCode(39);       // '
+
+                    // Crear variantes con ambos tipos de apostrophes
+                    const categoriaConTipografico = categoria.replace(new RegExp(apostropheNormal, 'g'), apostropheTipografico);
+                    const categoriaConNormal = categoria.replace(new RegExp(apostropheTipografico, 'g'), apostropheNormal);
+
+                    // Búsqueda que incluye ambas variantes de apostrophes
+                    countQuery.where(function() {
+                        this.where('h.categoria', categoria)
+                            .orWhere('h.categoria', categoriaConTipografico)
+                            .orWhere('h.categoria', categoriaConNormal)
+                            .orWhereRaw('LOWER(h.categoria) = LOWER(?)', [categoria])
+                            .orWhereRaw('LOWER(h.categoria) = LOWER(?)', [categoriaConTipografico])
+                            .orWhereRaw('LOWER(h.categoria) = LOWER(?)', [categoriaConNormal]);
+                    });
+                }
+                 // Filtro por MÚLTIPLES categorías para el conteo
+                if (categorias && Array.isArray(categorias) && categorias.length > 0) {
+                    const categoriasLimpias = categorias.map(cat => cat.trim());
+                    countQuery.whereIn('h.categoria', categoriasLimpias);
                 }
                 if (estado_calidad) {
                     countQuery.where('h.estado_calidad', estado_calidad);
@@ -77,7 +126,7 @@ const herramientasController = {
                 if (ubicacion) {
                     countQuery.where('h.ubicacion', ubicacion);
                 }
-                
+
                 const { count } = await countQuery.count('* as count').first();
                 total = parseInt(count);
 
@@ -228,7 +277,7 @@ const herramientasController = {
     // POST /api/v1/inventario/herramientas - Crear nueva herramienta
     createHerramienta: async (req, res) => {
         const trx = await db.transaction();
-        
+
         try {
             const {
                 id_herramienta,
@@ -241,7 +290,8 @@ const herramientasController = {
                 estado_calidad,
                 ubicacion,
                 precioxunidad,
-                uso_principal
+                uso_principal,
+                stock_minimo
             } = req.body;
 
             // Verificar que el ID de herramienta no exista
@@ -274,7 +324,8 @@ const herramientasController = {
                     estado_calidad: estado_calidad || 'Bueno',
                     ubicacion,
                     precioxunidad,
-                    uso_principal
+                    uso_principal,
+                    stock_minimo: stock_minimo !== undefined ? parseInt(stock_minimo) : 0
                 })
                 .returning('*');
 
@@ -296,7 +347,7 @@ const herramientasController = {
     // PUT /api/v1/inventario/herramientas/:id - Actualizar herramienta
     updateHerramienta: async (req, res) => {
         const trx = await db.transaction();
-        
+
         try {
             const { id } = req.params;
             const {
@@ -309,7 +360,8 @@ const herramientasController = {
                 estado_calidad,
                 ubicacion,
                 precioxunidad,
-                uso_principal
+                uso_principal,
+                stock_minimo
             } = req.body;
 
             // Verificar que la herramienta existe
@@ -334,7 +386,8 @@ const herramientasController = {
                     estado_calidad: estado_calidad || 'Bueno',
                     ubicacion,
                     precioxunidad,
-                    uso_principal
+                    uso_principal,
+                    stock_minimo: stock_minimo !== undefined ? parseInt(stock_minimo) : 0
                 })
                 .returning('*');
 
@@ -356,7 +409,7 @@ const herramientasController = {
     // DELETE /api/v1/inventario/herramientas/:id - Eliminar herramienta
     deleteHerramienta: async (req, res) => {
         const trx = await db.transaction();
-        
+
         try {
             const { id } = req.params;
 
@@ -400,10 +453,10 @@ const herramientasController = {
     // POST /api/v1/inventario/herramientas/entrada - Registrar entrada de herramienta
     entradaHerramienta: async (req, res) => {
         const trx = await db.transaction();
-        
+
         try {
             const { id, cantidad, notas } = req.body;
-            
+
             if (!id || !cantidad || isNaN(cantidad) || cantidad <= 0) {
                 throw new ValidationError('Datos inválidos');
             }
@@ -438,8 +491,8 @@ const herramientasController = {
 
             await trx.commit();
 
-            res.json({ 
-                success: true, 
+            res.json({
+                success: true,
                 message: 'Entrada registrada correctamente',
                 data: {
                     id,
@@ -458,10 +511,10 @@ const herramientasController = {
     // POST /api/v1/inventario/herramientas/salida - Registrar salida de herramienta
     salidaHerramienta: async (req, res) => {
         const trx = await db.transaction();
-        
+
         try {
             const { id, cantidad, notas } = req.body;
-            
+
             if (!id || !cantidad || isNaN(cantidad) || cantidad <= 0) {
                 throw new ValidationError('Datos inválidos');
             }
@@ -504,8 +557,8 @@ const herramientasController = {
 
             await trx.commit();
 
-            res.json({ 
-                success: true, 
+            res.json({
+                success: true,
                 message: 'Salida registrada correctamente',
                 data: {
                     id,

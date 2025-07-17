@@ -8,6 +8,49 @@ const { validateOrdenCreacion, validateOrdenUpdate } = require('../validators/or
 // Middleware de autenticación para todas las rutas
 router.use(authenticateToken);
 
+// Nuevas rutas para trabajos de corte
+// GET /api/v1/ordenes/cut-jobs - Obtener trabajos de corte pendientes
+router.get('/cut-jobs', 
+  requireRole(['operador', 'admin']),
+  asyncHandler(ordenesController.getCutJobs)
+);
+
+// GET /api/v1/ordenes/completed-cut-jobs - Obtener trabajos de corte completados
+router.get('/completed-cut-jobs', 
+  requireRole(['operador', 'admin']),
+  asyncHandler(ordenesController.getCompletedCutJobs)
+);
+
+// GET /api/v1/ordenes/cut-jobs/:jobId/plans - Obtener planes de corte
+router.get('/cut-jobs/:jobId/plans',
+  requireRole(['operador', 'admin']),
+  asyncHandler(ordenesController.getCutJobPlans)
+);
+
+// GET /api/v1/ordenes/cut-jobs/order/:orderId - Obtener detalles de cortes para una orden específica
+router.get('/cut-jobs/order/:orderId',
+  requireRole(['operador', 'admin']),
+  asyncHandler(ordenesController.getOrderCutDetails)
+);
+
+// POST /api/v1/ordenes/submit-actual-cuts - Enviar cortes reales
+router.post('/submit-actual-cuts',
+  requireRole(['operador', 'admin']),
+  asyncHandler(ordenesController.submitActualCuts)
+);
+
+// POST /api/v1/ordenes/submit-individual-cut - Enviar cortes individuales
+router.post('/submit-individual-cut',
+  requireRole(['operador', 'admin']),
+  asyncHandler(ordenesController.submitIndividualCut)
+);
+
+// POST /api/v1/ordenes/:id/approve - Aprobar orden
+router.post('/:id/approve',
+  requireRole(['admin']),
+  asyncHandler(ordenesController.approveOrden)
+);
+
 // GET /api/v1/ordenes - Obtener todas las órdenes con filtros
 router.get('/', asyncHandler(ordenesController.getOrdenes));
 

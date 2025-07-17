@@ -41,13 +41,13 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import { 
   fetchMateriales, 
-  fetchCategorias, 
   deleteMaterial,
   clearError,
   clearSuccessMessage 
 } from '../store/slices/materialesSlice';
 import MaterialModal from '../components/forms/MaterialModal';
 import MovimientoModal from '../components/forms/MovimientoModal';
+import { SUBGRUPOS_CATEGORIAS_MATERIALES } from '../constants/materialesConstants';
 
 const MaterialesList = () => {
   const dispatch = useDispatch();
@@ -61,11 +61,13 @@ const MaterialesList = () => {
   } = useSelector((state) => state.materiales);
   
   const [filters, setFilters] = useState({
+    subgrupo: '',
     categoria: '',
     estado_calidad: '',
     ubicacion: '',
     search: ''
   });
+  const [categoriasFiltradas, setCategoriasFiltradas] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [modalOpen, setModalOpen] = useState(false);
@@ -81,7 +83,6 @@ const MaterialesList = () => {
 
   useEffect(() => {
     loadMateriales();
-    loadCategorias();
   }, [currentPage, pageSize]);
 
   useEffect(() => {
@@ -107,7 +108,16 @@ const MaterialesList = () => {
       page: currentPage,
       limit: pageSize
     };
-    if (filters.categoria) params.categoria = filters.categoria;
+
+    if (filters.categoria) {
+        params.categoria = filters.categoria;
+    } else if (filters.subgrupo) {
+        const categoriasDelSubgrupo = SUBGRUPOS_CATEGORIAS_MATERIALES[filters.subgrupo] || [];
+        if (categoriasDelSubgrupo.length > 0) {
+            params.categorias = categoriasDelSubgrupo;
+        }
+    }
+
     if (filters.estado_calidad) params.estado_calidad = filters.estado_calidad;
     if (filters.ubicacion) params.ubicacion = filters.ubicacion;
     if (filters.search) params.search = filters.search;
@@ -115,15 +125,21 @@ const MaterialesList = () => {
     dispatch(fetchMateriales(params));
   };
 
-  const loadCategorias = () => {
-    dispatch(fetchCategorias());
-  };
-
   const handleFilterChange = (field) => (event) => {
+    const value = event.target.value;
     setFilters(prev => ({
       ...prev,
-      [field]: event.target.value
+      [field]: value
     }));
+
+    if (field === 'subgrupo') {
+      if (value) {
+        setCategoriasFiltradas(SUBGRUPOS_CATEGORIAS_MATERIALES[value] || []);
+        setFilters(prev => ({ ...prev, categoria: '' }));
+      } else {
+        setCategoriasFiltradas([]);
+      }
+    }
   };
 
   const handleApplyFilters = () => {
@@ -133,11 +149,13 @@ const MaterialesList = () => {
 
   const handleClearFilters = () => {
     setFilters({
+      subgrupo: '',
       categoria: '',
       estado_calidad: '',
       ubicacion: '',
       search: ''
     });
+    setCategoriasFiltradas([]);
     setCurrentPage(1);
     dispatch(fetchMateriales({ page: 1, limit: pageSize }));
   };
@@ -253,37 +271,26 @@ const MaterialesList = () => {
       {/* Filtros */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
-          <Typography variant="h6" gutterBottom>
-            Filtros
-          </Typography>
           <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} sm={6} md={3}>
-              <TextField
-                fullWidth
-                label="Buscar"
-                value={filters.search}
-                onChange={handleFilterChange('search')}
-                placeholder="ID, descripción, marca..."
-              />
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid item xs={12} sm={4} md={2}>
               <FormControl fullWidth>
-                <InputLabel>Categoría</InputLabel>
-                <Select
-                  value={filters.categoria}
-                  onChange={handleFilterChange('categoria')}
-                  label="Categoría"
-                >
-                  <MenuItem value="">Todas</MenuItem>
-                  {categorias.map((categoria) => (
-                    <MenuItem key={categoria} value={categoria}>
-                      {categoria}
-                    </MenuItem>
-                  ))}
+                <InputLabel>Subgrupo</InputLabel>
+                <Select value={filters.subgrupo} label="Subgrupo" onChange={handleFilterChange('subgrupo')}>
+                  <MenuItem value=""><em>Todos</em></MenuItem>
+                  {Object.keys(SUBGRUPOS_CATEGORIAS_MATERIALES).map(sub => <MenuItem key={sub} value={sub}>{sub}</MenuItem>)}
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={6} md={2}>
+            <Grid item xs={12} sm={4} md={2}>
+              <FormControl fullWidth disabled={!filters.subgrupo}>
+                <InputLabel>Categoría</InputLabel>
+                <Select value={filters.categoria} label="Categoría" onChange={handleFilterChange('categoria')}>
+                  <MenuItem value=""><em>Todas</em></MenuItem>
+                  {categoriasFiltradas.map(cat => <MenuItem key={cat} value={cat}>{cat}</MenuItem>)}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={4} md={2}>
               <FormControl fullWidth>
                 <InputLabel>Estado</InputLabel>
                 <Select
@@ -300,7 +307,7 @@ const MaterialesList = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={6} md={2}>
+            <Grid item xs={12} sm={4} md={2}>
               <FormControl fullWidth>
                 <InputLabel>Ubicación</InputLabel>
                 <Select
@@ -317,25 +324,12 @@ const MaterialesList = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={6} md={1}>
-              <Button
-                fullWidth
-                variant="contained"
-                onClick={handleApplyFilters}
-                size="small"
-              >
-                Filtrar
-              </Button>
+            <Grid item xs={12} sm={4} md={3}>
+              <TextField fullWidth label="Buscar..." value={filters.search} onChange={handleFilterChange('search')} />
             </Grid>
-            <Grid item xs={12} sm={6} md={1}>
-              <Button
-                fullWidth
-                variant="outlined"
-                onClick={handleClearFilters}
-                size="small"
-              >
-                Limpiar
-              </Button>
+            <Grid item xs={12} sm={12} md={2} sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+              <Button onClick={handleClearFilters} fullWidth>Limpiar</Button>
+              <Button variant="contained" onClick={handleApplyFilters} fullWidth>Aplicar</Button>
             </Grid>
           </Grid>
         </CardContent>
@@ -357,6 +351,7 @@ const MaterialesList = () => {
                   <TableCell>Categoría</TableCell>
                   <TableCell>Marca</TableCell>
                   <TableCell>Cantidad</TableCell>
+                  <TableCell>Mínimo</TableCell>
                   <TableCell>Unidad</TableCell>
                   <TableCell>Estado</TableCell>
                   <TableCell>Ubicación</TableCell>
@@ -367,13 +362,13 @@ const MaterialesList = () => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={10} align="center">
+                    <TableCell colSpan={11} align="center">
                       Cargando...
                     </TableCell>
                   </TableRow>
                 ) : materialesArray.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} align="center">
+                    <TableCell colSpan={11} align="center">
                       No se encontraron materiales
                     </TableCell>
                   </TableRow>
@@ -409,10 +404,13 @@ const MaterialesList = () => {
                         <Typography 
                           variant="body2" 
                           fontWeight="bold"
-                          color={material.cantidad_disponible <= 10 ? 'error' : 'inherit'}
+                          color={material.cantidad_disponible <= material.stock_minimo ? 'error' : 'inherit'}
                         >
-                          {material.cantidad_disponible || 0}
+                          {material.cantidad_disponible ?? 0}
                         </Typography>
+                      </TableCell>
+                      <TableCell>
+                        {material.stock_minimo ?? 0}
                       </TableCell>
                       <TableCell>
                         {material.unidad || 'unidad'}
@@ -550,8 +548,89 @@ const MaterialesList = () => {
         item={selectedMaterial}
         tipo={tipoMovimiento}
         onSuccess={handleModalSuccess}
+        tipoItem="material"
         apiEndpoint={tipoMovimiento === 'entrada' ? 'entradaMaterial' : 'salidaMaterial'}
       />
+
+      {/* Modal de detalles */}
+      <Dialog open={detailModalOpen} onClose={() => setDetailModalOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>
+          Detalles del Material - Código: {selectedMaterial?.id_material_extra}
+        </DialogTitle>
+        <DialogContent>
+          {selectedMaterial && (
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>
+                  Información Básica
+                </Typography>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Typography variant="subtitle2" color="text.secondary">Código:</Typography>
+                <Typography variant="body2">{selectedMaterial.id_material_extra}</Typography>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Typography variant="subtitle2" color="text.secondary">Descripción:</Typography>
+                <Typography variant="body2">{selectedMaterial.descripcion}</Typography>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Typography variant="subtitle2" color="text.secondary">Categoría:</Typography>
+                <Typography variant="body2">{selectedMaterial.categoria}</Typography>
+              </Grid>
+              {selectedMaterial.presentacion && (
+                <Grid item xs={12} md={6}>
+                  <Typography variant="subtitle2" color="text.secondary">Presentación:</Typography>
+                  <Typography variant="body2">{selectedMaterial.presentacion}</Typography>
+                </Grid>
+              )}
+              <Grid item xs={12} md={6}>
+                <Typography variant="subtitle2" color="text.secondary">Cantidad Disponible:</Typography>
+                <Typography variant="body2">{selectedMaterial.cantidad_disponible ?? 0}</Typography>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Typography variant="subtitle2" color="text.secondary">Stock Mínimo:</Typography>
+                <Typography variant="body2">{selectedMaterial.stock_minimo ?? 0}</Typography>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Typography variant="subtitle2" color="text.secondary">Unidad:</Typography>
+                <Typography variant="body2">{selectedMaterial.unidad}</Typography>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Typography variant="subtitle2" color="text.secondary">Marca:</Typography>
+                <Typography variant="body2">{selectedMaterial.marca || 'N/A'}</Typography>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Typography variant="subtitle2" color="text.secondary">Estado Calidad:</Typography>
+                <Chip label={selectedMaterial.estado_calidad} size="small" color={getEstadoColor(selectedMaterial.estado_calidad)} />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Typography variant="subtitle2" color="text.secondary">Ubicación:</Typography>
+                <Chip 
+                  label={selectedMaterial.ubicacion} 
+                  size="small" 
+                  color={getUbicacionColor(selectedMaterial.ubicacion)}
+                  variant="outlined"
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Typography variant="subtitle2" color="text.secondary">Precio por Unidad:</Typography>
+                <Typography variant="body2">${selectedMaterial.precioxunidad ?? 0}</Typography>
+              </Grid>
+              {selectedMaterial.uso_principal && (
+                <Grid item xs={12}>
+                  <Typography variant="subtitle2" color="text.secondary">Uso Principal:</Typography>
+                  <Typography variant="body2">{selectedMaterial.uso_principal}</Typography>
+                </Grid>
+              )}
+            </Grid>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDetailModalOpen(false)}>
+            Cerrar
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Dialog de confirmación de eliminación */}
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>

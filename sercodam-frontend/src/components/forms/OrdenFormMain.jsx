@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Grid, TextField, FormControl, InputLabel, Select, MenuItem, Autocomplete, Box, Typography } from '@mui/material';
 import { clientesApi } from '../../services/api';
 
-const OrdenFormMain = ({ formData, formErrors, handleInputChange }) => {
+const OrdenFormMain = ({ formData, formErrors, handleInputChange, handleClienteChange }) => {
     const [clientesOptions, setClientesOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [inputValue, setInputValue] = useState('');
@@ -28,7 +28,6 @@ const OrdenFormMain = ({ formData, formErrors, handleInputChange }) => {
     setLoading(true);
     try {
       const response = await clientesApi.searchClientes(query);
-      console.log('Search response:', response.data);
       setClientesOptions(response.data.clientes || []);
     } catch (error) {
       console.error('Error buscando clientes:', error);
@@ -53,15 +52,26 @@ const OrdenFormMain = ({ formData, formErrors, handleInputChange }) => {
   };
 
   const handleClienteInputChange = (event, newInputValue, reason) => {
-    console.log('handleClienteInputChange called:', { newInputValue, reason });
     
     if (reason === 'input') {
       setInputValue(newInputValue);
-      handleInputChange('cliente')({ target: { value: newInputValue } });
       
-      // Limpiar id_cliente si el campo se vacía
+      // Actualizar solo el nombre del cliente cuando el usuario escribe manualmente
+      // (el id_cliente se actualizará solo cuando se seleccione del dropdown)
+      if (handleClienteChange) {
+        handleClienteChange({ nombre: newInputValue, id: formData.id_cliente || '' });
+      } else {
+        handleInputChange('cliente')({ target: { value: newInputValue } });
+      }
+      
+      // Si el campo se vacía, también limpiar el id_cliente
       if (!newInputValue) {
-        handleInputChange('id_cliente')({ target: { value: '' } });
+        if (handleClienteChange) {
+          handleClienteChange({ nombre: '', id: '' });
+        } else {
+          handleInputChange('cliente')({ target: { value: '' } });
+          handleInputChange('id_cliente')({ target: { value: '' } });
+        }
         setClientesOptions([]);
         return;
       }
@@ -85,10 +95,16 @@ const OrdenFormMain = ({ formData, formErrors, handleInputChange }) => {
       }
     } else if (reason === 'clear') {
       setInputValue('');
-      handleInputChange('cliente')({ target: { value: '' } });
-      handleInputChange('id_cliente')({ target: { value: '' } });
-      setClientesOptions([]);
       setSelectedCliente(null);
+      
+      if (handleClienteChange) {
+        handleClienteChange({ nombre: '', id: '' });
+      } else {
+        handleInputChange('cliente')({ target: { value: '' } });
+        handleInputChange('id_cliente')({ target: { value: '' } });
+      }
+      
+      setClientesOptions([]);
       // Mostrar todos los clientes de nuevo al borrar
       setOpen(true);
       searchClientes('');
@@ -100,23 +116,41 @@ const OrdenFormMain = ({ formData, formErrors, handleInputChange }) => {
   };
 
   const handleClienteSelect = (event, cliente) => {
-    console.log('handleClienteSelect called:', cliente);
-    
     if (cliente && typeof cliente === 'object' && cliente.id_cliente) {
       setInputValue(cliente.nombre_cliente);
-      handleInputChange('cliente')({ target: { value: cliente.nombre_cliente } });
-      handleInputChange('id_cliente')({ target: { value: cliente.id_cliente } });
       setSelectedCliente(cliente);
-      console.log('Cliente seleccionado:', { nombre: cliente.nombre_cliente, id: cliente.id_cliente });
+      
+      // Usar la nueva función específica para cliente
+      if (handleClienteChange) {
+        handleClienteChange({
+          nombre: cliente.nombre_cliente,
+          id: cliente.id_cliente
+        });
+      } else {
+        // Fallback al método anterior si no está disponible
+        handleInputChange('cliente')({ target: { value: cliente.nombre_cliente } });
+        handleInputChange('id_cliente')({ target: { value: cliente.id_cliente } });
+      }
+      
       setClientesOptions([]);
       setOpen(false);
     } else if (cliente === null) {
       setInputValue('');
-      handleInputChange('cliente')({ target: { value: '' } });
-      handleInputChange('id_cliente')({ target: { value: '' } });
-      setClientesOptions([]);
       setSelectedCliente(null);
-      console.log('Cliente limpiado');
+      
+      // Usar la nueva función específica para limpiar cliente
+      if (handleClienteChange) {
+        handleClienteChange({
+          nombre: '',
+          id: ''
+        });
+      } else {
+        // Fallback al método anterior si no está disponible
+        handleInputChange('cliente')({ target: { value: '' } });
+        handleInputChange('id_cliente')({ target: { value: '' } });
+      }
+      
+      setClientesOptions([]);
     }
   };
 
@@ -204,7 +238,11 @@ const OrdenFormMain = ({ formData, formErrors, handleInputChange }) => {
             // Si no hay id_cliente seleccionado, limpiar el campo para evitar valores inválidos
             if (!formData.id_cliente) {
               setInputValue('');
-              handleInputChange('cliente')({ target: { value: '' } });
+              if (handleClienteChange) {
+                handleClienteChange({ nombre: '', id: '' });
+              } else {
+                handleInputChange('cliente')({ target: { value: '' } });
+              }
             }
           }}
         />

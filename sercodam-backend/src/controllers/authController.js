@@ -321,7 +321,7 @@ class AuthController {
     // POST /api/v1/auth/users
     async createUser(req, res) {
         try {
-            const { username, password, nombre, email, rol } = req.body;
+            const { username, password, nombre, email, rol, activo } = req.body;
 
             // Validación robusta de datos
             const validationErrors = [];
@@ -366,7 +366,7 @@ class AuthController {
                     nombre,
                     email,
                     rol: rol || 'usuario',
-                    activo: true,
+                    activo: typeof activo === 'boolean' ? activo : true,
                     creado_en: new Date(),
                     actualizado_en: new Date()
                 }).returning('id');
@@ -486,7 +486,7 @@ class AuthController {
     async updateUser(req, res) {
         try {
             const { id } = req.params;
-            const { nombre, email, rol, activo } = req.body;
+            const { nombre, email, rol, activo, password } = req.body;
 
             // Verificar que el usuario existe
             const existingUser = await db('usuario')
@@ -515,18 +515,27 @@ class AuthController {
                 }
             }
 
+            // Preparar datos de actualización
+            const updateData = {
+                nombre: nombre || existingUser.nombre,
+                email: email || existingUser.email,
+                rol: rol || existingUser.rol,
+                activo: activo !== undefined ? activo : existingUser.activo,
+                actualizado_en: new Date()
+            };
+
+            // Si se proporciona una nueva contraseña, hashearla
+            if (password && password.trim()) {
+                const hashedPassword = await bcrypt.hash(password, 12);
+                updateData.password = hashedPassword;
+            }
+
             // Actualizar usuario
             await db('usuario')
                 .where({ id })
-                .update({
-                    nombre: nombre || existingUser.nombre,
-                    email: email || existingUser.email,
-                    rol: rol || existingUser.rol,
-                    activo: activo !== undefined ? activo : existingUser.activo,
-                    actualizado_en: new Date()
-                });
+                .update(updateData);
 
-            logger.info(`Usuario ${req.user.username} actualizó el usuario ${existingUser.username}`);
+            logger.info(`Usuario ${req.user.username} actualizó el usuario ${existingUser.username}${password ? ' (incluyendo contraseña)' : ''}`);
 
             res.json({
                 success: true,

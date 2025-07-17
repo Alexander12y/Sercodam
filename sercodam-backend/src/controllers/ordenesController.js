@@ -94,6 +94,8 @@ async function getHerramientaData(id_item) {
 }
 
 const ordenesController = {
+    // DEBUG: Version identifier to confirm latest code is running
+    _debugVersion: '2025-07-15-18:45-DEBUG-VERSION-1.0',
     // GET /api/v1/ordenes - Obtener todas las órdenes con filtros
     getOrdenes: async (req, res) => {
         try {
@@ -286,77 +288,69 @@ const ordenesController = {
 
             // Obtener orden básica
             const orden = await db('orden_produccion as op')
+                .leftJoin('cliente as c', 'op.id_cliente', 'c.id_cliente')
                 .where('op.id_op', id)
-                .select('op.*')
+                .select('op.*', 'c.nombre_cliente', 'c.email as cliente_email', 'c.telefono as cliente_telefono')
                 .first();
 
             if (!orden) {
                 throw new NotFoundError('Orden de producción no encontrada');
             }
 
-            // Obtener materiales de la orden
-            const materiales = await db('orden_produccion_detalle as opd')
-                .leftJoin('inventario_item as ii', 'opd.id_item', 'ii.id_item')
+            // Obtener paños detallados desde trabajo_corte - esto muestra todos los paños asignados a la orden
+            const panos = await db.raw(`
+                SELECT 
+                    tc.job_id as id_detalle,
+                    tc.altura_req as largo_m,
+                    tc.ancho_req as ancho_m,
+                    tc.area_req as area_m2,
+                    tc.estado as estado_corte,
+                    p.estado_trabajo,
+                    tc.created_at,
+                    p.*,
+                    rp.tipo_red, rp.marca, rp.descripcion as red_descripcion,
+                    n.calibre as nylon_calibre, n.cuadro as nylon_cuadro, n.torsion as nylon_torsion, n.refuerzo as nylon_refuerzo,
+                    l.color as lona_color, l.presentacion as lona_presentacion,
+                    pp.grosor as polipropileno_grosor, pp.cuadro as polipropileno_cuadro,
+                    ms.color_tipo_red as malla_color, ms.presentacion as malla_presentacion
+                FROM trabajo_corte tc
+                JOIN pano p ON tc.id_item = p.id_item
+                LEFT JOIN red_producto rp ON p.id_mcr = rp.id_mcr
+                LEFT JOIN nylon n ON p.id_mcr = n.id_mcr
+                LEFT JOIN lona l ON p.id_mcr = l.id_mcr
+                LEFT JOIN polipropileno pp ON p.id_mcr = pp.id_mcr
+                LEFT JOIN malla_sombra ms ON p.id_mcr = ms.id_mcr
+                WHERE tc.id_op = ?
+                ORDER BY tc.created_at ASC
+            `, [id]);
+
+            // Obtener materiales extras detallados
+            const materialesExtras = await db('orden_produccion_detalle as opd')
+                .join('materiales_extras as me', 'opd.id_item', 'me.id_item')
                 .where('opd.id_op', id)
-                .select('opd.*', 'ii.tipo_item');
-
-            // Enriquecer datos de materiales con información detallada
-            const materialesDetallados = await Promise.all(
-                materiales.map(async (material) => {
-                    let detalle = null;
-
-                    if (material.tipo_item === 'PANO') {
-                        detalle = await getPanoData(material.id_item);
-                    } else if (material.tipo_item === 'EXTRA') {
-                        // Verificar si es material o herramienta
-                        detalle = await getMaterialData(material.id_item);
-                        
-                        if (detalle) {
-                            detalle.subtipo = 'MATERIAL';
-                        } else {
-                            detalle = await getHerramientaData(material.id_item);
-                            if (detalle) {
-                                detalle.subtipo = 'HERRAMIENTA';
-                            }
-                        }
-                    }
-
-                    return {
-                        ...material,
-                        detalle_item: detalle
-                    };
-                })
-            );
-
-            // Obtener herramientas asignadas
-            const herramientas = await db('herramienta_ordenada as ho')
+                .andWhere('opd.tipo_item', 'EXTRA')
+                .select(
+                    'opd.id_detalle', 'opd.cantidad', 'opd.notas',
+                    'me.id_item', 'me.id_material_extra', 'me.descripcion', 'me.categoria', 'me.unidad'
+                );
+            
+            // Obtener herramientas asignadas (tabla separada)
+            const herramientasAsignadas = await db('herramienta_ordenada as ho')
                 .leftJoin('herramientas as h', 'ho.id_item', 'h.id_item')
                 .where('ho.id_op', id)
-                .select('ho.*', 'h.descripcion', 'h.categoria', 'h.marca')
-                .orderBy('ho.fecha', 'desc');
-
-            // Obtener historial de movimientos
-            const movimientos = await db('movimiento_inventario as mi')
-                .leftJoin('inventario_item as ii', 'mi.id_item', 'ii.id_item')
-                .where('mi.id_op', id)
                 .select(
-                    'mi.*',
-                    'ii.tipo_item'
+                    'ho.id_op', 'ho.cantidad', 'ho.fecha',
+                    'h.id_item', 'h.id_herramienta', 'h.descripcion', 'h.categoria', 'h.marca', 'h.unidad'
                 )
-                .orderBy('mi.fecha', 'desc');
+                .orderBy('ho.fecha', 'desc');
 
             res.json({
                 success: true,
                 data: {
                     orden,
-                    materiales: materialesDetallados,
-                    herramientas,
-                    movimientos,
-                    estadisticas: {
-                        total_materiales: materialesDetallados.length,
-                        total_herramientas: herramientas.length,
-                        total_movimientos: movimientos.length
-                    }
+                    panos: panos.rows,
+                    materiales: materialesExtras,
+                    herramientas: herramientasAsignadas
                 }
             });
 
@@ -370,7 +364,7 @@ const ordenesController = {
     createOrden: async (req, res) => {
         const trx = await db.transaction();
         try {
-            const { cliente, id_cliente, observaciones, prioridad, fecha_inicio, fecha_fin, materiales = [], herramientas = [] } = req.body;
+            const { cliente, id_cliente, observaciones, prioridad, fecha_inicio, fecha_fin, panos = [], materiales = [], herramientas = [] } = req.body;
             const fechaActual = new Date();
             const año = fechaActual.getFullYear();
             const mes = String(fechaActual.getMonth() + 1).padStart(2, '0');
@@ -479,33 +473,51 @@ const ordenesController = {
                     prioridad,
                     fecha_inicio: fecha_inicio ? new Date(fecha_inicio) : null,
                     fecha_fin: fecha_fin ? new Date(fecha_fin) : null,
-                    estado: 'en_proceso'
+                    estado: 'por aprobar'
                 })
                 .returning('id_op');
             const id_op = ordenCreada.id_op;
 
-            // 3. Agregar materiales a la orden y descontar stock
-            for (const material of materiales) {
-                if (material.tipo_item === 'PANO') {
-                    // Usar la nueva función para procesar paños (crea dos registros: largo y ancho)
-                    // Los datos de largo y ancho vienen en las propiedades del material
-                    const largo_tomar = material.largo_m || material.largo_tomar || 0;
-                    const ancho_tomar = material.ancho_m || material.ancho_tomar || 0;
+            // Procesar panos con optimización
+            const panosController = require('./inventario/panosController');
+            for (let i = 0; i < panos.length; i++) {
+                const panoReq = panos[i];
+                
+                // Intentar encontrar paño del tipo solicitado
+                let suitablePanos = await panosController.findSuitablePanos(panoReq.altura_req, panoReq.ancho_req, panoReq.tipo_red);
+                
+                // Si no se encuentra paño del tipo solicitado, buscar cualquier tipo disponible
+                if (suitablePanos.length === 0 && panoReq.tipo_red) {
+                    logger.warn(`No se encontró paño de tipo '${panoReq.tipo_red}' para ${panoReq.altura_req}x${panoReq.ancho_req}. Buscando otros tipos...`);
+                    suitablePanos = await panosController.findSuitablePanos(panoReq.altura_req, panoReq.ancho_req, null);
                     
-                    await trx.raw('SELECT fn_procesar_pano_orden(?, ?, ?, ?, ?)', [
+                    if (suitablePanos.length > 0) {
+                        logger.info(`Paño alternativo encontrado: tipo '${suitablePanos[0].tipo_red}' en lugar de '${panoReq.tipo_red}'`);
+                    }
+                }
+                
+                if (suitablePanos.length === 0) {
+                    throw new ValidationError(`No se encontró paño adecuado para ${panoReq.altura_req}x${panoReq.ancho_req} de ningún tipo disponible`);
+                }
+                
+                const selectedPano = suitablePanos[0]; // El más pequeño
+                
+                // Crear trabajo de corte
+                await panosController.createCutJob(trx, id_op, selectedPano.id_item, panoReq.altura_req, panoReq.ancho_req, panoReq.umbral_sobrante_m2 || 5.0, i + 1, req.user.id);
+            }
+
+            // 3. Agregar materiales a la orden (sin descontar stock aún)
+            for (const material of materiales) {
+                if (material.tipo_item === 'EXTRA') {
+                    await trx('orden_produccion_detalle').insert({
                         id_op,
-                        material.id_item,
-                        largo_tomar,
-                        ancho_tomar,
-                        material.cantidad || 1
-                    ]);
-                } else if (material.tipo_item === 'EXTRA') {
-                    // Usar la nueva función para procesar materiales extras
-                    await trx.raw('SELECT fn_procesar_material_extra_orden(?, ?, ?)', [
-                        id_op,
-                        material.id_item,
-                        material.cantidad
-                    ]);
+                        id_item: material.id_item,
+                        tipo_item: 'EXTRA',
+                        cantidad: material.cantidad,
+                        notas: material.notas || '',
+                        catalogo: 'CATALOGO_2', // Asumir basado en funciones previas
+                        estado: 'por aprobar'
+                    });
                 } else if (material.tipo_item === 'HERRAMIENTA') {
                     // Para herramientas, insertar directamente en herramienta_ordenada
                     await trx('herramienta_ordenada').insert({
@@ -516,20 +528,28 @@ const ordenesController = {
                         notas: material.notas || ''
                     });
                 } else {
-                    // Para otros tipos de items
+                    // Para otros tipos de items (excluyendo PANO)
                     await trx('orden_produccion_detalle').insert({
                         id_op,
                         id_item: material.id_item,
                         tipo_item: material.tipo_item,
                         cantidad: material.cantidad,
                         notas: material.notas || '',
-                        estado: 'en_proceso'
+                        estado: 'por aprobar'
                     });
                 }
             }
 
-            // 4. Las herramientas ya se procesaron en el bucle anterior
-            // No necesitamos procesarlas por separado
+            // 4. Procesar herramientas por separado si vienen en el array herramientas
+            for (const herramienta of herramientas) {
+                await trx('herramienta_ordenada').insert({
+                    id_op,
+                    id_item: herramienta.id_item,
+                    tipo_movimiento: 'ASIGNACION',
+                    cantidad: herramienta.cantidad || 1,
+                    notas: herramienta.notas || ''
+                });
+            }
 
             await trx.commit();
             
@@ -544,21 +564,20 @@ const ordenesController = {
                         .select('op.*')
                         .first();
 
-                    // Obtener detalles de paños
-                    const panos = await db('orden_produccion_detalle as opd')
-                        .leftJoin('pano as p', 'opd.id_item', 'p.id_item')
+                    // Obtener trabajos de corte y sus planes
+                    const cutJobs = await db('trabajo_corte as tc')
+                        .leftJoin('pano as p', 'tc.id_item', 'p.id_item')
                         .leftJoin('red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
                         .leftJoin('nylon as n', 'p.id_mcr', 'n.id_mcr')
                         .leftJoin('lona as l', 'p.id_mcr', 'l.id_mcr')
                         .leftJoin('polipropileno as pp', 'p.id_mcr', 'pp.id_mcr')
                         .leftJoin('malla_sombra as ms', 'p.id_mcr', 'ms.id_mcr')
-                        .where('opd.id_op', id_op)
-                        .where('opd.tipo_item', 'PANO')
+                        .where('tc.id_op', id_op)
                         .select(
-                            'opd.*',
-                            'p.largo_m',
-                            'p.ancho_m',
-                            'p.area_m2',
+                            'tc.*',
+                            'p.largo_m as pano_largo',
+                            'p.ancho_m as pano_ancho',
+                            'p.area_m2 as pano_area',
                             'p.precio_x_unidad',
                             'p.estado as estado_pano',
                             'rp.tipo_red',
@@ -578,6 +597,67 @@ const ordenesController = {
                             'ms.color_tipo_red as malla_color_tipo_red',
                             'ms.presentacion as malla_presentacion'
                         );
+
+                    // Obtener planes de corte para cada trabajo
+                    for (const job of cutJobs) {
+                        job.plans = await db('plan_corte_pieza')
+                            .where('job_id', job.job_id)
+                            .orderBy('seq')
+                            .select('*');
+                    }
+
+                    // Obtener sobrantes (remnants) para esta orden
+                    const sobrantes = await db('panos_sobrantes')
+                        .where('id_op', id_op)
+                        .select('*');
+
+                    // Preparar datos de panos para PDF basados en trabajo_corte
+                    const panosParaPDF = cutJobs.map(job => {
+                            // Determinar campos técnicos según tipo_red
+                            let calibre, cuadro, torsion, refuerzo, color, presentacion, grosor, color_tipo_red;
+                        switch ((job.tipo_red || '').toLowerCase()) {
+                                case 'nylon':
+                                calibre = job.nylon_calibre;
+                                cuadro = job.nylon_cuadro;
+                                torsion = job.nylon_torsion;
+                                refuerzo = job.nylon_refuerzo;
+                                    break;
+                                case 'lona':
+                                color = job.lona_color;
+                                presentacion = job.lona_presentacion;
+                                    break;
+                                case 'polipropileno':
+                                grosor = job.polipropileno_grosor;
+                                cuadro = job.polipropileno_cuadro;
+                                    break;
+                                case 'malla sombra':
+                                color_tipo_red = job.malla_color_tipo_red;
+                                presentacion = job.malla_presentacion;
+                                    break;
+                            }
+
+                        return {
+                            id_item: job.id_item,
+                            largo_m: job.altura_req,  // altura_req es el largo solicitado
+                            ancho_m: job.ancho_req,   // ancho_req es el ancho solicitado
+                            cantidad: 1,
+                            tipo_red: job.tipo_red || 'nylon',
+                            area_m2: job.area_req,
+                            precio_m2: job.precio_x_unidad,
+                            // Datos del pano original
+                            pano_original_largo: job.pano_largo,
+                            pano_original_ancho: job.pano_ancho,
+                            pano_original_area: job.pano_area,
+                                calibre,
+                                cuadro,
+                                torsion,
+                                refuerzo,
+                                color,
+                                presentacion,
+                                grosor,
+                                color_tipo_red
+                        };
+                    });
 
                     // Obtener detalles de materiales
                     const materiales = await db('orden_produccion_detalle as opd')
@@ -606,48 +686,7 @@ const ordenesController = {
                     // Preparar datos para el PDF
                     const ordenData = {
                         ...ordenCompleta,
-                        panos: panos.map(pano => {
-                            // Determinar campos técnicos según tipo_red
-                            let calibre, cuadro, torsion, refuerzo, color, presentacion, grosor, color_tipo_red;
-                            switch ((pano.tipo_red || '').toLowerCase()) {
-                                case 'nylon':
-                                    calibre = pano.nylon_calibre;
-                                    cuadro = pano.nylon_cuadro;
-                                    torsion = pano.nylon_torsion;
-                                    refuerzo = pano.nylon_refuerzo;
-                                    break;
-                                case 'lona':
-                                    color = pano.lona_color;
-                                    presentacion = pano.lona_presentacion;
-                                    break;
-                                case 'polipropileno':
-                                    grosor = pano.polipropileno_grosor;
-                                    cuadro = pano.polipropileno_cuadro;
-                                    break;
-                                case 'malla sombra':
-                                    color_tipo_red = pano.malla_color_tipo_red;
-                                    presentacion = pano.malla_presentacion;
-                                    break;
-                            }
-                            return {
-                                largo_m: pano.largo_m,
-                                ancho_m: pano.ancho_m,
-                                cantidad: pano.cantidad,
-                                tipo_red: pano.tipo_red || 'nylon',
-                                area_m2: pano.area_m2,
-                                // Las columnas largo_tomar, ancho_tomar, area_tomar ya no existen
-                                // Los datos se almacenan en las notas y se procesan con las nuevas funciones
-                                precio_m2: pano.precio_x_unidad,
-                                calibre,
-                                cuadro,
-                                torsion,
-                                refuerzo,
-                                color,
-                                presentacion,
-                                grosor,
-                                color_tipo_red
-                            };
-                        }),
+                        panos: panosParaPDF,
                         materiales: materiales.map(material => ({
                             descripcion: material.descripcion || 'Material',
                             categoria: material.categoria || 'General',
@@ -661,45 +700,63 @@ const ordenesController = {
                             descripcion: herramienta.descripcion || '',
                             categoria: herramienta.categoria || 'General',
                             cantidad: herramienta.cantidad || 1
+                        })),
+                        // Format cuts data for PDF generation
+                        cuts: cutJobs.map(job => ({
+                            id_item: job.id_item,
+                            altura_req: job.altura_req,
+                            ancho_req: job.ancho_req,
+                            pano_original: {
+                                largo: job.pano_largo,
+                                ancho: job.pano_ancho,
+                                area: job.pano_area
+                            },
+                            plans: job.plans.map(plan => ({
+                                rol_pieza: plan.rol_pieza,
+                                altura_plan: plan.altura_plan,
+                                ancho_plan: plan.ancho_plan,
+                                seq: plan.seq
+                            }))
+                        })),
+                        // Add remnants data
+                        sobrantes: sobrantes.map(sobrante => ({
+                            id_remnant: sobrante.id_remnant,
+                            altura_m: sobrante.altura_m,
+                            ancho_m: sobrante.ancho_m,
+                            area_m2: sobrante.area_m2,
+                            parent_id_item: sobrante.id_item_padre
                         }))
                     };
+
+                    logger.info('Datos preparados para PDF:', {
+                        ordenId: ordenData.id_op,
+                        numeroOp: ordenData.numero_op,
+                        panosCount: ordenData.panos?.length || 0,
+                        materialesCount: ordenData.materiales?.length || 0,
+                        herramientasCount: ordenData.herramientas?.length || 0,
+                        cutsCount: ordenData.cuts?.length || 0,
+                        sobrantesCount: ordenData.sobrantes?.length || 0
+                    });
 
                     // Generar PDF
                     const { filepath, filename } = await pdfService.generateOrdenProduccionPDF(ordenData);
                     
                     logger.info('PDF generado automáticamente al crear orden', {
                         ordenId: id_op,
-                        numeroOp: numero_op,
-                        filepath,
-                        filename
+                        filename: filename,
+                        filepath: filepath
                     });
 
-                    // No necesitamos guardar referencia en BD - el archivo se maneja directamente
-                    logger.info('PDF generado y guardado en sistema de archivos', {
-                        ordenId: id_op,
-                        filename: filename
-                    });
-
-                    // Enviar webhook automáticamente al crear la orden en estado en_proceso
+                    // Enviar webhook si está configurado
                     try {
-                        const makeWebhookService = require('../services/makeWebhookService');
-                        const resultado = await makeWebhookService.enviarOrdenEnProceso(ordenData);
-                        
-                        if (resultado.success) {
-                            logger.info('Webhook enviado automáticamente al crear orden', {
+                        const webhookService = require('./webhookController');
+                        const resultado = await webhookService.sendWebhookWithPDF(ordenData, filepath);
+                        logger.info('Webhook enviado con PDF', {
                                 ordenId: id_op,
-                                numeroOp: numero_op,
-                                status: resultado.status,
                                 pdfIncluido: resultado.pdfIncluido
                             });
-                        } else {
-                            logger.warn('Error enviando webhook automático al crear orden', {
-                                ordenId: id_op,
-                                error: resultado.error
-                            });
-                        }
                     } catch (webhookError) {
-                        logger.error('Error crítico enviando webhook automático', {
+                        logger.warn('Error enviando webhook con PDF', {
                             ordenId: id_op,
                             error: webhookError.message
                         });
@@ -776,7 +833,32 @@ const ordenesController = {
         } catch (error) {
             await trx.rollback();
             logger.error('Error actualizando orden:', error);
-            throw error;
+            
+            // Si es un error de validación, devolver mensaje estructurado
+            if (error.name === 'ValidationError') {
+                return res.status(400).json({
+                    success: false,
+                    errorType: 'ValidationError',
+                    message: error.message,
+                    details: error.errors || []
+                });
+            }
+            
+            // Si es un error de recurso no encontrado
+            if (error.name === 'NotFoundError') {
+                return res.status(404).json({
+                    success: false,
+                    errorType: 'NotFoundError',
+                    message: error.message
+                });
+            }
+            
+            // Otros errores
+            return res.status(500).json({
+                success: false,
+                errorType: 'InternalError',
+                message: 'Error interno del servidor. Por favor, intenta de nuevo más tarde.'
+            });
         }
     },
 
@@ -829,21 +911,20 @@ const ordenesController = {
                         .select('op.*')
                         .first();
 
-                    // Obtener detalles de paños
-                    const panos = await db('orden_produccion_detalle as opd')
-                        .leftJoin('pano as p', 'opd.id_item', 'p.id_item')
+                    // Obtener trabajos de corte y sus planes
+                    const cutJobs = await db('trabajo_corte as tc')
+                        .leftJoin('pano as p', 'tc.id_item', 'p.id_item')
                         .leftJoin('red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
                         .leftJoin('nylon as n', 'p.id_mcr', 'n.id_mcr')
                         .leftJoin('lona as l', 'p.id_mcr', 'l.id_mcr')
                         .leftJoin('polipropileno as pp', 'p.id_mcr', 'pp.id_mcr')
                         .leftJoin('malla_sombra as ms', 'p.id_mcr', 'ms.id_mcr')
-                        .where('opd.id_op', id)
-                        .where('opd.tipo_item', 'PANO')
+                        .where('tc.id_op', id)
                         .select(
-                            'opd.*',
-                            'p.largo_m',
-                            'p.ancho_m',
-                            'p.area_m2',
+                            'tc.*',
+                            'p.largo_m as pano_largo',
+                            'p.ancho_m as pano_ancho',
+                            'p.area_m2 as pano_area',
                             'p.precio_x_unidad',
                             'p.estado as estado_pano',
                             'rp.tipo_red',
@@ -863,6 +944,67 @@ const ordenesController = {
                             'ms.color_tipo_red as malla_color_tipo_red',
                             'ms.presentacion as malla_presentacion'
                         );
+
+                    // Obtener planes de corte para cada trabajo
+                    for (const job of cutJobs) {
+                        job.plans = await db('plan_corte_pieza')
+                            .where('job_id', job.job_id)
+                            .orderBy('seq')
+                            .select('*');
+                    }
+
+                    // Obtener sobrantes (remnants) para esta orden
+                    const sobrantes = await db('panos_sobrantes')
+                        .where('id_op', id)
+                        .select('*');
+
+                    // Preparar datos de panos para PDF basados en trabajo_corte
+                    const panosParaPDF = cutJobs.map(job => {
+                        // Determinar campos técnicos según tipo_red
+                        let calibre, cuadro, torsion, refuerzo, color, presentacion, grosor, color_tipo_red;
+                        switch ((job.tipo_red || '').toLowerCase()) {
+                            case 'nylon':
+                                calibre = job.nylon_calibre;
+                                cuadro = job.nylon_cuadro;
+                                torsion = job.nylon_torsion;
+                                refuerzo = job.nylon_refuerzo;
+                                break;
+                            case 'lona':
+                                color = job.lona_color;
+                                presentacion = job.lona_presentacion;
+                                break;
+                            case 'polipropileno':
+                                grosor = job.polipropileno_grosor;
+                                cuadro = job.polipropileno_cuadro;
+                                break;
+                            case 'malla sombra':
+                                color_tipo_red = job.malla_color_tipo_red;
+                                presentacion = job.malla_presentacion;
+                                break;
+                        }
+
+                        return {
+                            id_item: job.id_item,
+                            largo_m: job.altura_req,  // altura_req es el largo solicitado
+                            ancho_m: job.ancho_req,   // ancho_req es el ancho solicitado
+                            cantidad: 1,
+                            tipo_red: job.tipo_red || 'nylon',
+                            area_m2: job.area_req,
+                            precio_m2: job.precio_x_unidad,
+                            // Datos del pano original
+                            pano_original_largo: job.pano_largo,
+                            pano_original_ancho: job.pano_ancho,
+                            pano_original_area: job.pano_area,
+                            calibre,
+                            cuadro,
+                            torsion,
+                            refuerzo,
+                            color,
+                            presentacion,
+                            grosor,
+                            color_tipo_red
+                        };
+                    });
 
                     // Obtener detalles de materiales
                     const materiales = await db('orden_produccion_detalle as opd')
@@ -887,51 +1029,10 @@ const ordenesController = {
                             'h.marca'
                         );
 
-                    // Preparar datos completos para el webhook
+                    // Preparar datos para el webhook
                     const ordenData = {
                         ...ordenCompleta,
-                        panos: panos.map(pano => {
-                            // Determinar campos técnicos según tipo_red
-                            let calibre, cuadro, torsion, refuerzo, color, presentacion, grosor, color_tipo_red;
-                            switch ((pano.tipo_red || '').toLowerCase()) {
-                                case 'nylon':
-                                    calibre = pano.nylon_calibre;
-                                    cuadro = pano.nylon_cuadro;
-                                    torsion = pano.nylon_torsion;
-                                    refuerzo = pano.nylon_refuerzo;
-                                    break;
-                                case 'lona':
-                                    color = pano.lona_color;
-                                    presentacion = pano.lona_presentacion;
-                                    break;
-                                case 'polipropileno':
-                                    grosor = pano.polipropileno_grosor;
-                                    cuadro = pano.polipropileno_cuadro;
-                                    break;
-                                case 'malla sombra':
-                                    color_tipo_red = pano.malla_color_tipo_red;
-                                    presentacion = pano.malla_presentacion;
-                                    break;
-                            }
-                            return {
-                                largo_m: pano.largo_m,
-                                ancho_m: pano.ancho_m,
-                                cantidad: pano.cantidad,
-                                tipo_red: pano.tipo_red || 'nylon',
-                                area_m2: pano.area_m2,
-                                // Las columnas largo_tomar, ancho_tomar, area_tomar ya no existen
-                                // Los datos se almacenan en las notas y se procesan con las nuevas funciones
-                                precio_m2: pano.precio_x_unidad,
-                                calibre,
-                                cuadro,
-                                torsion,
-                                refuerzo,
-                                color,
-                                presentacion,
-                                grosor,
-                                color_tipo_red
-                            };
-                        }),
+                        panos: panosParaPDF,
                         materiales: materiales.map(material => ({
                             descripcion: material.descripcion,
                             categoria: material.categoria,
@@ -943,37 +1044,69 @@ const ordenesController = {
                             descripcion: herramienta.descripcion || '',
                             categoria: herramienta.categoria || 'General',
                             cantidad: herramienta.cantidad || 1
-                        }))
+                        })),
+                        // Format cuts data for webhook
+                        cuts: cutJobs.map(job => ({
+                            id_item: job.id_item,
+                            altura_req: job.altura_req,
+                            ancho_req: job.ancho_req,
+                            pano_original: {
+                                largo: job.pano_largo,
+                                ancho: job.pano_ancho,
+                                area: job.pano_area
+                            },
+                            plans: job.plans.map(plan => ({
+                                rol_pieza: plan.rol_pieza,
+                                altura_plan: plan.altura_plan,
+                                ancho_plan: plan.ancho_plan,
+                                seq: plan.seq
+                            }))
+                        })),
+                        // Add remnants data
+                        sobrantes: sobrantes.map(sobrante => ({
+                            id_remnant: sobrante.id_remnant,
+                            altura_m: sobrante.altura_m,
+                            ancho_m: sobrante.ancho_m,
+                            area_m2: sobrante.area_m2,
+                            parent_id_item: sobrante.id_item_padre
+                        })),
+                        // Agregar información adicional para el webhook
+                        webhook_event: 'orden_en_proceso',
+                        webhook_timestamp: new Date().toISOString()
                     };
 
-                    // Enviar webhook de forma asíncrona (no bloquear la respuesta)
-                    setImmediate(async () => {
-                        try {
-                            const resultado = await makeWebhookService.enviarOrdenEnProceso(ordenData);
-                            if (resultado.success) {
-                                logger.info('Webhook enviado exitosamente al cambiar estado a en_proceso', {
+                    // Generar PDF para el webhook
+                    const pdfService = require('../services/pdfService');
+                    const { filepath, filename } = await pdfService.generateOrdenProduccionPDF(ordenData);
+
+                    // Agregar información del PDF a los datos del webhook
+                    ordenData.pdf_generated = true;
+                    ordenData.pdf_filename = filename;
+                    ordenData.pdf_filepath = filepath;
+
+                    logger.info('Enviando webhook a Make.com - Orden en proceso', {
                                     ordenId: id,
-                                    estado: estado
-                                });
-                            } else {
-                                logger.warn('Error enviando webhook al cambiar estado a en_proceso', {
+                        numeroOp: ordenData.numero_op,
+                        cliente: ordenData.cliente,
+                        pdfFilename: filename
+                    });
+
+                    // Enviar webhook con PDF adjunto
+                    const webhookResult = await makeWebhookService.enviarOrdenEnProceso(ordenData);
+                    
+                    logger.info('Webhook enviado exitosamente a Make.com', {
                                     ordenId: id,
-                                    error: resultado.error
-                                });
-                            }
-                        } catch (webhookError) {
-                            logger.error('Error crítico enviando webhook', {
-                                ordenId: id,
-                                error: webhookError.message
-                            });
-                        }
+                        success: webhookResult.success,
+                        pdfIncluido: webhookResult.pdfIncluido,
+                        status: webhookResult.status
                     });
 
                 } catch (webhookError) {
-                    logger.error('Error preparando webhook', {
+                    logger.error('Error enviando webhook a Make.com', {
                         ordenId: id,
                         error: webhookError.message
                     });
+                    // No fallar el cambio de estado si el webhook falla
                 }
             }
 
@@ -991,7 +1124,32 @@ const ordenesController = {
         } catch (error) {
             await trx.rollback();
             logger.error('Error cambiando estado de orden:', error);
-            throw error;
+            
+            // Si es un error de validación, devolver mensaje estructurado
+            if (error.name === 'ValidationError') {
+                return res.status(400).json({
+                    success: false,
+                    errorType: 'ValidationError',
+                    message: error.message,
+                    details: error.errors || []
+                });
+            }
+            
+            // Si es un error de recurso no encontrado
+            if (error.name === 'NotFoundError') {
+                return res.status(404).json({
+                    success: false,
+                    errorType: 'NotFoundError',
+                    message: error.message
+                });
+            }
+            
+            // Otros errores
+            return res.status(500).json({
+                success: false,
+                errorType: 'InternalError',
+                message: 'Error interno del servidor. Por favor, intenta de nuevo más tarde.'
+            });
         }
     },
 
@@ -1021,20 +1179,22 @@ const ordenesController = {
                     throw new ValidationError(`Material ID ${material.id_item} no disponible o insuficiente. Stock actual: ${stockDisponible}, solicitado: ${material.cantidad}`);
                 }
 
-                // Agregar material a la orden
+                // Agregar material a la orden (sin descontar stock aún)
                 await trx('orden_produccion_detalle').insert({
                     id_op: id,
                     id_item: material.id_item,
                     tipo_item: material.tipo_item || 'EXTRA',
                     cantidad: material.cantidad,
                     notas: material.notas || '',
-                    estado: 'en_proceso'
+                    estado: 'por aprobar' // Materials will be discounted when order is approved
                 });
 
-                // Descontar stock
-                await trx('materiales_extras')
-                    .where('id_item', material.id_item)
-                    .decrement('cantidad_disponible', material.cantidad);
+                // Stock will be discounted when order is approved, not when material is added
+                logger.info('Material added to order (stock will be discounted on approval):', {
+                    material_id: material.id_item,
+                    cantidad: material.cantidad,
+                    orden_id: id
+                });
             }
 
             await trx.commit();
@@ -1047,7 +1207,32 @@ const ordenesController = {
         } catch (error) {
             await trx.rollback();
             logger.error('Error agregando materiales:', error);
-            throw error;
+            
+            // Si es un error de validación, devolver mensaje estructurado
+            if (error.name === 'ValidationError') {
+                return res.status(400).json({
+                    success: false,
+                    errorType: 'ValidationError',
+                    message: error.message,
+                    details: error.errors || []
+                });
+            }
+            
+            // Si es un error de recurso no encontrado
+            if (error.name === 'NotFoundError') {
+                return res.status(404).json({
+                    success: false,
+                    errorType: 'NotFoundError',
+                    message: error.message
+                });
+            }
+            
+            // Otros errores
+            return res.status(500).json({
+                success: false,
+                errorType: 'InternalError',
+                message: 'Error interno del servidor. Por favor, intenta de nuevo más tarde.'
+            });
         }
     },
 
@@ -1102,7 +1287,32 @@ const ordenesController = {
         } catch (error) {
             await trx.rollback();
             logger.error('Error agregando herramientas:', error);
-            throw error;
+            
+            // Si es un error de validación, devolver mensaje estructurado
+            if (error.name === 'ValidationError') {
+                return res.status(400).json({
+                    success: false,
+                    errorType: 'ValidationError',
+                    message: error.message,
+                    details: error.errors || []
+                });
+            }
+            
+            // Si es un error de recurso no encontrado
+            if (error.name === 'NotFoundError') {
+                return res.status(404).json({
+                    success: false,
+                    errorType: 'NotFoundError',
+                    message: error.message
+                });
+            }
+            
+            // Otros errores
+            return res.status(500).json({
+                success: false,
+                errorType: 'InternalError',
+                message: 'Error interno del servidor. Por favor, intenta de nuevo más tarde.'
+            });
         }
     },
 
@@ -1163,7 +1373,32 @@ const ordenesController = {
         } catch (error) {
             await trx.rollback();
             logger.error('Error eliminando orden:', error);
-            throw error;
+            
+            // Si es un error de validación, devolver mensaje estructurado
+            if (error.name === 'ValidationError') {
+                return res.status(400).json({
+                    success: false,
+                    errorType: 'ValidationError',
+                    message: error.message,
+                    details: error.errors || []
+                });
+            }
+            
+            // Si es un error de recurso no encontrado
+            if (error.name === 'NotFoundError') {
+                return res.status(404).json({
+                    success: false,
+                    errorType: 'NotFoundError',
+                    message: error.message
+                });
+            }
+            
+            // Otros errores
+            return res.status(500).json({
+                success: false,
+                errorType: 'InternalError',
+                message: 'Error interno del servidor. Por favor, intenta de nuevo más tarde.'
+            });
         }
     },
 
@@ -1182,21 +1417,20 @@ const ordenesController = {
                 throw new NotFoundError('Orden de producción no encontrada');
             }
 
-            // Obtener detalles de paños
-            const panos = await db('orden_produccion_detalle as opd')
-                .leftJoin('pano as p', 'opd.id_item', 'p.id_item')
+            // Obtener trabajos de corte y sus planes
+            const cutJobs = await db('trabajo_corte as tc')
+                .leftJoin('pano as p', 'tc.id_item', 'p.id_item')
                 .leftJoin('red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
                 .leftJoin('nylon as n', 'p.id_mcr', 'n.id_mcr')
                 .leftJoin('lona as l', 'p.id_mcr', 'l.id_mcr')
                 .leftJoin('polipropileno as pp', 'p.id_mcr', 'pp.id_mcr')
                 .leftJoin('malla_sombra as ms', 'p.id_mcr', 'ms.id_mcr')
-                .where('opd.id_op', id)
-                .where('opd.tipo_item', 'PANO')
+                .where('tc.id_op', id)
                 .select(
-                    'opd.*',
-                    'p.largo_m',
-                    'p.ancho_m',
-                    'p.area_m2',
+                    'tc.*',
+                    'p.largo_m as pano_largo',
+                    'p.ancho_m as pano_ancho',
+                    'p.area_m2 as pano_area',
                     'p.precio_x_unidad',
                     'p.estado as estado_pano',
                     'rp.tipo_red',
@@ -1217,6 +1451,67 @@ const ordenesController = {
                     'ms.presentacion as malla_presentacion'
                 );
 
+            // Obtener planes de corte para cada trabajo
+            for (const job of cutJobs) {
+                job.plans = await db('plan_corte_pieza')
+                    .where('job_id', job.job_id)
+                    .orderBy('seq')
+                    .select('*');
+            }
+
+            // Obtener sobrantes (remnants) para esta orden
+            const sobrantes = await db('panos_sobrantes')
+                .where('id_op', id)
+                .select('*');
+
+            // Preparar datos de panos para PDF basados en trabajo_corte
+            const panosParaPDF = cutJobs.map(job => {
+                // Determinar campos técnicos según tipo_red
+                let calibre, cuadro, torsion, refuerzo, color, presentacion, grosor, color_tipo_red;
+                switch ((job.tipo_red || '').toLowerCase()) {
+                    case 'nylon':
+                        calibre = job.nylon_calibre;
+                        cuadro = job.nylon_cuadro;
+                        torsion = job.nylon_torsion;
+                        refuerzo = job.nylon_refuerzo;
+                        break;
+                    case 'lona':
+                        color = job.lona_color;
+                        presentacion = job.lona_presentacion;
+                        break;
+                    case 'polipropileno':
+                        grosor = job.polipropileno_grosor;
+                        cuadro = job.polipropileno_cuadro;
+                        break;
+                    case 'malla sombra':
+                        color_tipo_red = job.malla_color_tipo_red;
+                        presentacion = job.malla_presentacion;
+                        break;
+                }
+
+                return {
+                    id_item: job.id_item,
+                    largo_m: job.altura_req,  // altura_req es el largo solicitado
+                    ancho_m: job.ancho_req,   // ancho_req es el ancho solicitado
+                    cantidad: 1,
+                    tipo_red: job.tipo_red || 'nylon',
+                    area_m2: job.area_req,
+                    precio_m2: job.precio_x_unidad,
+                    // Datos del pano original
+                    pano_original_largo: job.pano_largo,
+                    pano_original_ancho: job.pano_ancho,
+                    pano_original_area: job.pano_area,
+                    calibre,
+                    cuadro,
+                    torsion,
+                    refuerzo,
+                    color,
+                    presentacion,
+                    grosor,
+                    color_tipo_red
+                };
+            });
+
             // Obtener detalles de materiales
             const materiales = await db('orden_produccion_detalle as opd')
                 .leftJoin('materiales_extras as me', 'opd.id_item', 'me.id_item')
@@ -1226,8 +1521,7 @@ const ordenesController = {
                     'opd.*',
                     'me.descripcion',
                     'me.categoria',
-                    'me.unidad',
-                    'me.precioxunidad'
+                    'me.unidad'
                 );
 
             // Obtener herramientas asignadas
@@ -1244,48 +1538,7 @@ const ordenesController = {
             // Preparar datos para el PDF
             const ordenData = {
                 ...orden,
-                panos: panos.map(pano => {
-                    // Determinar campos técnicos según tipo_red
-                    let calibre, cuadro, torsion, refuerzo, color, presentacion, grosor, color_tipo_red;
-                    switch ((pano.tipo_red || '').toLowerCase()) {
-                        case 'nylon':
-                            calibre = pano.nylon_calibre;
-                            cuadro = pano.nylon_cuadro;
-                            torsion = pano.nylon_torsion;
-                            refuerzo = pano.nylon_refuerzo;
-                            break;
-                        case 'lona':
-                            color = pano.lona_color;
-                            presentacion = pano.lona_presentacion;
-                            break;
-                        case 'polipropileno':
-                            grosor = pano.polipropileno_grosor;
-                            cuadro = pano.polipropileno_cuadro;
-                            break;
-                        case 'malla sombra':
-                            color_tipo_red = pano.malla_color_tipo_red;
-                            presentacion = pano.malla_presentacion;
-                            break;
-                    }
-                    return {
-                        largo_m: pano.largo_m,
-                        ancho_m: pano.ancho_m,
-                        cantidad: pano.cantidad,
-                        tipo_red: pano.tipo_red || 'nylon',
-                        area_m2: pano.area_m2,
-                        // Las columnas largo_tomar, ancho_tomar, area_tomar ya no existen
-                        // Los datos se almacenan en las notas y se procesan con las nuevas funciones
-                        precio_m2: pano.precio_x_unidad,
-                        calibre,
-                        cuadro,
-                        torsion,
-                        refuerzo,
-                        color,
-                        presentacion,
-                        grosor,
-                        color_tipo_red
-                    };
-                }),
+                panos: panosParaPDF,
                 materiales: materiales.map(material => ({
                     descripcion: material.descripcion || 'Material',
                     categoria: material.categoria || 'General',
@@ -1299,8 +1552,43 @@ const ordenesController = {
                     descripcion: herramienta.descripcion || '',
                     categoria: herramienta.categoria || 'General',
                     cantidad: herramienta.cantidad || 1
+                })),
+                // Format cuts data for PDF generation
+                cuts: cutJobs.map(job => ({
+                    id_item: job.id_item,
+                    altura_req: job.altura_req,
+                    ancho_req: job.ancho_req,
+                    pano_original: {
+                        largo: job.pano_largo,
+                        ancho: job.pano_ancho,
+                        area: job.pano_area
+                    },
+                    plans: job.plans.map(plan => ({
+                        rol_pieza: plan.rol_pieza,
+                        altura_plan: plan.altura_plan,
+                        ancho_plan: plan.ancho_plan,
+                        seq: plan.seq
+                    }))
+                })),
+                // Add remnants data
+                sobrantes: sobrantes.map(sobrante => ({
+                    id_remnant: sobrante.id_remnant,
+                    altura_m: sobrante.altura_m,
+                    ancho_m: sobrante.ancho_m,
+                    area_m2: sobrante.area_m2,
+                    parent_id_item: sobrante.id_item_padre
                 }))
             };
+
+            logger.info('Datos preparados para PDF:', {
+                ordenId: ordenData.id_op,
+                numeroOp: ordenData.numero_op,
+                panosCount: ordenData.panos?.length || 0,
+                materialesCount: ordenData.materiales?.length || 0,
+                herramientasCount: ordenData.herramientas?.length || 0,
+                cutsCount: ordenData.cuts?.length || 0,
+                sobrantesCount: ordenData.sobrantes?.length || 0
+            });
 
             // Generar PDF
             const pdfService = require('../services/pdfService');
@@ -1336,21 +1624,12 @@ const ordenesController = {
             logger.info('Iniciando descarga de PDF', { ordenId: id });
 
             const pdfService = require('../services/pdfService');
-            const fs = require('fs');
 
-            // Buscar el archivo PDF existente
-            const pdfInfo = pdfService.findPDFByOrderId(id);
-
-            if (!pdfInfo) {
-                logger.error('Archivo PDF no encontrado para la orden', { 
-                    ordenId: id 
-                });
+            // Siempre generar un PDF fresco
+            try {
+                logger.info('Generando PDF fresco para la orden', { ordenId: id });
                 
-                // Intentar generar el PDF si no existe
-                try {
-                    logger.info('Intentando generar PDF para la orden', { ordenId: id });
-                    
-                    // Obtener datos de la orden
+                // Obtener datos de la orden usando la función generarPDF
                     const orden = await db('orden_produccion')
                         .where('id_op', id)
                         .first();
@@ -1359,18 +1638,171 @@ const ordenesController = {
                         throw new NotFoundError('Orden de producción no encontrada');
                     }
 
-                    // Obtener detalles completos de la orden
-                    const ordenCompleta = await ordenesController.getOrdenDetalle({ params: { id } }, { 
-                        json: (data) => data,
-                        status: () => ({ json: (data) => data })
-                    });
+                // Obtener trabajos de corte y sus planes
+                const cutJobs = await db('trabajo_corte as tc')
+                    .leftJoin('pano as p', 'tc.id_item', 'p.id_item')
+                    .leftJoin('red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
+                    .leftJoin('nylon as n', 'p.id_mcr', 'n.id_mcr')
+                    .leftJoin('lona as l', 'p.id_mcr', 'l.id_mcr')
+                    .leftJoin('polipropileno as pp', 'p.id_mcr', 'pp.id_mcr')
+                    .leftJoin('malla_sombra as ms', 'p.id_mcr', 'ms.id_mcr')
+                    .where('tc.id_op', id)
+                    .select(
+                        'tc.*',
+                        'p.largo_m as pano_largo',
+                        'p.ancho_m as pano_ancho',
+                        'p.area_m2 as pano_area',
+                        'p.precio_x_unidad',
+                        'p.estado as estado_pano',
+                        'rp.tipo_red',
+                        'rp.descripcion as descripcion_producto',
+                        // Nylon
+                        'n.calibre as nylon_calibre',
+                        'n.cuadro as nylon_cuadro',
+                        'n.torsion as nylon_torsion',
+                        'n.refuerzo as nylon_refuerzo',
+                        // Lona
+                        'l.color as lona_color',
+                        'l.presentacion as lona_presentacion',
+                        // Polipropileno
+                        'pp.grosor as polipropileno_grosor',
+                        'pp.cuadro as polipropileno_cuadro',
+                        // Malla sombra
+                        'ms.color_tipo_red as malla_color_tipo_red',
+                        'ms.presentacion as malla_presentacion'
+                    );
 
-                    if (!ordenCompleta.success) {
-                        throw new Error('Error obteniendo datos de la orden');
+                // Obtener planes de corte para cada trabajo
+                for (const job of cutJobs) {
+                    job.plans = await db('plan_corte_pieza')
+                        .where('job_id', job.job_id)
+                        .orderBy('seq')
+                        .select('*');
+                }
+
+                // Obtener sobrantes (remnants) para esta orden
+                const sobrantes = await db('panos_sobrantes')
+                    .where('id_op', id)
+                    .select('*');
+
+                // Preparar datos de panos para PDF basados en trabajo_corte
+                const panosParaPDF = cutJobs.map(job => {
+                    // Determinar campos técnicos según tipo_red
+                    let calibre, cuadro, torsion, refuerzo, color, presentacion, grosor, color_tipo_red;
+                    switch ((job.tipo_red || '').toLowerCase()) {
+                        case 'nylon':
+                            calibre = job.nylon_calibre;
+                            cuadro = job.nylon_cuadro;
+                            torsion = job.nylon_torsion;
+                            refuerzo = job.nylon_refuerzo;
+                            break;
+                        case 'lona':
+                            color = job.lona_color;
+                            presentacion = job.lona_presentacion;
+                            break;
+                        case 'polipropileno':
+                            grosor = job.polipropileno_grosor;
+                            cuadro = job.polipropileno_cuadro;
+                            break;
+                        case 'malla sombra':
+                            color_tipo_red = job.malla_color_tipo_red;
+                            presentacion = job.malla_presentacion;
+                            break;
                     }
 
+                    return {
+                        id_item: job.id_item,
+                        largo_m: job.altura_req,  // altura_req es el largo solicitado
+                        ancho_m: job.ancho_req,   // ancho_req es el ancho solicitado
+                        cantidad: 1,
+                        tipo_red: job.tipo_red || 'nylon',
+                        area_m2: job.area_req,
+                        precio_m2: job.precio_x_unidad,
+                        // Datos del pano original
+                        pano_original_largo: job.pano_largo,
+                        pano_original_ancho: job.pano_ancho,
+                        pano_original_area: job.pano_area,
+                        calibre,
+                        cuadro,
+                        torsion,
+                        refuerzo,
+                        color,
+                        presentacion,
+                        grosor,
+                        color_tipo_red
+                    };
+                });
+
+                // Obtener detalles de materiales
+                const materiales = await db('orden_produccion_detalle as opd')
+                    .leftJoin('materiales_extras as me', 'opd.id_item', 'me.id_item')
+                    .where('opd.id_op', id)
+                    .where('opd.tipo_item', 'EXTRA')
+                    .select(
+                        'opd.*',
+                        'me.descripcion',
+                        'me.categoria',
+                        'me.unidad'
+                    );
+
+                // Obtener herramientas asignadas
+                const herramientas = await db('herramienta_ordenada as ho')
+                    .leftJoin('herramientas as h', 'ho.id_item', 'h.id_item')
+                    .where('ho.id_op', id)
+                    .select(
+                        'ho.*',
+                        'h.descripcion',
+                        'h.categoria',
+                        'h.marca'
+                    );
+
+                // Preparar datos para el PDF
+                const ordenData = {
+                    ...orden,
+                    panos: panosParaPDF,
+                    materiales: materiales.map(material => ({
+                        descripcion: material.descripcion || 'Material',
+                        categoria: material.categoria || 'General',
+                        cantidad: material.cantidad || 0,
+                        unidad: material.unidad || 'unidad',
+                        precioxunidad: material.precioxunidad || 0,
+                        precio_total: material.costo_total || 0
+                    })),
+                    herramientas: herramientas.map(herramienta => ({
+                        nombre: herramienta.descripcion || 'Herramienta',
+                        descripcion: herramienta.descripcion || '',
+                        categoria: herramienta.categoria || 'General',
+                        cantidad: herramienta.cantidad || 1
+                    })),
+                    // Format cuts data for PDF generation
+                    cuts: cutJobs.map(job => ({
+                        id_item: job.id_item,
+                        altura_req: job.altura_req,
+                        ancho_req: job.ancho_req,
+                        pano_original: {
+                            largo: job.pano_largo,
+                            ancho: job.pano_ancho,
+                            area: job.pano_area
+                        },
+                        plans: job.plans.map(plan => ({
+                            rol_pieza: plan.rol_pieza,
+                            altura_plan: plan.altura_plan,
+                            ancho_plan: plan.ancho_plan,
+                            seq: plan.seq
+                        }))
+                    })),
+                    // Add remnants data
+                    sobrantes: sobrantes.map(sobrante => ({
+                        id_remnant: sobrante.id_remnant,
+                        altura_m: sobrante.altura_m,
+                        ancho_m: sobrante.ancho_m,
+                        area_m2: sobrante.area_m2,
+                        parent_id_item: sobrante.id_item_padre
+                    }))
+                };
+
                     // Generar PDF
-                    const { filepath, filename } = await pdfService.generateOrdenProduccionPDF(ordenCompleta.data);
+                const { filepath, filename } = await pdfService.generateOrdenProduccionPDF(ordenData);
                     
                     logger.info('PDF generado exitosamente para descarga', { 
                         ordenId: id, 
@@ -1383,53 +1815,8 @@ const ordenesController = {
                     
                 } catch (genError) {
                     logger.error('Error generando PDF para descarga:', genError);
-                    throw new NotFoundError('No se pudo generar ni encontrar el PDF de la orden');
-                }
+                throw new NotFoundError('No se pudo generar el PDF de la orden');
             }
-
-            logger.info('Archivo PDF encontrado', { 
-                ordenId: id, 
-                filename: pdfInfo.filename, 
-                filepath: pdfInfo.filepath 
-            });
-
-            // Verificar que el archivo no esté vacío
-            const stats = fs.statSync(pdfInfo.filepath);
-            if (stats.size === 0) {
-                logger.error('Archivo PDF está vacío', { 
-                    ordenId: id, 
-                    filepath: pdfInfo.filepath, 
-                    size: stats.size 
-                });
-                throw new Error('El archivo PDF está vacío o corrupto');
-            }
-
-            logger.info('Enviando archivo PDF', { 
-                ordenId: id, 
-                filename: pdfInfo.filename, 
-                size: stats.size 
-            });
-
-            // Usar res.download() que es más simple y robusto
-            res.download(pdfInfo.filepath, pdfInfo.filename, (err) => {
-                if (err) {
-                    logger.error('Error enviando archivo PDF', { 
-                        ordenId: id, 
-                        error: err.message 
-                    });
-                    if (!res.headersSent) {
-                        res.status(500).json({
-                            success: false,
-                            message: 'Error enviando el archivo PDF'
-                        });
-                    }
-                } else {
-                    logger.info('PDF enviado exitosamente', { 
-                        ordenId: id, 
-                        filename: pdfInfo.filename 
-                    });
-                }
-            });
 
         } catch (error) {
             logger.error('Error descargando PDF:', error);
@@ -1484,6 +1871,1515 @@ const ordenesController = {
 
         } catch (error) {
             logger.error('Error buscando clientes:', error);
+            throw error;
+        }
+    },
+
+    // Nueva función: Aprobar orden
+    approveOrden: async (req, res) => {
+        const { id } = req.params;
+        const trx = await db.transaction();
+        try {
+            const orden = await trx('orden_produccion').where('id_op', id).first();
+            if (!orden || orden.estado !== 'por aprobar') {
+                throw new ValidationError('Orden no encontrada o no en estado por aprobar');
+            }
+
+            // DEBUG: Check what materials are in the order
+            const allOrderDetails = await trx('orden_produccion_detalle')
+                .where('id_op', id)
+                .select('*');
+            
+            logger.info('DEBUG: All order details found:', { 
+                orden_id: id, 
+                total_details: allOrderDetails.length,
+                details: allOrderDetails.map(d => ({
+                    id_detalle: d.id_detalle,
+                    id_item: d.id_item,
+                    tipo_item: d.tipo_item,
+                    cantidad: d.cantidad,
+                    estado: d.estado
+                }))
+            });
+
+            // NEW: Log all detalles for the order before filtering
+            logger.info('DEBUG: All detalles for order before filtering:', allOrderDetails);
+
+            // NEW: Log the raw SQL for the materialesExtras query
+            const materialesExtrasDebugQuery = trx('orden_produccion_detalle as opd')
+                .where('opd.id_op', id)
+                .where('opd.tipo_item', 'EXTRA')
+                .where('opd.estado', 'por aprobar')
+                .select(
+                    'opd.id_detalle',
+                    'opd.id_item',
+                    'opd.cantidad',
+                    'opd.notas'
+                );
+            logger.info('DEBUG: Raw materialesExtras SQL:', { sql: materialesExtrasDebugQuery.toString() });
+
+            // Execute the debug query
+            const materialesExtrasDebug = await materialesExtrasDebugQuery;
+            logger.info('DEBUG: materialesExtras result:', materialesExtrasDebug);
+
+            // NEW: Try a LIKE query for estado
+            const materialesExtrasLike = await trx('orden_produccion_detalle as opd')
+                .where('opd.id_op', id)
+                .where('opd.tipo_item', 'EXTRA')
+                .where('opd.estado', 'like', '%por aprobar%')
+                .select(
+                    'opd.id_detalle',
+                    'opd.id_item',
+                    'opd.cantidad',
+                    'opd.notas'
+                );
+            logger.info('DEBUG: materialesExtras LIKE result:', materialesExtrasLike);
+
+            // Verificar locks: asegurar que panos no estén en otras órdenes aprobadas
+            // Obtener los panos de esta orden
+            const panosEstaOrden = await trx('trabajo_corte as tc')
+                .where('tc.id_op', id)
+                .select('tc.id_item');
+
+            if (panosEstaOrden.length > 0) {
+                const panosIds = panosEstaOrden.map(p => p.id_item);
+                
+                // Verificar si estos panos están siendo usados por otras órdenes aprobadas
+                const panosBloqueados = await trx('trabajo_corte as tc')
+                    .join('orden_produccion as op', 'tc.id_op', 'op.id_op')
+                    .whereIn('tc.id_item', panosIds)
+                    .where('tc.id_op', '!=', id) // Excluir la orden actual
+                    .whereIn('op.estado', ['en_proceso', 'completada']) // Solo órdenes aprobadas
+                    .select('tc.id_item', 'op.numero_op', 'op.estado');
+
+                if (panosBloqueados.length > 0) {
+                    // Crear mensaje detallado con información de las órdenes que bloquean
+                    const ordenesBloqueadoras = [...new Set(panosBloqueados.map(p => p.numero_op))];
+                    const mensaje = `Los siguientes paños están siendo utilizados por otras órdenes aprobadas: ${ordenesBloqueadoras.join(', ')}`;
+                    throw new ConflictError(mensaje);
+                }
+            }
+
+            // Actualizar a 'en_proceso'
+            await trx('orden_produccion').where('id_op', id).update({ estado: 'en_proceso' });
+
+            // Set panos to 'Reservado' and trabajo_corte to 'En progreso'
+            await trx('pano')
+                .whereIn('id_item', function() {
+                    this.select('id_item').from('trabajo_corte').where('id_op', id);
+                })
+                .update({ estado_trabajo: 'Reservado' });
+            await trx('trabajo_corte').where('id_op', id).update({ estado: 'En progreso' });
+
+            // DISCOUNT MATERIALS WHEN ORDER IS APPROVED (not when cut is completed)
+            logger.info('DEBUG: Starting material discounting logic for order:', { orden_id: id });
+            
+            // First, get all materials that need to be discounted
+            const materialesExtras = materialesExtrasDebug;
+            logger.info('DEBUG: Found materials for discounting:', { 
+                orden_id: id, 
+                materiales_count: materialesExtras.length,
+                materiales: materialesExtras.map(m => ({
+                    id_detalle: m.id_detalle,
+                    id_item: m.id_item,
+                    cantidad: m.cantidad
+                }))
+            });
+
+            // Process each material and discount from inventory
+            for (const material of materialesExtras) {
+                // Get material details from materiales_extras
+                const materialData = await trx('materiales_extras')
+                    .where('id_item', material.id_item)
+                    .first();
+
+                if (!materialData) {
+                    throw new ValidationError(`Material ID ${material.id_item} no encontrado en inventario`);
+                }
+
+                // Convert cantidad to number for proper comparison
+                const cantidadSolicitada = parseFloat(material.cantidad) || 0;
+                const stockDisponible = parseFloat(materialData.cantidad_disponible) || 0;
+
+                // Debug log the values being compared
+                logger.info('DEBUG: Stock validation:', {
+                    material_id: material.id_item,
+                    descripcion: materialData.descripcion,
+                    cantidad_solicitada: cantidadSolicitada,
+                    stock_disponible: stockDisponible,
+                    cantidad_original: material.cantidad,
+                    stock_original: materialData.cantidad_disponible
+                });
+
+                // Validate stock availability
+                if (stockDisponible < cantidadSolicitada) {
+                    throw new ValidationError(`Stock insuficiente para material ${materialData.descripcion}: disponible ${stockDisponible}, solicitado ${cantidadSolicitada}`);
+                }
+
+                // Update material detail status
+                await trx('orden_produccion_detalle')
+                    .where('id_detalle', material.id_detalle)
+                    .update({ estado: 'en_proceso' });
+
+                // Discount from inventory
+                await trx('materiales_extras')
+                    .where('id_item', material.id_item)
+                    .decrement('cantidad_disponible', cantidadSolicitada);
+
+                // Register inventory movement
+                await trx('movimiento_inventario').insert({
+                    id_item: material.id_item,
+                    tipo_mov: 'CONSUMO',
+                    cantidad: cantidadSolicitada,
+                    unidad: materialData.unidad || 'unidad',
+                    notas: `Consumo para orden ${orden.numero_op}: ${materialData.descripcion}`,
+                    id_op: id,
+                    id_usuario: req.user.id
+                });
+
+                logger.info('Material discounted on order approval:', {
+                    material_id: material.id_item,
+                    descripcion: materialData.descripcion,
+                    cantidad: cantidadSolicitada,
+                    orden_id: id
+                });
+            }
+
+            // Query data for PDF, including cuts
+            const ordenData = await trx('orden_produccion').where('id_op', id).first();
+            
+            // Obtener trabajos de corte y sus planes
+            const cutJobs = await trx('trabajo_corte as tc')
+                .leftJoin('pano as p', 'tc.id_item', 'p.id_item')
+                .leftJoin('red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
+                .leftJoin('nylon as n', 'p.id_mcr', 'n.id_mcr')
+                .leftJoin('lona as l', 'p.id_mcr', 'l.id_mcr')
+                .leftJoin('polipropileno as pp', 'p.id_mcr', 'pp.id_mcr')
+                .leftJoin('malla_sombra as ms', 'p.id_mcr', 'ms.id_mcr')
+                .where('tc.id_op', id)
+                .select(
+                    'tc.*',
+                    'p.largo_m as pano_largo',
+                    'p.ancho_m as pano_ancho',
+                    'p.area_m2 as pano_area',
+                    'p.precio_x_unidad',
+                    'p.estado as estado_pano',
+                    'rp.tipo_red',
+                    'rp.descripcion as descripcion_producto',
+                    // Nylon
+                    'n.calibre as nylon_calibre',
+                    'n.cuadro as nylon_cuadro',
+                    'n.torsion as nylon_torsion',
+                    'n.refuerzo as nylon_refuerzo',
+                    // Lona
+                    'l.color as lona_color',
+                    'l.presentacion as lona_presentacion',
+                    // Polipropileno
+                    'pp.grosor as polipropileno_grosor',
+                    'pp.cuadro as polipropileno_cuadro',
+                    // Malla sombra
+                    'ms.color_tipo_red as malla_color_tipo_red',
+                    'ms.presentacion as malla_presentacion'
+                );
+
+            // Obtener planes de corte para cada trabajo
+            for (const job of cutJobs) {
+                job.plans = await trx('plan_corte_pieza')
+                    .where('job_id', job.job_id)
+                    .orderBy('seq')
+                    .select('*');
+            }
+
+            // Obtener sobrantes (remnants) para esta orden
+            const sobrantes = await trx('panos_sobrantes')
+                .where('id_op', id)
+                .select('*');
+
+            // Preparar datos de panos para PDF basados en trabajo_corte
+            const panosParaPDF = cutJobs.map(job => {
+                // Determinar campos técnicos según tipo_red
+                let calibre, cuadro, torsion, refuerzo, color, presentacion, grosor, color_tipo_red;
+                switch ((job.tipo_red || '').toLowerCase()) {
+                    case 'nylon':
+                        calibre = job.nylon_calibre;
+                        cuadro = job.nylon_cuadro;
+                        torsion = job.nylon_torsion;
+                        refuerzo = job.nylon_refuerzo;
+                        break;
+                    case 'lona':
+                        color = job.lona_color;
+                        presentacion = job.lona_presentacion;
+                        break;
+                    case 'polipropileno':
+                        grosor = job.polipropileno_grosor;
+                        cuadro = job.polipropileno_cuadro;
+                        break;
+                    case 'malla sombra':
+                        color_tipo_red = job.malla_color_tipo_red;
+                        presentacion = job.malla_presentacion;
+                        break;
+                }
+
+                return {
+                    id_item: job.id_item,
+                    largo_m: job.altura_req,  // altura_req es el largo solicitado
+                    ancho_m: job.ancho_req,   // ancho_req es el ancho solicitado
+                    cantidad: 1,
+                    tipo_red: job.tipo_red || 'nylon',
+                    area_m2: job.area_req,
+                    precio_m2: job.precio_x_unidad,
+                    // Datos del pano original
+                    pano_original_largo: job.pano_largo,
+                    pano_original_ancho: job.pano_ancho,
+                    pano_original_area: job.pano_area,
+                    calibre,
+                    cuadro,
+                    torsion,
+                    refuerzo,
+                    color,
+                    presentacion,
+                    grosor,
+                    color_tipo_red
+                };
+            });
+
+            // Obtener detalles de materiales
+            const materiales = await trx('orden_produccion_detalle as opd')
+                .leftJoin('materiales_extras as me', 'opd.id_item', 'me.id_item')
+                .where('opd.id_op', id)
+                .where('opd.tipo_item', 'EXTRA')
+                .select(
+                    'opd.*',
+                    'me.descripcion',
+                    'me.categoria',
+                    'me.unidad'
+                );
+            
+            // Obtener herramientas asignadas
+            const herramientas = await trx('herramienta_ordenada as ho')
+                .leftJoin('herramientas as h', 'ho.id_item', 'h.id_item')
+                .where('ho.id_op', id)
+                .select(
+                    'ho.*',
+                    'h.descripcion',
+                    'h.categoria',
+                    'h.marca'
+                );
+
+            // Preparar datos para el PDF
+            ordenData.panos = panosParaPDF;
+            ordenData.materiales = materiales.map(material => ({
+                descripcion: material.descripcion,
+                categoria: material.categoria,
+                cantidad: material.cantidad,
+                unidad: material.unidad
+            }));
+            ordenData.herramientas = herramientas.map(herramienta => ({
+                nombre: herramienta.descripcion || 'Herramienta',
+                descripcion: herramienta.descripcion || '',
+                categoria: herramienta.categoria || 'General',
+                cantidad: herramienta.cantidad || 1
+            }));
+
+            // Format cuts data for PDF generation
+            ordenData.cuts = cutJobs.map(job => ({
+                id_item: job.id_item,
+                altura_req: job.altura_req,
+                ancho_req: job.ancho_req,
+                pano_original: {
+                    largo: job.pano_largo,
+                    ancho: job.pano_ancho,
+                    area: job.pano_area
+                },
+                plans: job.plans.map(plan => ({
+                    rol_pieza: plan.rol_pieza,
+                    altura_plan: plan.altura_plan,
+                    ancho_plan: plan.ancho_plan,
+                    seq: plan.seq
+                }))
+            }));
+
+            // Add remnants data
+            ordenData.sobrantes = sobrantes.map(sobrante => ({
+                id_remnant: sobrante.id_remnant,
+                altura_m: sobrante.altura_m,
+                ancho_m: sobrante.ancho_m,
+                area_m2: sobrante.area_m2,
+                parent_id_item: sobrante.id_item_padre
+            }));
+
+            // Generate PDF
+            const pdfService = require('../services/pdfService');
+            const { filepath, filename } = await pdfService.generateOrdenProduccionPDF(ordenData);
+
+            // Enviar webhook a Make.com con el PDF cuando la orden se aprueba
+            try {
+                const makeWebhookService = require('../services/makeWebhookService');
+                
+                // Preparar datos completos de la orden para el webhook
+                const ordenCompleta = {
+                    ...ordenData,
+                    // Agregar información adicional para el webhook
+                    webhook_event: 'orden_aprobada',
+                    webhook_timestamp: new Date().toISOString(),
+                    pdf_generated: true,
+                    pdf_filename: filename,
+                    pdf_filepath: filepath
+                };
+
+                logger.info('Enviando webhook a Make.com - Orden aprobada', {
+                    ordenId: id,
+                    numeroOp: ordenData.numero_op,
+                    cliente: ordenData.cliente,
+                    pdfFilename: filename
+                });
+
+                // Enviar webhook con PDF adjunto
+                const webhookResult = await makeWebhookService.enviarOrdenEnProceso(ordenCompleta);
+                
+                logger.info('Webhook enviado exitosamente a Make.com', {
+                    ordenId: id,
+                    success: webhookResult.success,
+                    pdfIncluido: webhookResult.pdfIncluido,
+                    status: webhookResult.status
+                });
+
+            } catch (webhookError) {
+                logger.error('Error enviando webhook a Make.com', {
+                    ordenId: id,
+                    error: webhookError.message
+                });
+                // No fallar la aprobación si el webhook falla
+            }
+
+            await trx.commit();
+            res.json({ 
+                success: true, 
+                message: 'Orden aprobada y PDF generado', 
+                pdf: filename,
+                webhook_sent: true
+            });
+        } catch (error) {
+            await trx.rollback();
+            logger.error('Error aprobando orden:', error);
+            
+            // Si es un error de validación, devolver mensaje estructurado
+            if (error.name === 'ValidationError') {
+                return res.status(400).json({
+                    success: false,
+                    errorType: 'ValidationError',
+                    message: error.message,
+                    details: error.errors || []
+                });
+            }
+            
+            // Si es un error de conflicto (paños bloqueados), devolver mensaje estructurado
+            if (error.name === 'ConflictError') {
+                return res.status(409).json({
+                    success: false,
+                    errorType: 'ConflictError',
+                    message: error.message,
+                    details: error.errors || []
+                });
+            }
+            
+            // Otros errores
+            return res.status(500).json({
+                success: false,
+                errorType: 'InternalError',
+                message: 'Error interno del servidor. Por favor, intenta de nuevo más tarde.'
+            });
+        }
+    },
+
+    // Nueva: Obtener trabajos de corte pendientes para operador (agrupados por orden)
+    getCutJobs: async (req, res) => {
+        try {
+            const { id } = req.user;
+            
+            // Obtener órdenes con trabajos de corte pendientes
+            const ordersWithJobs = await db('orden_produccion as op')
+                .join('trabajo_corte as tc', 'op.id_op', 'tc.id_op')
+                .leftJoin('cliente as c', 'op.id_cliente', 'c.id_cliente')
+                .where('tc.id_operador', id)
+                .where('tc.estado', 'En progreso')
+                .where('op.estado', 'en_proceso')
+                .select(
+                    'op.id_op',
+                    'op.numero_op',
+                    'op.cliente',
+                    'op.fecha_op',
+                    'op.prioridad',
+                    'c.nombre_cliente',
+                    'c.email as cliente_email',
+                    'c.telefono as cliente_telefono',
+                    db.raw('COUNT(tc.job_id) as total_cuts'),
+                    db.raw('COUNT(tc.job_id) as pending_cuts')
+                )
+                .groupBy('op.id_op', 'op.numero_op', 'op.cliente', 'op.fecha_op', 'op.prioridad', 'c.nombre_cliente', 'c.email', 'c.telefono')
+                .orderBy('op.fecha_op', 'desc');
+
+            // Para cada orden, obtener los trabajos de corte detallados
+            const ordersWithCutDetails = await Promise.all(
+                ordersWithJobs.map(async (order) => {
+                    const cutJobs = await db('trabajo_corte as tc')
+                        .leftJoin('pano as p', 'tc.id_item', 'p.id_item')
+                        .leftJoin('red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
+                        .where('tc.id_op', order.id_op)
+                        .where('tc.id_operador', id)
+                        .where('tc.estado', 'En progreso')
+                        .select(
+                            'tc.job_id',
+                            'tc.altura_req',
+                            'tc.ancho_req',
+                            'tc.area_req',
+                            'tc.estado',
+                            'tc.created_at',
+                            'p.id_item',
+                            'p.largo_m as pano_largo',
+                            'p.ancho_m as pano_ancho',
+                            'p.area_m2 as pano_area',
+                            'rp.tipo_red',
+                            'rp.descripcion as descripcion_producto'
+                        )
+                        .orderBy('tc.created_at', 'asc');
+
+                    // Ensure numeric values for counts
+                    const processedOrder = {
+                        ...order,
+                        total_cuts: parseInt(order.total_cuts) || 0,
+                        pending_cuts: parseInt(order.pending_cuts) || 0,
+                        cut_jobs: cutJobs
+                    };
+
+                    logger.info('Processed order data:', {
+                        id_op: processedOrder.id_op,
+                        numero_op: processedOrder.numero_op,
+                        total_cuts: processedOrder.total_cuts,
+                        pending_cuts: processedOrder.pending_cuts,
+                        cut_jobs_count: cutJobs.length
+                    });
+
+                    return processedOrder;
+                })
+            );
+
+            res.json({ 
+                success: true, 
+                data: ordersWithCutDetails 
+            });
+        } catch (error) {
+            logger.error('Error obteniendo trabajos de corte:', error);
+            throw error;
+        }
+    },
+
+    // Nueva: Obtener trabajos de corte completados para operador (agrupados por orden)
+    getCompletedCutJobs: async (req, res) => {
+        try {
+            const { id } = req.user;
+            const { page = 1, limit = 10 } = req.query;
+            
+            // Obtener órdenes con trabajos de corte completados (incluye Confirmado y Desviado)
+            const ordersWithCompletedJobs = await db('orden_produccion as op')
+                .join('trabajo_corte as tc', 'op.id_op', 'tc.id_op')
+                .leftJoin('cliente as c', 'op.id_cliente', 'c.id_cliente')
+                .where('tc.id_operador', id)
+                .whereIn('tc.estado', ['Confirmado', 'Desviado'])
+                .select(
+                    'op.id_op',
+                    'op.numero_op',
+                    'op.cliente',
+                    'op.fecha_op',
+                    'op.prioridad',
+                    'c.nombre_cliente',
+                    'c.email as cliente_email',
+                    'c.telefono as cliente_telefono',
+                    db.raw('COUNT(tc.job_id) as total_cuts'),
+                    db.raw('COUNT(CASE WHEN tc.estado IN (\'Confirmado\', \'Desviado\') THEN 1 END) as completed_cuts'),
+                    db.raw('MAX(tc.completed_at) as last_completed_date')
+                )
+                .groupBy('op.id_op', 'op.numero_op', 'op.cliente', 'op.fecha_op', 'op.prioridad', 'c.nombre_cliente', 'c.email', 'c.telefono')
+                .orderBy('last_completed_date', 'desc');
+
+            // Contar total para paginación
+            const total = ordersWithCompletedJobs.length;
+            const offset = (parseInt(page) - 1) * parseInt(limit);
+            const paginatedOrders = ordersWithCompletedJobs.slice(offset, offset + parseInt(limit));
+
+            // Para cada orden, obtener los trabajos de corte detallados
+            const ordersWithCutDetails = await Promise.all(
+                paginatedOrders.map(async (order) => {
+                    const cutJobs = await db('trabajo_corte as tc')
+                        .leftJoin('pano as p', 'tc.id_item', 'p.id_item')
+                        .leftJoin('red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
+                        .leftJoin('nylon as n', 'p.id_mcr', 'n.id_mcr')
+                        .leftJoin('lona as l', 'p.id_mcr', 'l.id_mcr')
+                        .leftJoin('polipropileno as pp', 'p.id_mcr', 'pp.id_mcr')
+                        .leftJoin('malla_sombra as ms', 'p.id_mcr', 'ms.id_mcr')
+                        .where('tc.id_op', order.id_op)
+                        .where('tc.id_operador', id)
+                        .whereIn('tc.estado', ['Confirmado', 'Desviado'])
+                        .select(
+                            'tc.job_id',
+                            'tc.altura_req',
+                            'tc.ancho_req',
+                            'tc.area_req',
+                            'tc.estado',
+                            'tc.created_at',
+                            'tc.completed_at',
+                            'p.id_item',
+                            'p.largo_m as pano_largo',
+                            'p.ancho_m as pano_ancho',
+                            'p.area_m2 as pano_area',
+                            'rp.tipo_red',
+                            'rp.descripcion as descripcion_producto',
+                            // Nylon
+                            'n.calibre as nylon_calibre',
+                            'n.cuadro as nylon_cuadro',
+                            'n.torsion as nylon_torsion',
+                            'n.refuerzo as nylon_refuerzo',
+                            // Lona
+                            'l.color as lona_color',
+                            'l.presentacion as lona_presentacion',
+                            // Polipropileno
+                            'pp.grosor as polipropileno_grosor',
+                            'pp.cuadro as polipropileno_cuadro',
+                            // Malla sombra
+                            'ms.color_tipo_red as malla_color_tipo_red',
+                            'ms.presentacion as malla_presentacion'
+                        )
+                        .orderBy('tc.completed_at', 'desc');
+
+                    // Get cut plans and real cuts for each job
+                    for (const job of cutJobs) {
+                        job.plans = await db('plan_corte_pieza')
+                            .where('job_id', job.job_id)
+                            .orderBy('seq')
+                            .select('*');
+                        
+                        job.real_cuts = await db('real_corte_pieza')
+                            .where('job_id', job.job_id)
+                            .orderBy('seq')
+                            .select('*');
+                    }
+
+                    // Ensure numeric values for counts
+                    const processedOrder = {
+                        ...order,
+                        total_cuts: parseInt(order.total_cuts) || 0,
+                        completed_cuts: parseInt(order.completed_cuts) || 0,
+                        cut_jobs: cutJobs
+                    };
+
+                    return processedOrder;
+                })
+            );
+
+            res.json({ 
+                success: true, 
+                data: ordersWithCutDetails,
+                pagination: {
+                    page: parseInt(page),
+                    limit: parseInt(limit),
+                    total,
+                    totalPages: Math.ceil(total / parseInt(limit))
+                }
+            });
+        } catch (error) {
+            logger.error('Error obteniendo trabajos de corte completados:', error);
+            throw error;
+        }
+    },
+
+    // Nueva: Obtener planes de corte para un trabajo específico
+    getCutJobPlans: async (req, res) => {
+        try {
+            const { jobId } = req.params;
+            const { id } = req.user;
+            
+            // Verificar que el trabajo pertenece al operador
+            const job = await db('trabajo_corte')
+                .where('job_id', jobId)
+                .where('id_operador', id)
+                .first();
+            
+            if (!job) {
+                throw new NotFoundError('Trabajo de corte no encontrado');
+            }
+
+            const plans = await db('plan_corte_pieza')
+                .where('job_id', jobId)
+                .orderBy('seq')
+                .select('*');
+
+            res.json({ success: true, data: plans });
+        } catch (error) {
+            logger.error('Error obteniendo planes de corte:', error);
+            throw error;
+        }
+    },
+
+    // Nueva: Enviar cortes reales y confirmar (corregir path)
+    submitActualCuts: async (req, res) => {
+        logger.info('DEBUG_MARKER: submitActualCuts handler is running');
+        logger.info('DEBUG_VERSION:', ordenesController._debugVersion);
+        const { job_id, actual_pieces } = req.body;
+        const { id } = req.user;
+        const trx = await db.transaction();
+        try {
+            const job = await trx('trabajo_corte').where('job_id', job_id).first();
+            if (!job || job.id_operador !== id) {
+                throw new ValidationError('Trabajo no encontrado o no asignado');
+            }
+
+            // Check if pieces already exist to prevent duplicates
+            const existingPieces = await trx('real_corte_pieza')
+                .where('job_id', job_id)
+                .select('seq');
+            
+            const existingSeqs = existingPieces.map(p => p.seq);
+            logger.info('Existing pieces for job:', { job_id, existingSeqs });
+            
+            // Filter out pieces that already exist
+            const newPieces = actual_pieces.filter(piece => !existingSeqs.includes(piece.seq));
+            logger.info('New pieces to insert:', { job_id, newPieces: newPieces.map(p => p.seq) });
+            
+            if (newPieces.length === 0) {
+                logger.info('No new pieces to insert, all pieces already exist');
+                // Continue with the rest of the logic even if no new pieces
+            } else {
+                // Insert only new real_corte_pieza
+                for (const piece of newPieces) {
+                await trx('real_corte_pieza').insert({
+                    job_id,
+                    seq: piece.seq,
+                    altura_real: piece.altura_real,
+                    ancho_real: piece.ancho_real
+                });
+                }
+            }
+
+            // Comparar y confirmar
+            const plans = await trx('plan_corte_pieza').where('job_id', job_id).select('*');
+            const reals = await trx('real_corte_pieza').where('job_id', job_id).select('*');
+
+            const conteo_esperado = plans.length;
+            const conteo_real = reals.length;
+            const area_esperada = plans.reduce((sum, p) => sum + p.altura_plan * p.ancho_plan, 0);
+            const area_real = reals.reduce((sum, r) => sum + r.altura_real * r.ancho_real, 0);
+            
+            // Fix: Cap delta_pct to prevent numeric overflow (max 999.9999)
+            let delta_pct = 0;
+            if (area_esperada > 0) {
+                delta_pct = Math.abs((area_real - area_esperada) / area_esperada) * 100;
+                // Cap at 999.9999 to prevent numeric overflow
+                delta_pct = Math.min(delta_pct, 999.9999);
+            }
+
+            const tolerance = 5; // %
+            const withinTolerance = delta_pct <= tolerance && conteo_real === conteo_esperado;
+
+            // Insert reporte_variacion
+            await trx('reporte_variacion').insert({
+                job_id,
+                conteo_esperado,
+                area_esperada,
+                conteo_real,
+                area_real,
+                delta_pct,
+                resolucion: withinTolerance ? 'Anulado' : 'Abrir',
+                resolved_by: withinTolerance ? id : null,
+                resolved_at: withinTolerance ? db.fn.now() : null,
+                old_status: job.estado,
+                new_status: withinTolerance ? 'Confirmado' : 'Desviado'
+            });
+
+            if (withinTolerance) {
+                await trx('trabajo_corte').where('job_id', job_id).update({ 
+                    estado: 'Confirmado', 
+                    completed_at: db.fn.now() 
+                });
+                
+                // DISCOUNT PANO FROM INVENTORY WHEN CUT IS COMPLETED
+                const panoOriginal = await trx('pano').where('id_item', job.id_item).first();
+                if (panoOriginal) {
+                    // Calculate area consumed (requested area)
+                    const areaConsumida = job.altura_req * job.ancho_req;
+                    
+                    // Register pano consumption movement
+                    await trx('movimiento_inventario').insert({
+                        id_item: job.id_item,
+                        tipo_mov: 'CONSUMO',
+                        cantidad: areaConsumida,
+                        unidad: 'm²',
+                        notas: `Consumo de paño para corte: ${job.altura_req}m x ${job.ancho_req}m = ${areaConsumida.toFixed(2)}m²`,
+                        id_op: job.id_op,
+                        id_usuario: id
+                    });
+                    
+                                            // Update pano dimensions (subtract consumed area)
+                        const nuevaArea = Math.max(0, panoOriginal.area_m2 - areaConsumida);
+                        
+                        // Since area_m2 is a generated column, we need to update largo_m and ancho_m instead
+                        // Calculate new dimensions based on remaining area
+                        let nuevoLargo = panoOriginal.largo_m;
+                        let nuevoAncho = panoOriginal.ancho_m;
+                        
+                        if (nuevaArea > 0) {
+                            // Keep the same proportions but reduce the area
+                            const factor = Math.sqrt(nuevaArea / panoOriginal.area_m2);
+                            nuevoLargo = panoOriginal.largo_m * factor;
+                            nuevoAncho = panoOriginal.ancho_m * factor;
+                        } else {
+                            // If no area left, set to minimum values
+                            nuevoLargo = 0.01;
+                            nuevoAncho = 0.01;
+                        }
+                        
+                        await trx('pano')
+                            .where('id_item', job.id_item)
+                            .update({
+                                largo_m: nuevoLargo,
+                                ancho_m: nuevoAncho,
+                                // Cuando se completa un corte, el paño pasa a 'En progreso' porque el trabajo ya se hizo
+                                // pero la orden sigue en proceso. Solo cambiar aConsumido si no queda área
+                                estado_trabajo: nuevaArea >0 ? 'En progreso' : 'Consumido',
+                                updated_at: db.fn.now()
+                            });
+                    
+                    logger.info('Pano discounted on cut completion:', {
+                        pano_id: job.id_item,
+                        area_consumida: areaConsumida,
+                        area_restante: nuevaArea,
+                        job_id: job_id,
+                        orden_id: job.id_op
+                    });
+                }
+                
+                // Migrar remanentes válidos a pano
+                const sobrantes = await trx('panos_sobrantes')
+                    .select('id_remnant', 'id_item_padre', 'altura_m', 'ancho_m', 'estado', 'id_op')
+                    .where('id_op', job.id_op)
+                    .where('estado', 'Pendiente');
+                
+                // Debug: Log the raw data retrieved
+                logger.info('Raw sobrantes data (submitActualCuts):', JSON.stringify(sobrantes, null, 2));
+                logger.info('Number of sobrantes found:', sobrantes.length);
+                
+                for (const sob of sobrantes) {
+                    // Calculate area from dimensions
+                    const area_m2 = parseFloat(sob.altura_m || 0) * parseFloat(sob.ancho_m || 0);
+                    const umbral = job.umbral_sobrante_m2 || 5.0; // Default to 5.0 m² if not defined
+                    
+                    // Debug logging
+                    logger.info('Processing sobrante:', {
+                        id_remnant: sob.id_remnant,
+                        id_item_padre: sob.id_item_padre,
+                        id_item_padre_type: typeof sob.id_item_padre,
+                        altura_m: sob.altura_m,
+                        ancho_m: sob.ancho_m,
+                        area_m2: area_m2,
+                        umbral: umbral
+                    });
+
+                    let idItemPadre = sob.id_item_padre;
+                    
+                    // DEBUG: Log the original value and its type
+                    logger.info('=== PARSING DEBUG START ===');
+                    logger.info('Original id_item_padre:', { 
+                        value: idItemPadre, 
+                        type: typeof idItemPadre, 
+                        isNull: idItemPadre === null,
+                        isUndefined: idItemPadre === undefined,
+                        stringified: JSON.stringify(idItemPadre)
+                    });
+                    
+                    // Enhanced parsing logic to handle all possible cases
+                    if (typeof idItemPadre === 'object' && idItemPadre !== null) {
+                        // If it's already a JSON object, extract the id_item
+                        logger.info('Processing as object:', { 
+                            hasIdItem: 'id_item' in idItemPadre,
+                            hasIdItemPadre: 'id_item_padre' in idItemPadre,
+                            keys: Object.keys(idItemPadre)
+                        });
+                        idItemPadre = idItemPadre.id_item || idItemPadre.id_item_padre;
+                        logger.info('Extracted from object:', { idItemPadre });
+                    } else if (typeof idItemPadre === 'string') {
+                        // If it's a string, check if it's JSON
+                        logger.info('Processing as string:', { 
+                            length: idItemPadre.length,
+                            startsWithBrace: idItemPadre.startsWith('{'),
+                            value: idItemPadre
+                        });
+                        if (idItemPadre.startsWith('{')) {
+                            try {
+                                const parsed = JSON.parse(idItemPadre);
+                                logger.info('Successfully parsed JSON:', { parsed });
+                                idItemPadre = parsed.id_item || parsed.id_item_padre;
+                                logger.info('Extracted from parsed JSON:', { idItemPadre });
+                            } catch (e) {
+                                logger.error('Failed to parse id_item_padre string:', { id_item_padre: idItemPadre, error: e.message });
+                            }
+                        }
+                    } else {
+                        logger.info('Processing as other type:', { type: typeof idItemPadre, value: idItemPadre });
+                    }
+                    
+                    // Convert to integer
+                    const beforeParseInt = idItemPadre;
+                    idItemPadre = parseInt(idItemPadre, 10);
+                    logger.info('After parseInt:', { 
+                        before: beforeParseInt, 
+                        after: idItemPadre, 
+                        isNaN: isNaN(idItemPadre),
+                        isInteger: Number.isInteger(idItemPadre)
+                    });
+                    
+                    if (!idItemPadre || isNaN(idItemPadre)) {
+                        logger.error('Invalid id_item_padre after parsing:', { 
+                            original: sob.id_item_padre, 
+                            extracted: idItemPadre,
+                            beforeParseInt: beforeParseInt
+                        });
+                        logger.info('=== PARSING DEBUG END (INVALID) ===');
+                        continue;
+                    }
+                    
+                    logger.info('=== PARSING DEBUG END (SUCCESS) ===');
+                    logger.info('Final idItemPadre to insert into movimiento_inventario:', { idItemPadre });
+
+                    if (area_m2 >= umbral) {
+                        const parentPano = await trx('pano').where('id_item', idItemPadre).first();
+                        if (!parentPano) {
+                            logger.error('Parent pano not found:', { id_item_padre: idItemPadre });
+                            continue; // Skip this sobrante
+                        }
+
+                        const [new_id] = await trx('pano').insert({
+                            id_mcr: parentPano.id_mcr,
+                            largo_m: sob.altura_m,
+                            ancho_m: sob.ancho_m,
+                            estado: 'bueno',
+                            estado_trabajo: 'Libre'
+                        }).returning('id_item');
+                        
+                        // DEBUG: Log the new_id value and type
+                        logger.info('New pano created - new_id:', { 
+                            new_id: new_id, 
+                            type: typeof new_id,
+                            isObject: typeof new_id === 'object',
+                            stringified: JSON.stringify(new_id)
+                        });
+                        
+                        // Extract id_item if it's an object
+                        let finalNewId = new_id;
+                        if (typeof new_id === 'object' && new_id !== null) {
+                            finalNewId = new_id.id_item || new_id.id;
+                            logger.info('Extracted id_item from object:', { 
+                                original: new_id, 
+                                extracted: finalNewId 
+                            });
+                        }
+                        
+                        // Convert to integer
+                        finalNewId = parseInt(finalNewId, 10);
+                        logger.info('Final new_id after parsing:', { 
+                            finalNewId: finalNewId,
+                            isInteger: Number.isInteger(finalNewId)
+                        });
+                        
+                        // Debug: Log the exact data being inserted
+                            const movimientoData = {
+                            tipo_mov: 'AJUSTE_IN',
+                                cantidad: area_m2,
+                            unidad: 'm²',
+                            notas: 'Remanente migrado',
+                                id_item: finalNewId,
+                            id_op: job.id_op,
+                            id_usuario: id
+                            };
+                            
+                            // FAILSAFE: Validate id_item before insertion
+                            if (typeof movimientoData.id_item !== 'number' || !Number.isInteger(movimientoData.id_item)) {
+                                logger.error('!!! FAILSAFE TRIGGERED: Invalid id_item in AJUSTE_IN (individual):', {
+                                    id_item: movimientoData.id_item,
+                                    type: typeof movimientoData.id_item,
+                                    isInteger: Number.isInteger(movimientoData.id_item)
+                                });
+                                throw new Error(`Invalid id_item for AJUSTE_IN (individual): ${movimientoData.id_item} (type: ${typeof movimientoData.id_item})`);
+                            }
+                            
+                            logger.info('Inserting movimiento_inventario (AJUSTE_IN) - individual:', movimientoData);
+                            
+                            await trx('movimiento_inventario').insert(movimientoData);
+                    } else {
+                            // Debug: Log the exact data being inserted
+                            const movimientoData = {
+                            tipo_mov: 'AJUSTE_OUT',
+                                cantidad: area_m2,
+                            unidad: 'm²',
+                            notas: 'Desperdicio remanente',
+                                id_item: idItemPadre,
+                            id_op: job.id_op,
+                            id_usuario: id
+                            };
+                            
+                            // FAILSAFE: Validate id_item before insertion
+                            if (typeof movimientoData.id_item !== 'number' || !Number.isInteger(movimientoData.id_item)) {
+                                logger.error('!!! FAILSAFE TRIGGERED: Invalid id_item in AJUSTE_OUT (individual):', {
+                                    id_item: movimientoData.id_item,
+                                    type: typeof movimientoData.id_item,
+                                    isInteger: Number.isInteger(movimientoData.id_item)
+                                });
+                                throw new Error(`Invalid id_item for AJUSTE_OUT (individual): ${movimientoData.id_item} (type: ${typeof movimientoData.id_item})`);
+                            }
+                            
+                            logger.info('Inserting movimiento_inventario (AJUSTE_OUT) - individual:', movimientoData);
+                            
+                            await trx('movimiento_inventario').insert(movimientoData);
+                    }
+                    await trx('panos_sobrantes')
+                        .where('id_remnant', sob.id_remnant)
+                        .update({ estado: 'Migrado' });
+                }
+                
+                // Check if all jobs done, set orden to 'completada'
+                const pendingJobs = await trx('trabajo_corte')
+                    .where('id_op', job.id_op)
+                    .whereNotIn('estado', ['Confirmado', 'Desviado'])
+                    .count('* as count')
+                    .first();
+                    
+                if (pendingJobs.count === 0) {
+                    await trx('orden_produccion').where('id_op', job.id_op).update({ estado: 'completada' });
+                    
+                    // Liberar todos los paños de esta orden ya que está completada
+                    await trx('pano')
+                        .whereIn('id_item', function() {
+                            this.select('id_item').from('trabajo_corte').where('id_op', job.id_op);
+                        })
+                        .update({ 
+                            estado_trabajo: 'Libre',
+                            updated_at: db.fn.now()
+                        });
+                    
+                    logger.info('Order completed - all paños liberated:', {
+                        orden_id: job.id_op
+                    });
+                    
+                    // Materials are already discounted when order was approved
+                    // Only panos are processed during cut completion
+                    logger.info('Order completed - materials already discounted on approval:', {
+                        orden_id: job.id_op
+                    });
+                }
+            } else {
+                // Mark as deviated - requires admin approval
+                await trx('trabajo_corte').where('job_id', job_id).update({ 
+                    estado: 'Desviado', 
+                    completed_at: db.fn.now() 
+                });
+                
+                logger.info('Job marked as deviated - requires admin approval:', {
+                    job_id: job_id,
+                    delta_pct: delta_pct.toFixed(2),
+                    tolerance: tolerance
+                });
+            }
+
+            await trx.commit();
+            res.json({ success: true, message: 'Cortes submetidos y procesados' });
+        } catch (error) {
+            await trx.rollback();
+            logger.error('Error en submitActualCuts:', error);
+            throw error;
+        }
+    },
+
+    // Nueva: Obtener información detallada de cortes para una orden específica
+    getOrderCutDetails: async (req, res) => {
+        try {
+            const { orderId } = req.params;
+            const { id } = req.user;
+            
+            // Verificar que la orden existe (no filter by estado to allow both pending and completed)
+            const order = await db('orden_produccion as op')
+                .leftJoin('cliente as c', 'op.id_cliente', 'c.id_cliente')
+                .where('op.id_op', orderId)
+                .select(
+                    'op.*',
+                    'c.nombre_cliente',
+                    'c.email as cliente_email',
+                    'c.telefono as cliente_telefono'
+                )
+                .first();
+            
+            if (!order) {
+                throw new NotFoundError('Orden de producción no encontrada');
+            }
+
+            // Obtener trabajos de corte para esta orden (both pending and completed)
+            const cutJobs = await db('trabajo_corte as tc')
+                .leftJoin('pano as p', 'tc.id_item', 'p.id_item')
+                .leftJoin('red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
+                .leftJoin('nylon as n', 'p.id_mcr', 'n.id_mcr')
+                .leftJoin('lona as l', 'p.id_mcr', 'l.id_mcr')
+                .leftJoin('polipropileno as pp', 'p.id_mcr', 'pp.id_mcr')
+                .leftJoin('malla_sombra as ms', 'p.id_mcr', 'ms.id_mcr')
+                .where('tc.id_op', orderId)
+                .where('tc.id_operador', id)
+                .whereIn('tc.estado', ['En progreso', 'Confirmado', 'Desviado'])
+                .select(
+                    'tc.job_id',
+                    'tc.altura_req',
+                    'tc.ancho_req',
+                    'tc.area_req',
+                    'tc.estado',
+                    'tc.created_at',
+                    'tc.completed_at',
+                    'p.id_item',
+                    'p.largo_m as pano_largo',
+                    'p.ancho_m as pano_ancho',
+                    'p.area_m2 as pano_area',
+                    'p.estado as estado_pano',
+                    'rp.tipo_red',
+                    'rp.descripcion as descripcion_producto',
+                    // Nylon
+                    'n.calibre as nylon_calibre',
+                    'n.cuadro as nylon_cuadro',
+                    'n.torsion as nylon_torsion',
+                    'n.refuerzo as nylon_refuerzo',
+                    // Lona
+                    'l.color as lona_color',
+                    'l.presentacion as lona_presentacion',
+                    // Polipropileno
+                    'pp.grosor as polipropileno_grosor',
+                    'pp.cuadro as polipropileno_cuadro',
+                    // Malla sombra
+                    'ms.color_tipo_red as malla_color_tipo_red',
+                    'ms.presentacion as malla_presentacion'
+                )
+                .orderBy('tc.created_at', 'asc');
+
+            if (cutJobs.length === 0) {
+                throw new NotFoundError('No hay trabajos de corte asignados a este operador para esta orden');
+            }
+
+            // Obtener planes de corte para cada trabajo
+            for (const job of cutJobs) {
+                job.plans = await db('plan_corte_pieza')
+                    .where('job_id', job.job_id)
+                    .orderBy('seq')
+                    .select('*');
+                
+                // Obtener cortes reales ya registrados (si existen)
+                job.real_cuts = await db('real_corte_pieza')
+                    .where('job_id', job.job_id)
+                    .orderBy('seq')
+                    .select('*');
+            }
+
+            res.json({ 
+                success: true, 
+                data: {
+                    order,
+                    cut_jobs: cutJobs
+                }
+            });
+        } catch (error) {
+            logger.error('Error obteniendo detalles de corte de orden:', error);
+            throw error;
+        }
+    },
+
+    // Nueva: Enviar cortes individuales para un trabajo específico
+    submitIndividualCut: async (req, res) => {
+        logger.info('DEBUG_MARKER: submitIndividualCut handler is running');
+        logger.info('DEBUG_VERSION:', ordenesController._debugVersion);
+        const { job_id, actual_pieces } = req.body;
+        const { id } = req.user;
+        const trx = await db.transaction();
+        try {
+            const job = await trx('trabajo_corte').where('job_id', job_id).first();
+            if (!job || job.id_operador !== id) {
+                throw new ValidationError('Trabajo no encontrado o no asignado');
+            }
+
+            // Check if pieces already exist to prevent duplicates
+            const existingPieces = await trx('real_corte_pieza')
+                .where('job_id', job_id)
+                .select('seq');
+            
+            const existingSeqs = existingPieces.map(p => p.seq);
+            logger.info('Existing pieces for job (individual):', { job_id, existingSeqs });
+            
+            // Filter out pieces that already exist
+            const newPieces = actual_pieces.filter(piece => !existingSeqs.includes(piece.seq));
+            logger.info('New pieces to insert (individual):', { job_id, newPieces: newPieces.map(p => p.seq) });
+            
+            if (newPieces.length === 0) {
+                logger.info('No new pieces to insert (individual), all pieces already exist');
+                // Continue with the rest of the logic even if no new pieces
+            } else {
+                // Insert only new real_corte_pieza for individual pieces
+                for (const piece of newPieces) {
+                    await trx('real_corte_pieza').insert({
+                        job_id,
+                        seq: piece.seq,
+                        altura_real: piece.altura_real,
+                        ancho_real: piece.ancho_real
+                    });
+                }
+            }
+
+            // Check if all pieces for this job have been submitted
+            const plans = await trx('plan_corte_pieza').where('job_id', job_id).select('*');
+            const reals = await trx('real_corte_pieza').where('job_id', job_id).select('*');
+
+            const conteo_esperado = plans.length;
+            const conteo_real = reals.length;
+            const area_esperada = plans.reduce((sum, p) => sum + p.altura_plan * p.ancho_plan, 0);
+            const area_real = reals.reduce((sum, r) => sum + r.altura_real * r.ancho_real, 0);
+            
+            // Fix: Cap delta_pct to prevent numeric overflow (max 999.9999)
+            let delta_pct = 0;
+            if (area_esperada > 0) {
+                delta_pct = Math.abs((area_real - area_esperada) / area_esperada) * 100;
+                // Cap at 999.9999 to prevent numeric overflow
+                delta_pct = Math.min(delta_pct, 999.9999);
+            }
+
+            const tolerance = 5; // %
+            const withinTolerance = delta_pct <= tolerance && conteo_real === conteo_esperado;
+
+            // Only process if all pieces are submitted
+            if (conteo_real === conteo_esperado) {
+                // Insert reporte_variacion
+                await trx('reporte_variacion').insert({
+                    job_id,
+                    conteo_esperado,
+                    area_esperada,
+                    conteo_real,
+                    area_real,
+                    delta_pct,
+                    resolucion: withinTolerance ? 'Anulado' : 'Abrir',
+                    resolved_by: withinTolerance ? id : null,
+                    resolved_at: withinTolerance ? db.fn.now() : null,
+                    old_status: job.estado,
+                    new_status: withinTolerance ? 'Confirmado' : 'Desviado'
+                });
+
+                if (withinTolerance) {
+                    await trx('trabajo_corte').where('job_id', job_id).update({ 
+                        estado: 'Confirmado', 
+                        completed_at: db.fn.now() 
+                    });
+                    
+                    // DISCOUNT PANO FROM INVENTORY WHEN CUT IS COMPLETED (INDIVIDUAL)
+                    const panoOriginal = await trx('pano').where('id_item', job.id_item).first();
+                    if (panoOriginal) {
+                        // Calculate area consumed (requested area)
+                        const areaConsumida = job.altura_req * job.ancho_req;
+                        
+                        // Register pano consumption movement
+                        await trx('movimiento_inventario').insert({
+                            id_item: job.id_item,
+                            tipo_mov: 'CONSUMO',
+                            cantidad: areaConsumida,
+                            unidad: 'm²',
+                            notas: `Consumo de paño para corte individual: ${job.altura_req}m x ${job.ancho_req}m = ${areaConsumida.toFixed(2)}m²`,
+                            id_op: job.id_op,
+                            id_usuario: id
+                        });
+                        
+                        // Update pano dimensions (subtract consumed area)
+                        const nuevaArea = Math.max(0, panoOriginal.area_m2 - areaConsumida);
+                        
+                        // Since area_m2 is a generated column, we need to update largo_m and ancho_m instead
+                        // Calculate new dimensions based on remaining area
+                        let nuevoLargo = panoOriginal.largo_m;
+                        let nuevoAncho = panoOriginal.ancho_m;
+                        
+                        if (nuevaArea > 0) {
+                            // Keep the same proportions but reduce the area
+                            const factor = Math.sqrt(nuevaArea / panoOriginal.area_m2);
+                            nuevoLargo = panoOriginal.largo_m * factor;
+                            nuevoAncho = panoOriginal.ancho_m * factor;
+                        } else {
+                            // If no area left, set to minimum values
+                            nuevoLargo = 0.01;
+                            nuevoAncho = 0.01;
+                        }
+                        
+                        await trx('pano')
+                            .where('id_item', job.id_item)
+                            .update({
+                                largo_m: nuevoLargo,
+                                ancho_m: nuevoAncho,
+                                // Cuando se completa un corte, el paño pasa a 'En progreso' porque el trabajo ya se hizo
+                                // pero la orden sigue en proceso. Solo cambiar aConsumido si no queda área
+                                estado_trabajo: nuevaArea >0 ? 'En progreso' : 'Consumido',
+                                updated_at: db.fn.now()
+                            });
+                        
+                        logger.info('Pano discounted on individual cut completion:', {
+                            pano_id: job.id_item,
+                            area_consumida: areaConsumida,
+                            area_restante: nuevaArea,
+                            job_id: job_id,
+                            orden_id: job.id_op
+                        });
+                    }
+                    
+                    // Migrar remanentes válidos a pano
+                    const sobrantes = await trx('panos_sobrantes')
+                        .where('id_op', job.id_op)
+                        .where('estado', 'Pendiente');
+                    
+                    logger.info('Number of sobrantes found (individual):', sobrantes.length);
+                    
+                    for (const sob of sobrantes) {
+                        // Calculate area from dimensions
+                        const area_m2 = parseFloat(sob.altura_m || 0) * parseFloat(sob.ancho_m || 0);
+                        const umbral = job.umbral_sobrante_m2 || 5.0; // Default to 5.0 m² if not defined
+                        
+                        // Debug logging
+                        logger.info('Processing sobrante (individual):', {
+                            id_remnant: sob.id_remnant,
+                            id_item_padre: sob.id_item_padre,
+                            id_item_padre_type: typeof sob.id_item_padre,
+                            altura_m: sob.altura_m,
+                            ancho_m: sob.ancho_m,
+                            area_m2: area_m2,
+                            umbral: umbral
+                        });
+
+                        let idItemPadre = sob.id_item_padre;
+                        
+                        // DEBUG: Log the original value and its type
+                        logger.info('=== PARSING DEBUG START (INDIVIDUAL) ===');
+                        logger.info('Original id_item_padre (individual):', { 
+                            value: idItemPadre, 
+                            type: typeof idItemPadre, 
+                            isNull: idItemPadre === null,
+                            isUndefined: idItemPadre === undefined,
+                            stringified: JSON.stringify(idItemPadre)
+                        });
+                        
+                        // Enhanced parsing logic to handle all possible cases
+                        if (typeof idItemPadre === 'object' && idItemPadre !== null) {
+                            // If it's already a JSON object, extract the id_item
+                            logger.info('Processing as object (individual):', { 
+                                hasIdItem: 'id_item' in idItemPadre,
+                                hasIdItemPadre: 'id_item_padre' in idItemPadre,
+                                keys: Object.keys(idItemPadre)
+                            });
+                            idItemPadre = idItemPadre.id_item || idItemPadre.id_item_padre;
+                            logger.info('Extracted from object (individual):', { idItemPadre });
+                        } else if (typeof idItemPadre === 'string') {
+                            // If it's a string, check if it's JSON
+                            logger.info('Processing as string (individual):', { 
+                                length: idItemPadre.length,
+                                startsWithBrace: idItemPadre.startsWith('{'),
+                                value: idItemPadre
+                            });
+                            if (idItemPadre.startsWith('{')) {
+                                try {
+                                    const parsed = JSON.parse(idItemPadre);
+                                    logger.info('Successfully parsed JSON (individual):', { parsed });
+                                    idItemPadre = parsed.id_item || parsed.id_item_padre;
+                                    logger.info('Extracted from parsed JSON (individual):', { idItemPadre });
+                                } catch (e) {
+                                    logger.error('Failed to parse id_item_padre string (individual):', { id_item_padre: idItemPadre, error: e.message });
+                                }
+                            }
+                        } else {
+                            logger.info('Processing as other type (individual):', { type: typeof idItemPadre, value: idItemPadre });
+                        }
+                        
+                        // Convert to integer
+                        const beforeParseInt = idItemPadre;
+                        idItemPadre = parseInt(idItemPadre, 10);
+                        logger.info('After parseInt (individual):', { 
+                            before: beforeParseInt, 
+                            after: idItemPadre, 
+                            isNaN: isNaN(idItemPadre),
+                            isInteger: Number.isInteger(idItemPadre)
+                        });
+                        
+                        if (!idItemPadre || isNaN(idItemPadre)) {
+                            logger.error('Invalid id_item_padre after parsing (individual):', { 
+                                original: sob.id_item_padre, 
+                                extracted: idItemPadre,
+                                beforeParseInt: beforeParseInt
+                            });
+                            logger.info('=== PARSING DEBUG END (INVALID) ===');
+                            continue;
+                        }
+                        
+                        logger.info('=== PARSING DEBUG END (SUCCESS) ===');
+                        logger.info('Final idItemPadre to insert into movimiento_inventario (individual):', { idItemPadre });
+
+                        if (area_m2 >= umbral) {
+                            const parentPano = await trx('pano').where('id_item', idItemPadre).first();
+                            if (!parentPano) {
+                                logger.error('Parent pano not found (individual):', { id_item_padre: idItemPadre });
+                                continue; // Skip this sobrante
+                            }
+
+                            const [new_id] = await trx('pano').insert({
+                                id_mcr: parentPano.id_mcr,
+                                largo_m: sob.altura_m,
+                                ancho_m: sob.ancho_m,
+                                estado: 'bueno',
+                                estado_trabajo: 'Libre'
+                            }).returning('id_item');
+                            
+                            // DEBUG: Log the new_id value and type
+                            logger.info('New pano created - new_id:', { 
+                                new_id: new_id, 
+                                type: typeof new_id,
+                                isObject: typeof new_id === 'object',
+                                stringified: JSON.stringify(new_id)
+                            });
+                            
+                            // Extract id_item if it's an object
+                            let finalNewId = new_id;
+                            if (typeof new_id === 'object' && new_id !== null) {
+                                finalNewId = new_id.id_item || new_id.id;
+                                logger.info('Extracted id_item from object:', { 
+                                    original: new_id, 
+                                    extracted: finalNewId 
+                                });
+                            }
+                            
+                            // Convert to integer
+                            finalNewId = parseInt(finalNewId, 10);
+                            logger.info('Final new_id after parsing:', { 
+                                finalNewId: finalNewId,
+                                isInteger: Number.isInteger(finalNewId)
+                            });
+                            
+                            // Debug: Log the exact data being inserted
+                            const movimientoData = {
+                                tipo_mov: 'AJUSTE_IN',
+                                cantidad: area_m2,
+                                unidad: 'm²',
+                                notas: 'Remanente migrado',
+                                id_item: finalNewId,
+                                id_op: job.id_op,
+                                id_usuario: id
+                            };
+                            
+                            // FAILSAFE: Validate id_item before insertion
+                            if (typeof movimientoData.id_item !== 'number' || !Number.isInteger(movimientoData.id_item)) {
+                                logger.error('!!! FAILSAFE TRIGGERED: Invalid id_item in AJUSTE_IN:', {
+                                    id_item: movimientoData.id_item,
+                                    type: typeof movimientoData.id_item,
+                                    isInteger: Number.isInteger(movimientoData.id_item)
+                                });
+                                throw new Error(`Invalid id_item for AJUSTE_IN: ${movimientoData.id_item} (type: ${typeof movimientoData.id_item})`);
+                            }
+                            
+                            logger.info('Inserting movimiento_inventario (AJUSTE_IN):', movimientoData);
+                            
+                            await trx('movimiento_inventario').insert(movimientoData);
+                        } else {
+                            // Debug: Log the exact data being inserted
+                            const movimientoData = {
+                                tipo_mov: 'AJUSTE_OUT',
+                                cantidad: area_m2,
+                                unidad: 'm²',
+                                notas: 'Desperdicio remanente',
+                                id_item: idItemPadre,
+                                id_op: job.id_op,
+                                id_usuario: id
+                            };
+                            
+                            // FAILSAFE: Validate id_item before insertion
+                            if (typeof movimientoData.id_item !== 'number' || !Number.isInteger(movimientoData.id_item)) {
+                                logger.error('!!! FAILSAFE TRIGGERED: Invalid id_item in AJUSTE_OUT:', {
+                                    id_item: movimientoData.id_item,
+                                    type: typeof movimientoData.id_item,
+                                    isInteger: Number.isInteger(movimientoData.id_item)
+                                });
+                                throw new Error(`Invalid id_item for AJUSTE_OUT: ${movimientoData.id_item} (type: ${typeof movimientoData.id_item})`);
+                            }
+                            
+                            logger.info('Inserting movimiento_inventario (AJUSTE_OUT):', movimientoData);
+                            
+                            await trx('movimiento_inventario').insert(movimientoData);
+                        }
+                        await trx('panos_sobrantes')
+                            .where('id_remnant', sob.id_remnant)
+                            .update({ estado: 'Migrado' });
+                    }
+                    
+                    // Check if all jobs done, set orden to 'completada'
+                    const pendingJobs = await trx('trabajo_corte')
+                        .where('id_op', job.id_op)
+                        .whereNotIn('estado', ['Confirmado', 'Desviado'])
+                        .count('* as count')
+                        .first();
+                        
+                    if (pendingJobs.count === 0) {
+                        await trx('orden_produccion').where('id_op', job.id_op).update({ estado: 'completada' });
+                        
+                        // Liberar todos los paños de esta orden ya que está completada
+                        await trx('pano')
+                            .whereIn('id_item', function() {
+                                this.select('id_item').from('trabajo_corte').where('id_op', job.id_op);
+                            })
+                            .update({ 
+                                estado_trabajo: 'Libre',
+                                updated_at: db.fn.now()
+                            });
+                        
+                        logger.info('Order completed - all paños liberated:', {
+                            orden_id: job.id_op
+                        });
+                        
+                        // Materials are already discounted when order was approved
+                        // Only panos are processed during cut completion
+                        logger.info('Order completed - materials already discounted on approval:', {
+                            orden_id: job.id_op
+                        });
+                    }
+                } else {
+                    // Mark as deviated - requires admin approval
+                    await trx('trabajo_corte').where('job_id', job_id).update({ 
+                        estado: 'Desviado', 
+                        completed_at: db.fn.now() 
+                    });
+                    
+                    logger.info('Job marked as deviated - requires admin approval:', {
+                        job_id: job_id,
+                        delta_pct: delta_pct.toFixed(2),
+                        tolerance: tolerance
+                    });
+                }
+            }
+
+            await trx.commit();
+            res.json({ 
+                success: true, 
+                message: 'Cortes individuales submetidos',
+                job_completed: conteo_real === conteo_esperado,
+                within_tolerance: withinTolerance,
+                job_status: conteo_real === conteo_esperado ? (withinTolerance ? 'Confirmado' : 'Desviado') : 'En progreso',
+                tolerance_info: {
+                    delta_percentage: delta_pct.toFixed(2),
+                    tolerance_limit: tolerance,
+                    area_expected: area_esperada.toFixed(2),
+                    area_actual: area_real.toFixed(2),
+                    pieces_expected: conteo_esperado,
+                    pieces_actual: conteo_real
+                }
+            });
+        } catch (error) {
+            await trx.rollback();
+            logger.error('Error en submitIndividualCut:', error);
             throw error;
         }
     }

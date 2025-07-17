@@ -43,11 +43,13 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchOrdenes, cambiarEstadoOrden } from '../store/slices/ordenesSlice';
+import { fetchOrdenes, cambiarEstadoOrden, approveOrden } from '../store/slices/ordenesSlice';
 import { useSnackbar } from 'notistack';
 
 const getEstadoColor = (estado) => {
   switch (estado) {
+    case 'por aprobar':
+      return 'warning';
     case 'en_proceso':
       return 'info';
     case 'completada':
@@ -63,6 +65,8 @@ const getEstadoColor = (estado) => {
 
 const getEstadoText = (estado) => {
   switch (estado) {
+    case 'por aprobar':
+      return 'Por Aprobar';
     case 'en_proceso':
       return 'En Proceso';
     case 'completada':
@@ -143,6 +147,7 @@ const OrdenesList = () => {
 
   const handleCambiarEstado = (orden, nuevoEstado) => {
     const acciones = {
+      'por aprobar': { title: 'Aprobar Orden', message: '¿Estás seguro de que quieres aprobar esta orden? Esto iniciará la producción y bloqueará los paños seleccionados.' },
       'en_proceso': { title: 'Iniciar Producción', message: '¿Estás seguro de que quieres iniciar la producción de esta orden?' },
       'completada': { title: 'Completar Orden', message: '¿Estás seguro de que quieres marcar esta orden como completada?' },
       'cancelada': { title: 'Cancelar Orden', message: '¿Estás seguro de que quieres cancelar esta orden? Esta acción no se puede deshacer.' },
@@ -160,6 +165,14 @@ const OrdenesList = () => {
 
   const confirmarAccion = async () => {
     try {
+      if (confirmDialog.action === 'en_proceso' && confirmDialog.orden.estado === 'por aprobar') {
+        // Usar approveOrden para órdenes en 'por aprobar'
+        await dispatch(approveOrden(confirmDialog.orden.id_op)).unwrap();
+        enqueueSnackbar('Orden aprobada exitosamente', { 
+          variant: 'success' 
+        });
+      } else {
+        // Usar cambiarEstadoOrden para otros cambios de estado
       await dispatch(cambiarEstadoOrden({ 
         id: confirmDialog.orden.id_op, 
         estado: confirmDialog.action 
@@ -168,18 +181,22 @@ const OrdenesList = () => {
       enqueueSnackbar(`Estado cambiado exitosamente a ${getEstadoText(confirmDialog.action)}`, { 
         variant: 'success' 
       });
+      }
       
       loadOrdenes(); // Recargar la lista
     } catch (error) {
-      enqueueSnackbar('Error al cambiar el estado de la orden', { 
-        variant: 'error' 
+      // Mostrar mensaje de error más específico para conflictos de paños
+      const errorMessage = error.message || 'Error al cambiar el estado de la orden';
+      enqueueSnackbar(errorMessage, { 
+        variant: 'error',
+        autoHideDuration: 6000 // Mostrar por más tiempo para mensajes largos
       });
     } finally {
       setConfirmDialog({ open: false, orden: null, action: null, title: '', message: '' });
     }
   };
 
-  const canStart = (estado) => false; // No hay estado pendiente, las órdenes se crean directamente en en_proceso
+  const canStart = (estado) => estado === 'por aprobar';
   const canComplete = (estado) => estado === 'en_proceso';
   const canCancel = (estado) => ['en_proceso', 'pausada'].includes(estado);
   const canPause = (estado) => estado === 'en_proceso';
@@ -248,6 +265,7 @@ const OrdenesList = () => {
                   onChange={(e) => setFiltroEstado(e.target.value)}
                 >
                   <MenuItem value="">Todos los estados</MenuItem>
+                  <MenuItem value="por aprobar">Por Aprobar</MenuItem>
                   <MenuItem value="en_proceso">En Proceso</MenuItem>
                   <MenuItem value="completada">Completada</MenuItem>
                   <MenuItem value="cancelada">Cancelada</MenuItem>
@@ -356,7 +374,7 @@ const OrdenesList = () => {
                       </Tooltip>
 
                       {canStart(orden.estado) && (
-                        <Tooltip title="Iniciar Producción">
+                        <Tooltip title="Aprobar Orden">
                           <span>
                             <IconButton
                               size="small"

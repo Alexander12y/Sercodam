@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test API Orden</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .error { background: #ffebee; color: #c62828; }
+        .success { background: #e8f5e8; color: #2e7d32; }
+        pre { white-space: pre-wrap; word-wrap: break-word; }
+    </style>
+</head>
+<body>
+    <h1>Test API Orden de Producción</h1>
+    <button onclick="testAPI()">Probar API</button>
+    <div id="result"></div>
+
+    <script>
+        async function testAPI() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<div class="result">Probando API...</div>';
+            
+            try {
+                // Obtener órdenes
+                const response = await fetch('http://localhost:4000/api/v1/ordenes');
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${data.message || 'Error desconocido'}`);
+                }
+                
+                const ordenes = data.data?.ordenes || data.ordenes || [];
+                resultDiv.innerHTML = `<div class="result success">✅ Se encontraron ${ordenes.length} órdenes</div>`;
+                
+                if (ordenes.length === 0) {
+                    resultDiv.innerHTML += '<div class="result error">❌ No hay órdenes disponibles</div>';
+                    return;
+                }
+                
+                // Buscar una orden con paños
+                for (const orden of ordenes) {
+                    try {
+                        const detalleResponse = await fetch(`http://localhost:4000/api/v1/ordenes/${orden.id_op}/detalle`);
+                        const detalleData = await detalleResponse.json();
+                        
+                        if (!detalleResponse.ok) {
+                            console.warn(`Error obteniendo detalle de orden ${orden.id_op}:`, detalleData);
+                            continue;
+                        }
+                        
+                        const detalle = detalleData.data || detalleData;
+                        
+                        if (detalle.panos && detalle.panos.length > 0) {
+                            resultDiv.innerHTML += `
+                                <div class="result success">
+                                    <h3>✅ Orden con paños encontrada: ${orden.numero_op}</h3>
+                                    <p><strong>Cliente:</strong> ${detalle.orden.nombre_cliente}</p>
+                                    <p><strong>Estado:</strong> ${detalle.orden.estado}</p>
+                                    <p><strong>Paños:</strong> ${detalle.panos.length}</p>
+                                    <p><strong>Materiales:</strong> ${detalle.materiales.length}</p>
+                                    <p><strong>Herramientas:</strong> ${detalle.herramientas.length}</p>
+                                </div>
+                            `;
+                            
+                            // Mostrar detalles de paños
+                            detalle.panos.forEach((pano, index) => {
+                                resultDiv.innerHTML += `
+                                    <div class="result">
+                                        <h4>Paño ${index + 1}:</h4>
+                                        <p><strong>ID:</strong> ${pano.id_item}</p>
+                                        <p><strong>Tipo:</strong> ${pano.tipo_red || 'N/A'}</p>
+                                        <p><strong>Cantidad:</strong> ${pano.cantidad}</p>
+                                        <p><strong>Largo:</strong> ${pano.largo_m} m</p>
+                                        <p><strong>Ancho:</strong> ${pano.ancho_m} m</p>
+                                        <p><strong>Notas:</strong> ${pano.notas || 'Sin notas'}</p>
+                                    </div>
+                                `;
+                            });
+                            
+                            // Mostrar datos completos
+                            resultDiv.innerHTML += `
+                                <div class="result">
+                                    <h4>Datos completos de la orden:</h4>
+                                    <pre>${JSON.stringify(detalle, null, 2)}</pre>
+                                </div>
+                            `;
+                            
+                            return; // Encontramos una orden con paños
+                        }
+                    } catch (error) {
+                        console.warn(`Error procesando orden ${orden.id_op}:`, error);
+                    }
+                }
+                
+                resultDiv.innerHTML += '<div class="result error">❌ No se encontró ninguna orden con paños</div>';
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="result error">❌ Error: ${error.message}</div>`;
+                console.error('Error:', error);
+            }
+        }
+    </script>
+</body>
+</html> 
