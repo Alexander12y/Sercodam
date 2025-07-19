@@ -51,6 +51,7 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
   const [panoSeleccionado, setPanoSeleccionado] = useState(null);
   const [errorStock, setErrorStock] = useState("");
   const [umbralSobrante, setUmbralSobrante] = useState(0.5); // Default to 0.5, user can change
+  const [datosInicialsCargados, setDatosInicialesCargados] = useState(false);
   
   // Filtros
   const [filtros, setFiltros] = useState({
@@ -70,26 +71,16 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
   const estados = ['bueno', 'regular', 'malo', '50%'];
   const ubicaciones = ['Bodega CDMX', 'Querétaro', 'Oficina', 'Instalación'];
 
-  // Cargar datos iniciales cuando se monta el componente
+  // Cargar datos iniciales cuando se monta el componente (SOLO UNA VEZ, SIN FILTROS)
   useEffect(() => {
-    console.log('🔍 useEffect inicial - Estado de Redux:', {
-      panosReduxLength: panosRedux?.length || 0,
-      loadingRedux: loadingRedux
-    });
-    
-    if (panosRedux.length === 0 && !loadingRedux) {
-      console.log('🔍 Cargando datos iniciales...');
-      loadPanos();
+    if (!datosInicialsCargados && !loadingRedux) {
+      console.log('🔍 Cargando datos iniciales sin filtros...');
+      loadDatosIniciales();
     }
-  }, [panosRedux.length, loadingRedux]);
+  }, [datosInicialsCargados, loadingRedux]);
 
   // Procesar datos de Redux y aplicar filtros
   useEffect(() => {
-    console.log('🔍 useEffect - Datos de Redux recibidos:', {
-      panosReduxLength: panosRedux?.length || 0,
-      panosRedux: panosRedux
-    });
-    
     if (panosRedux && panosRedux.length > 0) {
       let panosFiltrados = [...panosRedux];
       
@@ -98,16 +89,7 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
         p.estado_trabajo === 'Libre' || p.estado_trabajo === null || p.estado_trabajo === undefined
       );
       
-      // Log para verificar especificaciones
-      if (panosFiltrados.length > 0) {
-        console.log('🔍 OrdenFormPanos - Primer paño de Redux:', {
-          id_item: panosFiltrados[0].id_item,
-          tipo_red: panosFiltrados[0].tipo_red,
-          especificaciones: panosFiltrados[0].especificaciones,
-          tiene_especificaciones: !!panosFiltrados[0].especificaciones,
-          longitud_especificaciones: panosFiltrados[0].especificaciones?.length
-        });
-      }
+      console.log(`📊 Paños procesados: ${panosFiltrados.length} disponibles de ${panosRedux.length} totales`);
       
       // Filtros adicionales en el frontend
       if (filtros.largo_min) {
@@ -141,16 +123,14 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
         );
       }
       
-      console.log('🔍 Actualizando estado local con paños filtrados:', {
-        panosFiltradosLength: panosFiltrados.length,
-        primerPano: panosFiltrados[0] ? {
-          id_item: panosFiltrados[0].id_item,
-          tipo_red: panosFiltrados[0].tipo_red,
-          especificaciones: panosFiltrados[0].especificaciones,
-          tiene_especificaciones: !!panosFiltrados[0].especificaciones
-        } : null
-      });
+      console.log(`✅ ${panosFiltrados.length} paños listos para mostrar`);
       setPanos(panosFiltrados);
+    } else {
+      // Si no hay datos de Redux, mostrar array vacío
+      setPanos([]);
+      if (panosRedux?.length === 0) {
+        console.log('📭 No se encontraron paños con los filtros aplicados');
+      }
     }
   }, [panosRedux, filtros]);
 
@@ -161,22 +141,39 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
     }
   };
 
+  // Función para cargar datos iniciales SIN filtros (solo una vez)
+  const loadDatosIniciales = async () => {
+    try {
+      console.log('🔍 Cargando TODOS los paños sin filtros...');
+      const params = { limit: 1000 }; // Sin filtros, traer todos los paños
+      
+      await dispatch(fetchPanos(params));
+      setDatosInicialesCargados(true);
+      
+      console.log('✅ Datos iniciales cargados correctamente');
+    } catch (error) {
+      console.error('❌ Error cargando datos iniciales:', error);
+    }
+  };
+
+  // Función para aplicar filtros (solo cuando el usuario busca)
   const loadPanos = async () => {
     try {
+      console.log('🔍 Aplicando filtros:', filtros);
       const params = { limit: 1000 }; // Sin paginación, traer todos
       
-      // Aplicar filtros
+      // Aplicar filtros SOLO si hay filtros activos
       if (filtros.tipo_red) params.tipo_red = filtros.tipo_red;
       if (filtros.estado) params.estado = filtros.estado;
       if (filtros.ubicacion) params.ubicacion = filtros.ubicacion;
       if (filtros.busqueda) params.search = filtros.busqueda;
       
-      // Usar Redux para cargar los paños
+      // Usar Redux para cargar los paños filtrados
       await dispatch(fetchPanos(params));
       
-      // Los datos se cargarán automáticamente en panosRedux
+      console.log('✅ Filtros aplicados correctamente');
     } catch (error) {
-      console.error('Error cargando paños:', error);
+      console.error('❌ Error aplicando filtros:', error);
     }
   };
 
@@ -197,6 +194,9 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
       area_min: '',
       area_max: ''
     });
+    
+    // Recargar datos iniciales sin filtros
+    loadDatosIniciales();
   };
 
   const handleAgregar = () => {
@@ -749,16 +749,7 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2" style={{ whiteSpace: 'pre-line', fontSize: '0.75rem' }}>
-                            {(() => {
-                              console.log('🔍 Renderizando especificaciones para paño:', {
-                                id_item: pano.id_item,
-                                tipo_red: pano.tipo_red,
-                                especificaciones: pano.especificaciones,
-                                tiene_especificaciones: !!pano.especificaciones,
-                                todas_las_propiedades: Object.keys(pano)
-                              });
-                              return pano.especificaciones || 'Sin especificaciones';
-                            })()}
+                            {pano.especificaciones || 'Sin especificaciones'}
                           </Typography>
                         </TableCell>
                       </TableRow>
