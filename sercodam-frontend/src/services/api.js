@@ -84,6 +84,9 @@ export const ordenesApi = {
   
   // Aprobar orden
   approveOrden: (id) => api.post(`/ordenes/${id}/approve`),
+
+  // Eliminar orden
+  deleteOrden: (id) => api.delete(`/ordenes/${id}`),
   
   // Agregar materiales a orden
   agregarMateriales: (id, data) => api.post(`/ordenes/${id}/materiales`, data),
