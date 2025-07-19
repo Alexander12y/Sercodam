@@ -30,7 +30,13 @@ try {
     const logger = require('./config/logger');
     const db = require('./config/database');
     const { redis } = require('./config/redis');
-    const devConfig = require('../config/development');
+    
+    // Cargar configuración según el entorno
+    const isProduction = process.env.NODE_ENV === 'production';
+    const config = isProduction 
+        ? require('../config/production')
+        : require('../config/development');
+    
     console.log('✅ Configuraciones cargadas');
 
     // Middleware
@@ -54,11 +60,14 @@ try {
     // Crear app Express
     const app = express();
 
-    // Lista de orígenes permitidos para CORS (agrega aquí tu subdominio de producción cuando lo tengas)
+    // Lista de orígenes permitidos para CORS
     const ALLOWED_ORIGINS = [
         'http://localhost:3000',
         'http://localhost:5173',
-        // 'https://TU-SUBDOMINIO.sercodam.com' // <-- Agrega aquí tu subdominio de producción
+        // Agregar aquí el dominio de producción cuando esté disponible
+        // 'https://op.sercodam.com',
+        // 'https://ordenes.sercodam.com',
+        // 'https://sercodam.com'
     ];
 
     // CORS configuration (lo más arriba posible)
@@ -104,25 +113,8 @@ try {
       crossOriginOpenerPolicy: { policy: 'same-origin' },
     }));
 
-    // Rate limiting - Configuración más inteligente
-    const isDevelopment = process.env.NODE_ENV === 'development';
-    const rateLimitConfig = isDevelopment ? devConfig.rateLimit : {
-        windowMs: RATE_LIMIT_WINDOW * 60 * 1000,
-        max: RATE_LIMIT_MAX,
-        message: {
-            success: false,
-            message: 'Demasiadas solicitudes desde esta IP, intenta de nuevo más tarde.',
-            retryAfter: Math.ceil(RATE_LIMIT_WINDOW * 60 / 60)
-        },
-        standardHeaders: true,
-        legacyHeaders: false,
-        skip: (req) => {
-            return req.path === '/health';
-        },
-        keyGenerator: (req) => {
-            return req.ip + ':' + (req.get('User-Agent') || 'unknown');
-        }
-    };
+    // Rate limiting - Configuración según entorno
+    const rateLimitConfig = config.rateLimit;
 
     // Rate limiting estricto para endpoints sensibles
     const sensitiveLimiter = rateLimit({

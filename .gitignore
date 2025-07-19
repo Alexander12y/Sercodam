@@ -1,21 +1,89 @@
-# ─── Dependencias compiladas ─────────────────────────
-sercodam-backend/node_modules/
-sercodam-frontend/node_modules/
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# ─── Archivos de bloqueo de npm ──────────────────────
-sercodam-backend/package-lock.json
-sercodam-frontend/package-lock.json
+# Production builds
+sercodam-frontend/dist/
+sercodam-backend/dist/
 
-# ─── Directorios de Node en el repositorio raíz ───────
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
 node_modules/
 
-# ─── Archivos de log y directorios temporales ────────
-*.log
-sercodam-backend/src/logs/
-sercodam-backend/temp/
+# Optional npm cache directory
+.npm
 
-# ─── Archivos PDF generados ──────────────────────────
-*.pdf
+# Optional REPL history
+.node_repl_history
 
-# ─── Archivos de lock y cache globales ──────────────
-package-lock.json
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+
+# Backup files
+backup-*/
+backups/
+
+# PM2 files
+.pm2/
+
+# Database files
+*.sqlite
+*.db
+
+# SSL certificates
+*.pem
+*.key
+*.crt

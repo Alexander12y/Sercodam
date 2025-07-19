@@ -895,7 +895,178 @@ const ordenesController = {
 
             // Si el estado cambió a 'cancelada', restaurar inventario completo (paños + materiales extras)
             if (estado === 'cancelada' && estadoAnterior !== 'cancelada') {
-                await trx.raw('SELECT fn_restaurar_inventario_completo_cancelada(?)', [id]);
+                logger.info('Cancelando orden y restaurando inventario:', { orden_id: id });
+                
+                // 1. Restaurar materiales extras que fueron descontados en la aprobación
+                const materialesDescontados = await trx('orden_produccion_detalle as opd')
+                    .join('materiales_extras as me', 'opd.id_item', 'me.id_item')
+                    .where('opd.id_op', id)
+                    .where('opd.tipo_item', 'EXTRA')
+                    .where('opd.estado', 'en_proceso')
+                    .select('opd.id_item', 'opd.cantidad', 'me.descripcion', 'me.unidad');
+                
+                for (const material of materialesDescontados) {
+                    // Restaurar cantidad al inventario
+                    await trx('materiales_extras')
+                        .where('id_item', material.id_item)
+                        .increment('cantidad_disponible', material.cantidad);
+                    
+                    // Registrar movimiento de restauración
+                    await trx('movimiento_inventario').insert({
+                        id_item: material.id_item,
+                        tipo_mov: 'AJUSTE_IN',
+                        cantidad: material.cantidad,
+                        unidad: material.unidad,
+                        notas: `Restauración por cancelación de orden ${orden.numero_op}: ${material.descripcion}`,
+                        id_op: id,
+                        id_usuario: req.user.id
+                    });
+                    
+                    // Marcar detalle como cancelado
+                    await trx('orden_produccion_detalle')
+                        .where('id_op', id)
+                        .where('id_item', material.id_item)
+                        .update({ estado: 'cancelado' });
+                    
+                    logger.info('Material restaurado:', {
+                        material_id: material.id_item,
+                        cantidad: material.cantidad,
+                        descripcion: material.descripcion
+                    });
+                }
+                
+                // 2. Manejar paños según el estado de los cortes
+                const trabajosCorte = await trx('trabajo_corte')
+                    .where('id_op', id)
+                    .select('job_id', 'id_item', 'estado', 'altura_req', 'ancho_req', 'completed_at');
+                
+                for (const trabajo of trabajosCorte) {
+                    // Verificar si el trabajo tenía completed_at (indicando que se completó antes de cancelar)
+                    const trabajoCompletado = trabajo.completed_at !== null;
+                    
+                    if (trabajoCompletado) {
+                        // Si el corte ya se completó, necesitamos restaurar el paño objetivo
+                        logger.info('Corte ya completado, restaurando paño objetivo:', { job_id: trabajo.job_id });
+                        
+                        // Obtener datos del paño padre original
+                        const panoPadre = await trx('pano')
+                            .where('id_item', trabajo.id_item)
+                            .first();
+                        
+                        if (panoPadre) {
+                            // Crear el paño objetivo con las dimensiones solicitadas
+                            const [nuevoPanoResult] = await trx('pano').insert({
+                                id_mcr: panoPadre.id_mcr,
+                                largo_m: trabajo.altura_req,
+                                ancho_m: trabajo.ancho_req,
+                                estado: panoPadre.estado,
+                                ubicacion: panoPadre.ubicacion,
+                                precio_x_unidad: panoPadre.precio_x_unidad,
+                                stock_minimo: panoPadre.stock_minimo,
+                                estado_trabajo: 'Libre',
+                                created_at: db.fn.now(),
+                                updated_at: db.fn.now()
+                            }).returning('id_item');
+                            
+                            // Extraer el ID del resultado
+                            const nuevoPanoId = typeof nuevoPanoResult === 'object' ? nuevoPanoResult.id_item : nuevoPanoResult;
+                            
+                            // Registrar movimiento de restauración del paño objetivo
+                            await trx('movimiento_inventario').insert({
+                                id_item: nuevoPanoId,
+                                tipo_mov: 'AJUSTE_IN',
+                                cantidad: trabajo.altura_req * trabajo.ancho_req,
+                                unidad: 'm²',
+                                notas: `Restauración de paño objetivo por cancelación de orden ${orden.numero_op}`,
+                                id_op: id,
+                                id_usuario: req.user.id
+                            });
+                            
+                            logger.info('Paño objetivo restaurado:', {
+                                nuevo_pano_id: nuevoPanoId,
+                                dimensiones: `${trabajo.altura_req}m x ${trabajo.ancho_req}m`,
+                                area: trabajo.altura_req * trabajo.ancho_req
+                            });
+                        }
+                        
+                        // Los remanentes ya están como paños libres, no hay que hacer nada
+                        
+                        // El paño padre ya no existe físicamente (se convirtió en remanentes + objetivo)
+                        // Solo marcarlo como consumido para mantener auditoría
+                        await trx('pano')
+                            .where('id_item', trabajo.id_item)
+                            .update({ estado_trabajo: 'Consumido' });
+                        
+                    } else {
+                        // Si el corte no se completó, liberar el paño padre
+                        logger.info('Corte no completado, liberando paño padre:', { 
+                            job_id: trabajo.job_id, 
+                            pano_id: trabajo.id_item 
+                        });
+                        
+                        // Marcar paño padre como libre
+                        await trx('pano')
+                            .where('id_item', trabajo.id_item)
+                            .update({ estado_trabajo: 'Libre' });
+                        
+                        // Eliminar remanentes pendientes de este trabajo
+                        await trx('panos_sobrantes')
+                            .where('id_op', id)
+                            .where('estado', 'Pendiente')
+                            .del();
+                        
+                        // Registrar movimiento de liberación
+                        await trx('movimiento_inventario').insert({
+                            id_item: trabajo.id_item,
+                            tipo_mov: 'AJUSTE_IN',
+                            cantidad: trabajo.altura_req * trabajo.ancho_req,
+                            unidad: 'm²',
+                            notas: `Liberación de paño por cancelación de orden ${orden.numero_op}`,
+                            id_op: id,
+                            id_usuario: req.user.id
+                        });
+                    }
+                    
+                    // Marcar trabajo de corte como cancelado
+                    await trx('trabajo_corte')
+                        .where('job_id', trabajo.job_id)
+                        .update({ estado: 'Cancelado' });
+                }
+                
+                // 3. Liberar herramientas asignadas
+                const herramientasAsignadas = await trx('herramienta_ordenada')
+                    .where('id_op', id)
+                    .select('id_item', 'cantidad');
+                
+                for (const herramienta of herramientasAsignadas) {
+                    // Restaurar cantidad al inventario
+                    await trx('herramientas')
+                        .where('id_item', herramienta.id_item)
+                        .increment('cantidad_disponible', herramienta.cantidad);
+                    
+                    // Registrar movimiento de restauración
+                    await trx('movimiento_inventario').insert({
+                        id_item: herramienta.id_item,
+                        tipo_mov: 'AJUSTE_IN',
+                        cantidad: herramienta.cantidad,
+                        unidad: 'unidad',
+                        notas: `Restauración de herramienta por cancelación de orden ${orden.numero_op}`,
+                        id_op: id,
+                        id_usuario: req.user.id
+                    });
+                }
+                
+                // Eliminar asignaciones de herramientas
+                await trx('herramienta_ordenada')
+                    .where('id_op', id)
+                    .del();
+                
+                logger.info('Orden cancelada exitosamente:', { 
+                    orden_id: id, 
+                    materiales_restaurados: materialesDescontados.length,
+                    trabajos_corte: trabajosCorte.length,
+                    herramientas_restauradas: herramientasAsignadas.length
+                });
             }
 
             await trx.commit();
@@ -2642,9 +2813,9 @@ const ordenesController = {
                             .update({
                                 largo_m: nuevoLargo,
                                 ancho_m: nuevoAncho,
-                                // Cuando se completa un corte, el paño pasa a 'En progreso' porque el trabajo ya se hizo
-                                // pero la orden sigue en proceso. Solo cambiar aConsumido si no queda área
-                                estado_trabajo: nuevaArea >0 ? 'En progreso' : 'Consumido',
+                                // CORRECCIÓN: El paño padre siempre se consume cuando se hace un corte
+                                // ya que se convierte en remanentes más pequeños
+                                estado_trabajo: 'Consumido',
                                 updated_at: db.fn.now()
                             });
                     
@@ -2760,7 +2931,10 @@ const ordenesController = {
                             id_mcr: parentPano.id_mcr,
                             largo_m: sob.altura_m,
                             ancho_m: sob.ancho_m,
-                            estado: 'bueno',
+                            estado: parentPano.estado, // Heredar estado del paño padre
+                            ubicacion: parentPano.ubicacion, // Heredar ubicación del paño padre
+                            precio_x_unidad: parentPano.precio_x_unidad, // Heredar precio del paño padre
+                            stock_minimo: parentPano.stock_minimo, // Heredar stock mínimo del paño padre
                             estado_trabajo: 'Libre'
                         }).returning('id_item');
                         
@@ -3117,9 +3291,9 @@ const ordenesController = {
                             .update({
                                 largo_m: nuevoLargo,
                                 ancho_m: nuevoAncho,
-                                // Cuando se completa un corte, el paño pasa a 'En progreso' porque el trabajo ya se hizo
-                                // pero la orden sigue en proceso. Solo cambiar aConsumido si no queda área
-                                estado_trabajo: nuevaArea >0 ? 'En progreso' : 'Consumido',
+                                // CORRECCIÓN: El paño padre siempre se consume cuando se hace un corte
+                                // ya que se convierte en remanentes más pequeños
+                                estado_trabajo: 'Consumido',
                                 updated_at: db.fn.now()
                             });
                         
@@ -3232,7 +3406,10 @@ const ordenesController = {
                                 id_mcr: parentPano.id_mcr,
                                 largo_m: sob.altura_m,
                                 ancho_m: sob.ancho_m,
-                                estado: 'bueno',
+                                estado: parentPano.estado, // Heredar estado del paño padre
+                                ubicacion: parentPano.ubicacion, // Heredar ubicación del paño padre
+                                precio_x_unidad: parentPano.precio_x_unidad, // Heredar precio del paño padre
+                                stock_minimo: parentPano.stock_minimo, // Heredar stock mínimo del paño padre
                                 estado_trabajo: 'Libre'
                             }).returning('id_item');
                             

@@ -145,6 +145,11 @@ export const panosApi = {
   getPolipropilenoCatalogos: () => api.get('/inventario/panos/catalogos/polipropileno'),
   getLonaCatalogos: () => api.get('/inventario/panos/catalogos/lona'),
   getMallaSombraCatalogos: () => api.get('/inventario/panos/catalogos/malla-sombra'),
+  // Nuevos endpoints para datos completos del catálogo
+  getNylonFullData: () => api.get('/inventario/panos/catalogos/nylon/full'),
+  getPolipropilenoFullData: () => api.get('/inventario/panos/catalogos/polipropileno/full'),
+  getLonaFullData: () => api.get('/inventario/panos/catalogos/lona/full'),
+  getMallaSombraFullData: () => api.get('/inventario/panos/catalogos/malla-sombra/full'),
 };
 
 // API de materiales

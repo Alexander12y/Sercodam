@@ -79,6 +79,26 @@ router.get('/panos/catalogos/malla-sombra',
     asyncHandler(panosController.getMallaSombraCatalogos)
 );
 
+// GET /api/v1/inventario/panos/catalogos/nylon/full - Obtener datos completos de nylon
+router.get('/panos/catalogos/nylon/full', 
+    asyncHandler(panosController.getNylonFullData)
+);
+
+// GET /api/v1/inventario/panos/catalogos/polipropileno/full - Obtener datos completos de polipropileno
+router.get('/panos/catalogos/polipropileno/full', 
+    asyncHandler(panosController.getPolipropilenoFullData)
+);
+
+// GET /api/v1/inventario/panos/catalogos/lona/full - Obtener datos completos de lona
+router.get('/panos/catalogos/lona/full', 
+    asyncHandler(panosController.getLonaFullData)
+);
+
+// GET /api/v1/inventario/panos/catalogos/malla-sombra/full - Obtener datos completos de malla sombra
+router.get('/panos/catalogos/malla-sombra/full', 
+    asyncHandler(panosController.getMallaSombraFullData)
+);
+
 // GET /api/v1/inventario/panos/:id - Obtener paño específico
 router.get('/panos/:id', 
     validateIdParam,

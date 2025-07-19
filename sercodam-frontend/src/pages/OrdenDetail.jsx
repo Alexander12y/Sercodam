@@ -601,27 +601,33 @@ const getProgresoOrden = (estado) => {
 
 // Util para generar especificaciones dinámicas (mismo criterio que PDF)
 const generateDynamicSpecs = (pano) => {
+  // Primero, intentar usar el campo especificaciones generado por el backend
+  if (pano.especificaciones) {
+    return pano.especificaciones.replace(/\n/g, ', ');
+  }
+
+  // Si no existe especificaciones, generar usando los campos individuales correctos
   const specs = [];
   switch ((pano.tipo_red || '').toLowerCase()) {
     case 'nylon':
-      if (pano.nylon_calibre) specs.push(`Calibre: ${pano.nylon_calibre}`);
-      if (pano.nylon_cuadro) specs.push(`Cuadro: ${pano.nylon_cuadro}`);
-      if (pano.nylon_torsion) specs.push(`Torsión: ${pano.nylon_torsion}`);
-      if (pano.nylon_refuerzo !== undefined && pano.nylon_refuerzo !== null) {
-        specs.push(`Refuerzo: ${pano.nylon_refuerzo === true || pano.nylon_refuerzo === 't' || pano.nylon_refuerzo === 'Sí' ? 'Sí' : 'No'}`);
+      if (pano.calibre) specs.push(`Calibre: ${pano.calibre}`);
+      if (pano.cuadro) specs.push(`Cuadro: ${pano.cuadro}`);
+      if (pano.torsion) specs.push(`Torsión: ${pano.torsion}`);
+      if (pano.refuerzo !== undefined && pano.refuerzo !== null) {
+        specs.push(`Refuerzo: ${pano.refuerzo === true || pano.refuerzo === 't' || pano.refuerzo === 'Sí' ? 'Sí' : 'No'}`);
       }
       break;
     case 'lona':
-      if (pano.lona_color) specs.push(`Color: ${pano.lona_color}`);
-      if (pano.lona_presentacion) specs.push(`Presentación: ${pano.lona_presentacion}`);
+      if (pano.color) specs.push(`Color: ${pano.color}`);
+      if (pano.presentacion) specs.push(`Presentación: ${pano.presentacion}`);
       break;
     case 'polipropileno':
-      if (pano.polipropileno_grosor) specs.push(`Grosor: ${pano.polipropileno_grosor}`);
-      if (pano.polipropileno_cuadro) specs.push(`Cuadro: ${pano.polipropileno_cuadro}`);
+      if (pano.grosor) specs.push(`Grosor: ${pano.grosor}`);
+      if (pano.cuadro) specs.push(`Cuadro: ${pano.cuadro}`);
       break;
     case 'malla sombra':
-      if (pano.malla_color) specs.push(`Color/Tipo: ${pano.malla_color}`);
-      if (pano.malla_presentacion) specs.push(`Presentación: ${pano.malla_presentacion}`);
+      if (pano.color_tipo_red) specs.push(`Color/Tipo: ${pano.color_tipo_red}`);
+      if (pano.presentacion) specs.push(`Presentación: ${pano.presentacion}`);
       break;
     default:
       break;

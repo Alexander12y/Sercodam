@@ -40,11 +40,9 @@ const materialesController = {
             let query = db('materiales_extras as me')
                 .select(
                     'me.*',
-                    'ii.tipo_item',
-                    'ii.fecha_creacion'
-                )
-                .leftJoin('inventario_item as ii', 'me.id_item', 'ii.id_item')
-                .where('ii.tipo_item', 'MATERIAL EXTRA');
+                    db.raw("'MATERIAL EXTRA' as tipo_item"),
+                    'me.ultima_modificacion as fecha_creacion'
+                );
 
             // Aplicar filtros
             if (categorias && Array.isArray(categorias) && categorias.length > 0) {
@@ -100,8 +98,6 @@ const materialesController = {
             } else {
                 // Contar total para paginación (consulta separada y simple)
                 const totalResult = await db('materiales_extras as me')
-                    .leftJoin('inventario_item as ii', 'me.id_item', 'ii.id_item')
-                    .where('ii.tipo_item', 'MATERIAL EXTRA')
                     .count('me.id_item as count')
                     .first();
                 total = parseInt(totalResult.count || 0);
@@ -145,10 +141,9 @@ const materialesController = {
             const material = await db('materiales_extras as me')
                 .select(
                     'me.*',
-                    'ii.tipo_item',
-                    'ii.fecha_creacion'
+                    db.raw("'MATERIAL EXTRA' as tipo_item"),
+                    'me.ultima_modificacion as fecha_creacion'
                 )
-                .leftJoin('inventario_item as ii', 'me.id_item', 'ii.id_item')
                 .where('me.id_item', id)
                 .first();
 

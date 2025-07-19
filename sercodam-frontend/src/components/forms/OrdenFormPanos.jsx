@@ -35,12 +35,17 @@ import {
   FilterList as FilterIcon,
   Info as InfoIcon
 } from '@mui/icons-material';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchPanos } from '../../store/slices/panosSlice';
 import { panosApi } from '../../services/api';
 
 const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave }) => {
+  const dispatch = useDispatch();
+  const { lista: panosRedux, loading: loadingRedux } = useSelector((state) => state.panos);
+  
   const [modalOpen, setModalOpen] = useState(false);
   const [panos, setPanos] = useState([]);
-  const [loading, setLoading] = useState(false);
+
   const [largoTomar, setLargoTomar] = useState(0);
   const [anchoTomar, setAnchoTomar] = useState(0);
   const [panoSeleccionado, setPanoSeleccionado] = useState(null);
@@ -65,31 +70,44 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
   const estados = ['bueno', 'regular', 'malo', '50%'];
   const ubicaciones = ['Bodega CDMX', 'Querétaro', 'Oficina', 'Instalación'];
 
-  // Función para guardar draft cuando cambian los paños
-  const saveDraftOnChange = (newPanosSeleccionados) => {
-    if (onDraftSave) {
-      onDraftSave(newPanosSeleccionados);
+  // Cargar datos iniciales cuando se monta el componente
+  useEffect(() => {
+    console.log('🔍 useEffect inicial - Estado de Redux:', {
+      panosReduxLength: panosRedux?.length || 0,
+      loadingRedux: loadingRedux
+    });
+    
+    if (panosRedux.length === 0 && !loadingRedux) {
+      console.log('🔍 Cargando datos iniciales...');
+      loadPanos();
     }
-  };
+  }, [panosRedux.length, loadingRedux]);
 
-  const loadPanos = async () => {
-    setLoading(true);
-    try {
-      const params = { limit: 1000 }; // Sin paginación, traer todos
+  // Procesar datos de Redux y aplicar filtros
+  useEffect(() => {
+    console.log('🔍 useEffect - Datos de Redux recibidos:', {
+      panosReduxLength: panosRedux?.length || 0,
+      panosRedux: panosRedux
+    });
+    
+    if (panosRedux && panosRedux.length > 0) {
+      let panosFiltrados = [...panosRedux];
       
-      // Aplicar filtros
-      if (filtros.tipo_red) params.tipo_red = filtros.tipo_red;
-      if (filtros.estado) params.estado = filtros.estado;
-      if (filtros.ubicacion) params.ubicacion = filtros.ubicacion;
-      if (filtros.busqueda) params.search = filtros.busqueda;
-      
-      const response = await panosApi.getPanos(params);
-      let panosFiltrados = response.data?.panos || response.data || [];
-      
-      // NUEVO: Filtrar solo paños disponibles para nuevas órdenes (estado_trabajo = 'Libre')
+      // Filtrar solo paños disponibles para nuevas órdenes (estado_trabajo = 'Libre')
       panosFiltrados = panosFiltrados.filter(p => 
         p.estado_trabajo === 'Libre' || p.estado_trabajo === null || p.estado_trabajo === undefined
       );
+      
+      // Log para verificar especificaciones
+      if (panosFiltrados.length > 0) {
+        console.log('🔍 OrdenFormPanos - Primer paño de Redux:', {
+          id_item: panosFiltrados[0].id_item,
+          tipo_red: panosFiltrados[0].tipo_red,
+          especificaciones: panosFiltrados[0].especificaciones,
+          tiene_especificaciones: !!panosFiltrados[0].especificaciones,
+          longitud_especificaciones: panosFiltrados[0].especificaciones?.length
+        });
+      }
       
       // Filtros adicionales en el frontend
       if (filtros.largo_min) {
@@ -123,12 +141,42 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
         );
       }
       
+      console.log('🔍 Actualizando estado local con paños filtrados:', {
+        panosFiltradosLength: panosFiltrados.length,
+        primerPano: panosFiltrados[0] ? {
+          id_item: panosFiltrados[0].id_item,
+          tipo_red: panosFiltrados[0].tipo_red,
+          especificaciones: panosFiltrados[0].especificaciones,
+          tiene_especificaciones: !!panosFiltrados[0].especificaciones
+        } : null
+      });
       setPanos(panosFiltrados);
+    }
+  }, [panosRedux, filtros]);
+
+  // Función para guardar draft cuando cambian los paños
+  const saveDraftOnChange = (newPanosSeleccionados) => {
+    if (onDraftSave) {
+      onDraftSave(newPanosSeleccionados);
+    }
+  };
+
+  const loadPanos = async () => {
+    try {
+      const params = { limit: 1000 }; // Sin paginación, traer todos
+      
+      // Aplicar filtros
+      if (filtros.tipo_red) params.tipo_red = filtros.tipo_red;
+      if (filtros.estado) params.estado = filtros.estado;
+      if (filtros.ubicacion) params.ubicacion = filtros.ubicacion;
+      if (filtros.busqueda) params.search = filtros.busqueda;
+      
+      // Usar Redux para cargar los paños
+      await dispatch(fetchPanos(params));
+      
+      // Los datos se cargarán automáticamente en panosRedux
     } catch (error) {
       console.error('Error cargando paños:', error);
-      setPanos([]);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -572,9 +620,9 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                     variant="contained"
                     startIcon={<SearchIcon />}
                     onClick={handleBuscar}
-                    disabled={loading}
+                                                disabled={loadingRedux}
                   >
-                    {loading ? 'Buscando...' : 'Buscar Paños'}
+                                          {loadingRedux ? 'Buscando...' : 'Buscar Paños'}
                   </Button>
                 </Grid>
                 <Grid item xs={12} md={6}>
@@ -701,7 +749,16 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2" style={{ whiteSpace: 'pre-line', fontSize: '0.75rem' }}>
-                            {pano.especificaciones || 'Sin especificaciones'}
+                            {(() => {
+                              console.log('🔍 Renderizando especificaciones para paño:', {
+                                id_item: pano.id_item,
+                                tipo_red: pano.tipo_red,
+                                especificaciones: pano.especificaciones,
+                                tiene_especificaciones: !!pano.especificaciones,
+                                todas_las_propiedades: Object.keys(pano)
+                              });
+                              return pano.especificaciones || 'Sin especificaciones';
+                            })()}
                           </Typography>
                         </TableCell>
                       </TableRow>

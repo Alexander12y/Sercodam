@@ -81,13 +81,34 @@ const CutDetailsModal = ({ open, onClose, orderId, isCompleted = false }) => {
     const getTechnicalSpecs = (job) => {
         const specs = [];
         if (job.tipo_red) specs.push(`Tipo: ${job.tipo_red}`);
-        if (job.nylon_calibre) specs.push(`Calibre: ${job.nylon_calibre}`);
-        if (job.nylon_cuadro) specs.push(`Cuadro: ${job.nylon_cuadro}`);
-        if (job.nylon_torsion) specs.push(`Torsión: ${job.nylon_torsion}`);
-        if (job.nylon_refuerzo) specs.push(`Refuerzo: ${job.nylon_refuerzo ? 'Sí' : 'No'}`);
-        if (job.lona_color) specs.push(`Color: ${job.lona_color}`);
-        if (job.polipropileno_grosor) specs.push(`Grosor: ${job.polipropileno_grosor}`);
-        if (job.malla_color_tipo_red) specs.push(`Color/Tipo: ${job.malla_color_tipo_red}`);
+        
+        // Si tiene especificaciones del backend, usarlas directamente
+        if (job.especificaciones) {
+            specs.push(...job.especificaciones.split('\n').filter(Boolean));
+            return specs;
+        }
+
+        // Usar campos individuales correctos como fallback
+        switch ((job.tipo_red || '').toLowerCase()) {
+            case 'nylon':
+                if (job.calibre) specs.push(`Calibre: ${job.calibre}`);
+                if (job.cuadro) specs.push(`Cuadro: ${job.cuadro}`);
+                if (job.torsion) specs.push(`Torsión: ${job.torsion}`);
+                if (job.refuerzo !== undefined) specs.push(`Refuerzo: ${job.refuerzo ? 'Sí' : 'No'}`);
+                break;
+            case 'lona':
+                if (job.color) specs.push(`Color: ${job.color}`);
+                if (job.presentacion) specs.push(`Presentación: ${job.presentacion}`);
+                break;
+            case 'polipropileno':
+                if (job.grosor) specs.push(`Grosor: ${job.grosor}`);
+                if (job.cuadro) specs.push(`Cuadro: ${job.cuadro}`);
+                break;
+            case 'malla sombra':
+                if (job.color_tipo_red) specs.push(`Color/Tipo: ${job.color_tipo_red}`);
+                if (job.presentacion) specs.push(`Presentación: ${job.presentacion}`);
+                break;
+        }
         return specs;
     };
 

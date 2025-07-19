@@ -1,6 +1,36 @@
 {
+  "name": "sercodam-op-tests",
+  "version": "1.0.0",
+  "description": "Scripts de prueba para SERCODAM OP",
+  "main": "run-all-tests.js",
+  "scripts": {
+    "test": "node run-all-tests.js",
+    "test:cleanup": "node cleanup-for-deployment.js",
+    "test:system": "node test-system-complete.js",
+    "test:auth": "node test-auth-specific.js",
+    "test:inventory": "node test-inventory-workflow.js",
+    "test:database": "node test-database-integrity.js"
+  },
   "dependencies": {
-    "qrcode": "^1.5.4",
-    "speakeasy": "^2.0.0"
-  }
+    "axios": "^1.10.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "knex": "^3.0.1",
+    "pg": "^8.16.3",
+    "redis": "^4.6.10",
+    "winston": "^3.11.0"
+  },
+  "keywords": [
+    "testing",
+    "sercodam",
+    "production-orders",
+    "inventory"
+  ],
+  "author": "Sercodam Team",
+  "license": "MIT"
 }

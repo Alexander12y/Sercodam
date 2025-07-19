@@ -146,12 +146,16 @@ const initializeRedis = async () => {
         logger.info('✅ Redis real conectado exitosamente');
 
     } catch (error) {
-        logger.warn('⚠️ No se pudo conectar a Redis, usando mock para desarrollo');
-        logger.debug('Redis error details:', { message: error.message, code: error.code });
-        
-        redis = new MockRedis();
-        await redis.connect();
-        isRealRedis = false;
+        if (process.env.NODE_ENV === 'production') {
+            logger.error('❌ No se pudo conectar a Redis en producción. Abortando...');
+            process.exit(1); // Detiene el backend en producción si Redis falla
+        } else {
+            logger.warn('⚠️ No se pudo conectar a Redis, usando mock para desarrollo');
+            logger.debug('Redis error details:', { message: error.message, code: error.code });
+            redis = new MockRedis();
+            await redis.connect();
+            isRealRedis = false;
+        }
     }
 };
 

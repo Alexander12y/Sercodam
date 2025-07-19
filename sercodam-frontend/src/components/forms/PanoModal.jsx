@@ -40,6 +40,8 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // Catálogos completos
   const [nylonCatalogos, setNylonCatalogos] = useState({
     calibres: [],
     cuadros: [],
@@ -58,6 +60,21 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
     presentaciones: []
   });
 
+  // Opciones filtradas basadas en selecciones previas
+  const [filteredOptions, setFilteredOptions] = useState({
+    cuadros: [],
+    torsiones: [],
+    presentaciones: []
+  });
+
+  // Datos completos del catálogo para filtrar
+  const [catalogData, setCatalogData] = useState({
+    nylon: [],
+    lona: [],
+    polipropileno: [],
+    mallaSombra: []
+  });
+
   const tiposValidos = ['lona', 'nylon', 'polipropileno', 'malla sombra'];
   const estadosValidos = ['bueno', 'regular', 'malo', '50%'];
   const ubicacionesValidas = ['Bodega CDMX', 'Querétaro', 'Oficina', 'Instalación'];
@@ -69,7 +86,7 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
     ? (parseFloat(formData.largo_m) * parseFloat(formData.ancho_m)).toFixed(2)
     : '';
 
-  // Cargar catálogos de nylon cuando se selecciona el tipo
+  // Cargar catálogos cuando se selecciona el tipo
   useEffect(() => {
     if (formData.tipo_red === 'nylon') {
       loadNylonCatalogos();
@@ -82,10 +99,28 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
     }
   }, [formData.tipo_red]);
 
+  // Filtrar opciones cuando cambian las selecciones
+  useEffect(() => {
+    if (formData.tipo_red === 'nylon') {
+      filterNylonOptions();
+    } else if (formData.tipo_red === 'polipropileno') {
+      filterPolipropilenoOptions();
+    } else if (formData.tipo_red === 'lona') {
+      filterLonaOptions();
+    } else if (formData.tipo_red === 'malla sombra') {
+      filterMallaSombraOptions();
+    }
+  }, [formData.tipo_red, formData.calibre, formData.grosor, formData.color, formData.color_tipo_red, catalogData]);
+
   const loadNylonCatalogos = async () => {
     try {
       const response = await panosApi.getNylonCatalogos();
       setNylonCatalogos(response.data.data);
+      
+      // Cargar datos completos para filtrar
+      const fullDataResponse = await panosApi.getNylonFullData();
+      console.log('🔍 Datos completos de nylon cargados:', fullDataResponse.data.data);
+      setCatalogData(prev => ({ ...prev, nylon: fullDataResponse.data.data }));
     } catch (error) {
       console.error('Error cargando catálogos de nylon:', error);
     }
@@ -95,6 +130,10 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
     try {
       const response = await panosApi.getPolipropilenoCatalogos();
       setPolipropilenoCatalogos(response.data.data);
+      
+      // Cargar datos completos para filtrar
+      const fullDataResponse = await panosApi.getPolipropilenoFullData();
+      setCatalogData(prev => ({ ...prev, polipropileno: fullDataResponse.data.data }));
     } catch (error) {
       console.error('Error cargando catálogos de polipropileno:', error);
     }
@@ -104,6 +143,10 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
     try {
       const response = await panosApi.getLonaCatalogos();
       setLonaCatalogos(response.data.data);
+      
+      // Cargar datos completos para filtrar
+      const fullDataResponse = await panosApi.getLonaFullData();
+      setCatalogData(prev => ({ ...prev, lona: fullDataResponse.data.data }));
     } catch (error) {
       console.error('Error cargando catálogos de lona:', error);
     }
@@ -113,9 +156,153 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
     try {
       const response = await panosApi.getMallaSombraCatalogos();
       setMallaSombraCatalogos(response.data.data);
+      
+      // Cargar datos completos para filtrar
+      const fullDataResponse = await panosApi.getMallaSombraFullData();
+      setCatalogData(prev => ({ ...prev, mallaSombra: fullDataResponse.data.data }));
     } catch (error) {
       console.error('Error cargando catálogos de malla sombra:', error);
     }
+  };
+
+  // Funciones de filtrado
+  const filterNylonOptions = () => {
+    if (!formData.calibre) {
+      setFilteredOptions(prev => ({ ...prev, cuadros: [], torsiones: [] }));
+      return;
+    }
+
+    console.log('🔍 Filtrando nylon - calibre seleccionado:', formData.calibre);
+    console.log('🔍 Datos de nylon disponibles:', catalogData.nylon);
+    
+    const filtered = catalogData.nylon.filter(item => item.calibre === formData.calibre);
+    console.log('🔍 Elementos filtrados por calibre:', filtered);
+    
+    const cuadros = [...new Set(filtered.map(item => item.cuadro))].filter(Boolean);
+    const torsiones = [...new Set(filtered.map(item => item.torsion))].filter(Boolean);
+    
+    console.log('🔍 Cuadros disponibles:', cuadros);
+    console.log('🔍 Torsiones disponibles:', torsiones);
+
+    setFilteredOptions(prev => ({ ...prev, cuadros, torsiones }));
+  };
+
+  const filterPolipropilenoOptions = () => {
+    if (!formData.grosor) {
+      setFilteredOptions(prev => ({ ...prev, cuadros: [] }));
+      return;
+    }
+
+    const filtered = catalogData.polipropileno.filter(item => item.grosor === formData.grosor);
+    const cuadros = [...new Set(filtered.map(item => item.cuadro))].filter(Boolean);
+
+    setFilteredOptions(prev => ({ ...prev, cuadros }));
+  };
+
+  const filterLonaOptions = () => {
+    if (!formData.color) {
+      setFilteredOptions(prev => ({ ...prev, presentaciones: [] }));
+      return;
+    }
+
+    const filtered = catalogData.lona.filter(item => item.color === formData.color);
+    const presentaciones = [...new Set(filtered.map(item => item.presentacion))].filter(Boolean);
+
+    setFilteredOptions(prev => ({ ...prev, presentaciones }));
+  };
+
+  const filterMallaSombraOptions = () => {
+    if (!formData.color_tipo_red) {
+      setFilteredOptions(prev => ({ ...prev, presentaciones: [] }));
+      return;
+    }
+
+    const filtered = catalogData.mallaSombra.filter(item => item.color_tipo_red === formData.color_tipo_red);
+    const presentaciones = [...new Set(filtered.map(item => item.presentacion))].filter(Boolean);
+
+    setFilteredOptions(prev => ({ ...prev, presentaciones }));
+  };
+
+  // Limpiar campos dependientes cuando cambia la selección principal
+  const handlePrimaryChange = (field) => (event) => {
+    const value = event.target.value;
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value };
+      
+      // Limpiar campos dependientes
+      if (field === 'calibre') {
+        newData.cuadro = '';
+        newData.torsion = '';
+        newData.refuerzo = '';
+      } else if (field === 'grosor') {
+        newData.cuadro = '';
+      } else if (field === 'color') {
+        newData.presentacion = '';
+      } else if (field === 'color_tipo_red') {
+        newData.presentacion = '';
+      }
+      
+      return newData;
+    });
+  };
+
+  const handleChange = (field) => (event) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: event.target.value
+    }));
+  };
+
+  // Obtener el id_mcr basado en las selecciones
+  const getSelectedIdMcr = () => {
+    if (!formData.tipo_red) return null;
+
+    let catalogItems = [];
+    let searchCriteria = {};
+
+    switch (formData.tipo_red) {
+      case 'nylon':
+        catalogItems = catalogData.nylon;
+        searchCriteria = {
+          calibre: formData.calibre,
+          cuadro: formData.cuadro,
+          torsion: formData.torsion,
+          refuerzo: formData.refuerzo === 'Sí'
+        };
+        break;
+      case 'polipropileno':
+        catalogItems = catalogData.polipropileno;
+        searchCriteria = {
+          grosor: formData.grosor,
+          cuadro: formData.cuadro
+        };
+        break;
+      case 'lona':
+        catalogItems = catalogData.lona;
+        searchCriteria = {
+          color: formData.color,
+          presentacion: formData.presentacion
+        };
+        break;
+      case 'malla sombra':
+        catalogItems = catalogData.mallaSombra;
+        searchCriteria = {
+          color_tipo_red: formData.color_tipo_red,
+          presentacion: formData.presentacion
+        };
+        break;
+    }
+
+    // Filtrar por criterios no vacíos
+    const validCriteria = Object.fromEntries(
+      Object.entries(searchCriteria).filter(([_, value]) => value !== '' && value !== null && value !== undefined)
+    );
+
+    const matchingItem = catalogItems.find(item => 
+      Object.entries(validCriteria).every(([key, value]) => item[key] === value)
+    );
+
+    return matchingItem?.id_mcr || null;
   };
 
   useEffect(() => {
@@ -161,13 +348,6 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
     setError('');
   }, [pano, open]);
 
-  const handleChange = (field) => (event) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: event.target.value
-    }));
-  };
-
   const validateForm = () => {
     if (!formData.tipo_red) {
       setError('El tipo de red es requerido');
@@ -189,6 +369,14 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
       setError('La ubicación es requerida');
       return false;
     }
+
+    // Validar que se seleccionó una combinación válida
+    const selectedIdMcr = getSelectedIdMcr();
+    if (!selectedIdMcr) {
+      setError('Debe seleccionar una combinación válida de especificaciones');
+      return false;
+    }
+
     return true;
   };
 
@@ -205,22 +393,17 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
     }
 
     try {
+      const selectedIdMcr = getSelectedIdMcr();
+      
       const submitData = {
-        ...formData,
+        id_mcr: selectedIdMcr, // Usar el id_mcr del catálogo
         largo_m: parseFloat(formData.largo_m),
         ancho_m: parseFloat(formData.ancho_m),
+        estado: formData.estado,
+        ubicacion: formData.ubicacion,
         precio_x_unidad: parseFloat(formData.precio_x_unidad || 0),
-        refuerzo: formData.refuerzo === 'Sí'
+        stock_minimo: parseFloat(formData.stock_minimo || 0)
       };
-
-      // Eliminar stock_minimo si está vacío
-      if (submitData.stock_minimo === '' || submitData.stock_minimo === null) {
-        delete submitData.stock_minimo;
-      }
-
-      if (submitData.precio_x_unidad === '' || submitData.precio_x_unidad === null) {
-        delete submitData.precio_x_unidad; // ya validado antes
-      }
 
       console.log('🔍 Datos que se van a enviar:', submitData);
       console.log('🔍 ID del paño a editar:', pano?.id_item);
@@ -237,7 +420,6 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
       console.error('Error:', error);
       console.error('Error response:', error.response?.data);
       
-      // Mostrar errores específicos si existen
       if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
         const errorMessages = error.response.data.errors.map(err => err.message || err).join(', ');
         setError(`Errores de validación: ${errorMessages}`);
@@ -250,13 +432,13 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
   };
 
   const getEstadoColor = (estado) => {
-    const colors = {
-      'bueno': 'success',
-      'regular': 'warning',
-      'malo': 'error',
-      '50%': 'info',
-    };
-    return colors[estado] || 'default';
+    switch (estado) {
+      case 'bueno': return 'success';
+      case 'regular': return 'warning';
+      case 'malo': return 'error';
+      case '50%': return 'info';
+      default: return 'default';
+    }
   };
 
   const renderSpecificFields = () => {
@@ -266,11 +448,12 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
           <>
             <Grid item xs={12} md={6}>
               <FormControl fullWidth>
-                <InputLabel>Calibre</InputLabel>
+                <InputLabel>Calibre *</InputLabel>
                 <Select
                   value={formData.calibre}
-                  onChange={handleChange('calibre')}
-                  label="Calibre"
+                  onChange={handlePrimaryChange('calibre')}
+                  label="Calibre *"
+                  required
                 >
                   <MenuItem value="">
                     <em>Seleccione un calibre...</em>
@@ -284,17 +467,18 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
               </FormControl>
             </Grid>
             <Grid item xs={12} md={6}>
-              <FormControl fullWidth>
-                <InputLabel>Cuadro</InputLabel>
+              <FormControl fullWidth disabled={!formData.calibre}>
+                <InputLabel>Cuadro *</InputLabel>
                 <Select
                   value={formData.cuadro}
                   onChange={handleChange('cuadro')}
-                  label="Cuadro"
+                  label="Cuadro *"
+                  required
                 >
                   <MenuItem value="">
                     <em>Seleccione un cuadro...</em>
                   </MenuItem>
-                  {nylonCatalogos.cuadros.map(cuadro => (
+                  {filteredOptions.cuadros.map(cuadro => (
                     <MenuItem key={cuadro} value={cuadro}>
                       {cuadro}
                     </MenuItem>
@@ -303,17 +487,18 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
               </FormControl>
             </Grid>
             <Grid item xs={12} md={6}>
-              <FormControl fullWidth>
-                <InputLabel>Torsión</InputLabel>
+              <FormControl fullWidth disabled={!formData.calibre}>
+                <InputLabel>Torsión *</InputLabel>
                 <Select
                   value={formData.torsion}
                   onChange={handleChange('torsion')}
-                  label="Torsión"
+                  label="Torsión *"
+                  required
                 >
                   <MenuItem value="">
                     <em>Seleccione una torsión...</em>
                   </MenuItem>
-                  {nylonCatalogos.torsiones.map(torsion => (
+                  {filteredOptions.torsiones.map(torsion => (
                     <MenuItem key={torsion} value={torsion}>
                       {torsion}
                     </MenuItem>
@@ -322,12 +507,13 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
               </FormControl>
             </Grid>
             <Grid item xs={12} md={6}>
-              <FormControl fullWidth>
-                <InputLabel>Refuerzo</InputLabel>
+              <FormControl fullWidth disabled={!formData.calibre}>
+                <InputLabel>Refuerzo *</InputLabel>
                 <Select
                   value={formData.refuerzo}
                   onChange={handleChange('refuerzo')}
-                  label="Refuerzo"
+                  label="Refuerzo *"
+                  required
                 >
                   <MenuItem value="">
                     <em>Seleccione...</em>
@@ -345,11 +531,12 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
           <>
             <Grid item xs={12} md={6}>
               <FormControl fullWidth>
-                <InputLabel>Color</InputLabel>
+                <InputLabel>Color *</InputLabel>
                 <Select
                   value={formData.color}
-                  onChange={handleChange('color')}
-                  label="Color"
+                  onChange={handlePrimaryChange('color')}
+                  label="Color *"
+                  required
                 >
                   <MenuItem value="">
                     <em>Seleccione un color...</em>
@@ -363,17 +550,18 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
               </FormControl>
             </Grid>
             <Grid item xs={12} md={6}>
-              <FormControl fullWidth>
-                <InputLabel>Presentación</InputLabel>
+              <FormControl fullWidth disabled={!formData.color}>
+                <InputLabel>Presentación *</InputLabel>
                 <Select
                   value={formData.presentacion}
                   onChange={handleChange('presentacion')}
-                  label="Presentación"
+                  label="Presentación *"
+                  required
                 >
                   <MenuItem value="">
                     <em>Seleccione una presentación...</em>
                   </MenuItem>
-                  {lonaCatalogos.presentaciones.map(presentacion => (
+                  {filteredOptions.presentaciones.map(presentacion => (
                     <MenuItem key={presentacion} value={presentacion}>
                       {presentacion}
                     </MenuItem>
@@ -389,11 +577,12 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
           <>
             <Grid item xs={12} md={6}>
               <FormControl fullWidth>
-                <InputLabel>Grosor</InputLabel>
+                <InputLabel>Grosor *</InputLabel>
                 <Select
                   value={formData.grosor}
-                  onChange={handleChange('grosor')}
-                  label="Grosor"
+                  onChange={handlePrimaryChange('grosor')}
+                  label="Grosor *"
+                  required
                 >
                   <MenuItem value="">
                     <em>Seleccione un grosor...</em>
@@ -407,17 +596,18 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
               </FormControl>
             </Grid>
             <Grid item xs={12} md={6}>
-              <FormControl fullWidth>
-                <InputLabel>Cuadro</InputLabel>
+              <FormControl fullWidth disabled={!formData.grosor}>
+                <InputLabel>Cuadro *</InputLabel>
                 <Select
                   value={formData.cuadro}
                   onChange={handleChange('cuadro')}
-                  label="Cuadro"
+                  label="Cuadro *"
+                  required
                 >
                   <MenuItem value="">
                     <em>Seleccione un cuadro...</em>
                   </MenuItem>
-                  {polipropilenoCatalogos.cuadros.map(cuadro => (
+                  {filteredOptions.cuadros.map(cuadro => (
                     <MenuItem key={cuadro} value={cuadro}>
                       {cuadro}
                     </MenuItem>
@@ -433,11 +623,12 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
           <>
             <Grid item xs={12} md={6}>
               <FormControl fullWidth>
-                <InputLabel>Color y Tipo de Red</InputLabel>
+                <InputLabel>Color y Tipo de Red *</InputLabel>
                 <Select
                   value={formData.color_tipo_red}
-                  onChange={handleChange('color_tipo_red')}
-                  label="Color y Tipo de Red"
+                  onChange={handlePrimaryChange('color_tipo_red')}
+                  label="Color y Tipo de Red *"
+                  required
                 >
                   <MenuItem value="">
                     <em>Seleccione color y tipo...</em>
@@ -451,17 +642,18 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
               </FormControl>
             </Grid>
             <Grid item xs={12} md={6}>
-              <FormControl fullWidth>
-                <InputLabel>Presentación</InputLabel>
+              <FormControl fullWidth disabled={!formData.color_tipo_red}>
+                <InputLabel>Presentación *</InputLabel>
                 <Select
                   value={formData.presentacion}
                   onChange={handleChange('presentacion')}
-                  label="Presentación"
+                  label="Presentación *"
+                  required
                 >
                   <MenuItem value="">
                     <em>Seleccione una presentación...</em>
                   </MenuItem>
-                  {mallaSombraCatalogos.presentaciones.map(presentacion => (
+                  {filteredOptions.presentaciones.map(presentacion => (
                     <MenuItem key={presentacion} value={presentacion}>
                       {presentacion}
                     </MenuItem>
@@ -490,20 +682,19 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
         )}
         
         <Grid container spacing={2} sx={{ mt: 1 }}>
-          <Grid item xs={12}>
-            <Typography variant="h6" gutterBottom>
-              Información Básica
-            </Typography>
-          </Grid>
-          
+          {/* Tipo de Red */}
           <Grid item xs={12} md={6}>
-            <FormControl fullWidth required>
-              <InputLabel>Tipo de Red</InputLabel>
+            <FormControl fullWidth>
+              <InputLabel>Tipo de Red *</InputLabel>
               <Select
                 value={formData.tipo_red}
                 onChange={handleChange('tipo_red')}
-                label="Tipo de Red"
+                label="Tipo de Red *"
+                required
               >
+                <MenuItem value="">
+                  <em>Seleccione un tipo...</em>
+                </MenuItem>
                 {tiposValidos.map(tipo => (
                   <MenuItem key={tipo} value={tipo}>
                     {tipo.charAt(0).toUpperCase() + tipo.slice(1)}
@@ -513,82 +704,87 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
             </FormControl>
           </Grid>
 
+          {/* Campos específicos según el tipo de red */}
+          {renderSpecificFields()}
+
+          <Divider sx={{ width: '100%', my: 2 }} />
+
+          {/* Dimensiones */}
           <Grid item xs={12} md={6}>
             <TextField
               fullWidth
-              required
-              label="Largo (m)"
+              label="Largo (metros) *"
               type="number"
               value={formData.largo_m}
               onChange={handleChange('largo_m')}
-              inputProps={{ min: 0.01, step: 0.01 }}
-              helperText="Largo en metros"
+              inputProps={{ min: 0, step: 0.001 }}
+              required
             />
           </Grid>
-
           <Grid item xs={12} md={6}>
             <TextField
               fullWidth
-              required
-              label="Ancho (m)"
+              label="Ancho (metros) *"
               type="number"
               value={formData.ancho_m}
               onChange={handleChange('ancho_m')}
-              inputProps={{ min: 0.01, step: 0.01 }}
-              helperText="Ancho en metros"
+              inputProps={{ min: 0, step: 0.001 }}
+              required
             />
           </Grid>
 
-          <Grid item xs={12} md={6}>
-            <TextField
-              fullWidth
-              label="Área Calculada (m²)"
-              type="number"
-              value={areaCalculada}
-              InputProps={{
-                readOnly: true,
-              }}
-              helperText="Se calcula automáticamente (Largo × Ancho)"
-              sx={{
-                '& .MuiInputBase-input': {
-                  backgroundColor: '#f5f5f5',
-                  color: '#666'
-                }
-              }}
-            />
-          </Grid>
+          {/* Área calculada */}
+          {areaCalculada && (
+            <Grid item xs={12}>
+              <Box sx={{ p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Área calculada: <strong>{areaCalculada} m²</strong>
+                </Typography>
+              </Box>
+            </Grid>
+          )}
 
+          {/* Estado */}
           <Grid item xs={12} md={6}>
-            <FormControl fullWidth required>
-              <InputLabel>Estado</InputLabel>
+            <FormControl fullWidth>
+              <InputLabel>Estado *</InputLabel>
               <Select
                 value={formData.estado}
                 onChange={handleChange('estado')}
-                label="Estado"
+                label="Estado *"
+                required
               >
+                <MenuItem value="">
+                  <em>Seleccione un estado...</em>
+                </MenuItem>
                 {estadosValidos.map(estado => (
                   <MenuItem key={estado} value={estado}>
-                    <Box display="flex" alignItems="center" gap={1}>
-                      <Chip 
-                        label={estado} 
-                        color={getEstadoColor(estado)} 
-                        size="small" 
-                      />
-                    </Box>
+                    <Chip 
+                      label={estado} 
+                      color={getEstadoColor(estado)} 
+                      size="small" 
+                      sx={{ mr: 1 }}
+                    />
+                    {estado}
                   </MenuItem>
                 ))}
               </Select>
             </FormControl>
           </Grid>
 
+          {/* Ubicación */}
           <Grid item xs={12} md={6}>
-            <FormControl fullWidth required>
-              <InputLabel>Ubicación</InputLabel>
+            <FormControl fullWidth>
+              <InputLabel>Ubicación *</InputLabel>
               <Select
                 value={formData.ubicacion}
                 onChange={handleChange('ubicacion')}
-                label="Ubicación"
+                label="Ubicación *"
+                required
               >
+                <MenuItem value="">
+                  <em>Seleccione una ubicación...</em>
+                </MenuItem>
                 {ubicacionesValidas.map(ubicacion => (
                   <MenuItem key={ubicacion} value={ubicacion}>
                     {ubicacion}
@@ -598,53 +794,31 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
             </FormControl>
           </Grid>
 
+          {/* Precio por unidad */}
           <Grid item xs={12} md={6}>
             <TextField
               fullWidth
-              label="Precio por Unidad ($)"
+              label="Precio por unidad ($) *"
               type="number"
               value={formData.precio_x_unidad}
               onChange={handleChange('precio_x_unidad')}
               inputProps={{ min: 0, step: 0.01 }}
-              helperText="Precio por metro cuadrado"
+              required
             />
           </Grid>
 
-          <Grid item xs={12}>
+          {/* Stock mínimo */}
+          <Grid item xs={12} md={6}>
             <TextField
               fullWidth
-              label="Descripción"
-              multiline
-              rows={2}
-              value={formData.descripcion}
-              onChange={handleChange('descripcion')}
-              placeholder="Descripción adicional del paño..."
-            />
-          </Grid>
-
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Stock Mínimo (Área m²)"
+              label="Stock mínimo"
               type="number"
-              inputProps={{ min: 0, step: 'any' }}
               value={formData.stock_minimo}
               onChange={handleChange('stock_minimo')}
-              helperText="Área mínima antes de alerta"
+              inputProps={{ min: 0, step: 0.01 }}
+              helperText="Cantidad mínima antes de alerta"
             />
           </Grid>
-
-          {formData.tipo_red && (
-            <>
-              <Grid item xs={12}>
-                <Divider sx={{ my: 2 }} />
-                <Typography variant="h6" gutterBottom>
-                  Especificaciones de {formData.tipo_red.charAt(0).toUpperCase() + formData.tipo_red.slice(1)}
-                </Typography>
-              </Grid>
-              {renderSpecificFields()}
-            </>
-          )}
         </Grid>
       </DialogContent>
       <DialogActions>

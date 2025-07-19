@@ -444,10 +444,10 @@ const CreateOrden = () => {
                         ? `${p.largo_tomar}m x ${p.ancho_tomar}m` 
                         : (p.largo_m && p.ancho_m ? `${p.largo_m}m x ${p.ancho_m}m` : '')}
                       {p.cantidad ? ` - Cantidad: ${p.cantidad}` : ''}
-                      {p.calibre || p.cuadro || p.torsion || p.color || p.refuerzo ? (
+                      {p.especificaciones ? (
                         <>
                           {' - Especificaciones: '}
-                          {[p.calibre && `Calibre: ${p.calibre}`, p.cuadro && `Cuadro: ${p.cuadro}`, p.torsion && `Torsión: ${p.torsion}`, p.color && `Color: ${p.color}`, p.refuerzo && `Refuerzo: ${p.refuerzo}`].filter(Boolean).join(', ')}
+                          {p.especificaciones.replace(/\n/g, ', ')}
                         </>
                       ) : null}
                     </li>

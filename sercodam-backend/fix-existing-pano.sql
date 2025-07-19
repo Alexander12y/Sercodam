@@ -1,0 +1,1 @@
+UPDATE pano SET estado_trabajo = 'Libre' WHERE estado_trabajo IS NULL; 

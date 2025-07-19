@@ -136,6 +136,16 @@ const panosSlice = createSlice({
         }
         
         console.log('✅ Slice - Estado actualizado:', { lista: state.lista.length, paginacion: state.paginacion });
+        
+        // Log específico para verificar especificaciones
+        if (state.lista.length > 0) {
+          console.log('🔍 Slice - Verificando especificaciones del primer paño:', {
+            id_item: state.lista[0].id_item,
+            tipo_red: state.lista[0].tipo_red,
+            especificaciones: state.lista[0].especificaciones,
+            tiene_especificaciones: !!state.lista[0].especificaciones
+          });
+        }
       })
       .addCase(fetchPanos.rejected, (state, action) => {
         state.loading = false;

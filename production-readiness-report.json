@@ -1,0 +1,185 @@
+{
+  "timestamp": "2025-07-17T21:00:07.168Z",
+  "summary": {
+    "total": 29,
+    "passed": 27,
+    "failed": 2,
+    "successRate": "93.1"
+  },
+  "results": [
+    {
+      "test": "Variables de entorno",
+      "success": true,
+      "details": "Todas las variables requeridas están configuradas",
+      "timestamp": "2025-07-17T21:00:06.205Z"
+    },
+    {
+      "test": "Configuración Redis",
+      "success": true,
+      "details": "Host: localhost:6379",
+      "timestamp": "2025-07-17T21:00:06.205Z"
+    },
+    {
+      "test": "Conexión PostgreSQL",
+      "success": true,
+      "details": "Conexión exitosa",
+      "timestamp": "2025-07-17T21:00:06.316Z"
+    },
+    {
+      "test": "Tabla usuario",
+      "success": true,
+      "details": "3 registros",
+      "timestamp": "2025-07-17T21:00:06.342Z"
+    },
+    {
+      "test": "Tabla materiales_extras",
+      "success": true,
+      "details": "273 registros",
+      "timestamp": "2025-07-17T21:00:06.346Z"
+    },
+    {
+      "test": "Tabla herramientas",
+      "success": true,
+      "details": "286 registros",
+      "timestamp": "2025-07-17T21:00:06.352Z"
+    },
+    {
+      "test": "Tabla inventario_item",
+      "success": true,
+      "details": "559 registros",
+      "timestamp": "2025-07-17T21:00:06.355Z"
+    },
+    {
+      "test": "Servidor corriendo",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-07-17T21:00:06.479Z"
+    },
+    {
+      "test": "Login exitoso",
+      "success": false,
+      "details": "Respuesta inesperada del servidor",
+      "timestamp": "2025-07-17T21:00:07.152Z"
+    },
+    {
+      "test": "Rutas protegidas",
+      "success": false,
+      "details": "No hay token de autenticación",
+      "timestamp": "2025-07-17T21:00:07.154Z"
+    },
+    {
+      "test": "Archivo database.js",
+      "success": true,
+      "details": "Archivo encontrado",
+      "timestamp": "2025-07-17T21:00:07.155Z"
+    },
+    {
+      "test": "Archivo redis.js",
+      "success": true,
+      "details": "Archivo encontrado",
+      "timestamp": "2025-07-17T21:00:07.156Z"
+    },
+    {
+      "test": "Archivo logger.js",
+      "success": true,
+      "details": "Archivo encontrado",
+      "timestamp": "2025-07-17T21:00:07.156Z"
+    },
+    {
+      "test": "Archivo knexfile.js",
+      "success": true,
+      "details": "Archivo encontrado",
+      "timestamp": "2025-07-17T21:00:07.156Z"
+    },
+    {
+      "test": "Archivo ecosystem.config.js",
+      "success": true,
+      "details": "Archivo encontrado",
+      "timestamp": "2025-07-17T21:00:07.157Z"
+    },
+    {
+      "test": "Dependencia express",
+      "success": true,
+      "details": "Versión: ^4.18.2",
+      "timestamp": "2025-07-17T21:00:07.158Z"
+    },
+    {
+      "test": "Dependencia pg",
+      "success": true,
+      "details": "Versión: ^8.11.3",
+      "timestamp": "2025-07-17T21:00:07.159Z"
+    },
+    {
+      "test": "Dependencia redis",
+      "success": true,
+      "details": "Versión: ^4.6.10",
+      "timestamp": "2025-07-17T21:00:07.159Z"
+    },
+    {
+      "test": "Dependencia jsonwebtoken",
+      "success": true,
+      "details": "Versión: ^9.0.2",
+      "timestamp": "2025-07-17T21:00:07.159Z"
+    },
+    {
+      "test": "Dependencia bcryptjs",
+      "success": true,
+      "details": "Versión: ^2.4.3",
+      "timestamp": "2025-07-17T21:00:07.160Z"
+    },
+    {
+      "test": "Directorio controllers",
+      "success": true,
+      "details": "Directorio encontrado",
+      "timestamp": "2025-07-17T21:00:07.161Z"
+    },
+    {
+      "test": "Directorio routes",
+      "success": true,
+      "details": "Directorio encontrado",
+      "timestamp": "2025-07-17T21:00:07.162Z"
+    },
+    {
+      "test": "Directorio middleware",
+      "success": true,
+      "details": "Directorio encontrado",
+      "timestamp": "2025-07-17T21:00:07.162Z"
+    },
+    {
+      "test": "Directorio migrations",
+      "success": true,
+      "details": "Directorio encontrado",
+      "timestamp": "2025-07-17T21:00:07.163Z"
+    },
+    {
+      "test": "Directorio config",
+      "success": true,
+      "details": "Directorio encontrado",
+      "timestamp": "2025-07-17T21:00:07.163Z"
+    },
+    {
+      "test": "Directorio de logs",
+      "success": true,
+      "details": "Directorio de logs existe",
+      "timestamp": "2025-07-17T21:00:07.164Z"
+    },
+    {
+      "test": "NODE_ENV configurado",
+      "success": true,
+      "details": "Valor: development",
+      "timestamp": "2025-07-17T21:00:07.165Z"
+    },
+    {
+      "test": "JWT_SECRET configurado",
+      "success": true,
+      "details": "Secret válido configurado",
+      "timestamp": "2025-07-17T21:00:07.165Z"
+    },
+    {
+      "test": "CORS configurado",
+      "success": true,
+      "details": "Origin: http://localhost:3000",
+      "timestamp": "2025-07-17T21:00:07.166Z"
+    }
+  ]
+}

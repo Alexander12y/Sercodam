@@ -18,6 +18,7 @@ import {
   Menu,
   MenuItem,
   Button,
+  Link,
   Chip,
 } from '@mui/material';
 import {
@@ -38,7 +39,7 @@ import {
   People as PeopleIcon,
   ContentCutOutlined as ScissorsIcon,
 } from '@mui/icons-material';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { toggleSidebar } from '../store/slices/uiSlice';
 import { logout } from '../store/slices/authSlice';
@@ -462,9 +463,79 @@ const Layout = ({ children }) => {
           mt: '64px', // Height of AppBar
           bgcolor: 'background.default',
           minHeight: 'calc(100vh - 64px)',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
-        {children}
+        <Box sx={{ flexGrow: 1, pb: 4 }}>
+          {children}
+        </Box>
+        
+        {/* Footer */}
+        <Box
+          component="footer"
+          sx={{
+            mt: 'auto',
+            bgcolor: 'primary.main',
+            color: 'white',
+            py: 3,
+            px: 4,
+            borderRadius: '8px 8px 0 0',
+            boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
+            position: 'relative',
+            '&::before': {
+              content: '""',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '2px',
+              background: 'linear-gradient(90deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.1) 100%)',
+            }
+          }}
+        >
+          <Typography
+            variant="body2"
+            sx={{
+              fontSize: '0.8rem',
+              fontWeight: 400,
+              opacity: 0.9,
+              fontStyle: 'italic',
+              textAlign: 'left',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+            }}
+          >
+            <Box
+              component="span"
+              sx={{
+                width: '4px',
+                height: '4px',
+                borderRadius: '50%',
+                bgcolor: 'rgba(255,255,255,0.6)',
+                display: 'inline-block',
+              }}
+            />
+            Planeado y desarrollado por{' '}
+            <Link
+              href="https://wiger.ai/"
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{
+                color: 'inherit',
+                textDecoration: 'none',
+                fontWeight: 500,
+                '&:hover': {
+                  textDecoration: 'underline',
+                  opacity: 0.8,
+                }
+              }}
+            >
+              Wiger
+            </Link>
+          </Typography>
+        </Box>
       </Box>
     </Box>
   );
