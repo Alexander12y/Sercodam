@@ -101,6 +101,12 @@ const EditOrden = () => {
   });
   const [saving, setSaving] = useState(false);
 
+  // Verificar si la orden está cancelada o completada
+  const orden = ordenActual?.orden || ordenActual;
+  const isOrdenCancelada = orden?.estado === 'cancelada';
+  const isOrdenCompletada = orden?.estado === 'completada';
+  const isOrdenNoEditable = isOrdenCancelada || isOrdenCompletada;
+
   // Estados para Autocomplete de Cliente
   const [clientesOptions, setClientesOptions] = useState([]);
   const [loadingClientes, setLoadingClientes] = useState(false);
@@ -282,6 +288,12 @@ const EditOrden = () => {
         </Typography>
       </Box>
 
+              {isOrdenNoEditable && (
+          <Alert severity="info" sx={{ mb: 3 }}>
+            Esta orden está {isOrdenCancelada ? 'cancelada' : 'completada'}. Solo puedes ver la información, no modificarla.
+          </Alert>
+        )}
+
       <form onSubmit={handleSubmit}>
         <Grid container spacing={3}>
           {/* Información básica */}
@@ -336,12 +348,14 @@ const EditOrden = () => {
                                 : 'No se encontraron clientes'
                       }
                       filterOptions={(x) => x}
+                      disabled={isOrdenNoEditable}
                       renderInput={(params) => (
                         <TextField
                           {...params}
                           label="Cliente *"
                           required
                           placeholder="Haz clic para ver clientes o escribe para buscar"
+                          disabled={isOrdenNoEditable}
                         />
                       )}
                       autoHighlight
@@ -359,6 +373,7 @@ const EditOrden = () => {
                       multiline
                       rows={3}
                       variant="outlined"
+                      disabled={isOrdenNoEditable}
                     />
                   </Grid>
                   
@@ -368,15 +383,18 @@ const EditOrden = () => {
                       <Select
                         value={formData.estado}
                         label="Estado"
+                        disabled
                         onChange={(e) => handleInputChange('estado', e.target.value)}
                       >
-
                         <MenuItem value="en_proceso">En Proceso</MenuItem>
                         <MenuItem value="completada">Completada</MenuItem>
                         <MenuItem value="cancelada">Cancelada</MenuItem>
                         <MenuItem value="pausada">Pausada</MenuItem>
                       </Select>
                     </FormControl>
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                      El estado se cambia desde los botones de acción en la lista de órdenes
+                    </Typography>
                   </Grid>
                   
                   <Grid item xs={12} sm={6}>
@@ -386,6 +404,7 @@ const EditOrden = () => {
                         value={formData.prioridad}
                         label="Prioridad"
                         onChange={(e) => handleInputChange('prioridad', e.target.value)}
+                        disabled={isOrdenNoEditable}
                       >
                         <MenuItem value="baja">Baja</MenuItem>
                         <MenuItem value="media">Media</MenuItem>
@@ -403,6 +422,7 @@ const EditOrden = () => {
                       onChange={(e) => handleInputChange('fecha_inicio', e.target.value)}
                       InputLabelProps={{ shrink: true }}
                       variant="outlined"
+                      disabled={isOrdenNoEditable}
                     />
                   </Grid>
                   
@@ -415,6 +435,7 @@ const EditOrden = () => {
                       onChange={(e) => handleInputChange('fecha_fin', e.target.value)}
                       InputLabelProps={{ shrink: true }}
                       variant="outlined"
+                      disabled={isOrdenNoEditable}
                     />
                   </Grid>
                 </Grid>
@@ -482,6 +503,11 @@ const EditOrden = () => {
 
         {/* Botones de acción */}
         <Box sx={{ mt: 3, display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+          {isOrdenNoEditable && (
+            <Alert severity="warning" sx={{ flex: 1, mr: 2 }}>
+              No se pueden editar órdenes {isOrdenCancelada ? 'canceladas' : 'completadas'}
+            </Alert>
+          )}
           <Button
             variant="outlined"
             startIcon={<CancelIcon />}
@@ -494,7 +520,7 @@ const EditOrden = () => {
             type="submit"
             variant="contained"
             startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
-            disabled={saving}
+            disabled={saving || isOrdenNoEditable}
           >
             {saving ? 'Guardando...' : 'Guardar Cambios'}
           </Button>

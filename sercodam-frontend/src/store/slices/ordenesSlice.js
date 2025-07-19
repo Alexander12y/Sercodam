@@ -92,6 +92,21 @@ export const approveOrden = createAsyncThunk(
   }
 );
 
+export const deleteOrden = createAsyncThunk(
+  'ordenes/deleteOrden',
+  async (id, { rejectWithValue }) => {
+    try {
+      const response = await ordenesApi.deleteOrden(id);
+      return response.data;
+    } catch (err) {
+      if (err.response && err.response.data) {
+        return rejectWithValue(err.response.data);
+      }
+      throw err;
+    }
+  }
+);
+
 const initialState = {
   ordenes: [],
   ordenActual: null,
@@ -246,6 +261,29 @@ const ordenesSlice = createSlice({
         }
       })
       .addCase(approveOrden.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload?.message || action.error.message;
+      })
+      // deleteOrden
+      .addCase(deleteOrden.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(deleteOrden.fulfilled, (state, action) => {
+        state.loading = false;
+        // Remover la orden de la lista
+        const ordenEliminada = action.payload.data || action.payload;
+        if (ordenEliminada && ordenEliminada.id_op) {
+          state.ordenes = state.ordenes.filter(
+            (orden) => orden.id_op !== ordenEliminada.id_op
+          );
+        }
+        // Limpiar orden actual si es la misma
+        if (state.ordenActual && state.ordenActual.id_op === ordenEliminada?.id_op) {
+          state.ordenActual = null;
+        }
+      })
+      .addCase(deleteOrden.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload?.message || action.error.message;
       });

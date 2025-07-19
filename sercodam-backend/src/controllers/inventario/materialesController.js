@@ -347,6 +347,21 @@ const materialesController = {
                 throw new NotFoundError('Material no encontrado');
             }
 
+            // Verificar si el material está siendo usado en alguna orden (excepto cancelada)
+            const ordenesUsandoMaterial = await trx('orden_produccion_detalle as opd')
+                .join('orden_produccion as op', 'opd.id_op', 'op.id_op')
+                .where('opd.id_item', id)
+                .whereNot('op.estado', 'cancelada') // Permitir eliminar solo si está en orden cancelada
+                .select('op.id_op', 'op.numero_op', 'op.estado', 'opd.tipo_item')
+                .first();
+
+            if (ordenesUsandoMaterial) {
+                throw new ValidationError(
+                    `No se puede eliminar el material porque está siendo usado como ${ordenesUsandoMaterial.tipo_item} en la orden ${ordenesUsandoMaterial.numero_op} (estado: ${ordenesUsandoMaterial.estado}). ` +
+                    `Los materiales solo se pueden eliminar si están ligados a órdenes canceladas.`
+                );
+            }
+
             // Eliminar material (el inventario_item se elimina automáticamente por CASCADE)
             await trx('materiales_extras')
                 .where('id_item', id)

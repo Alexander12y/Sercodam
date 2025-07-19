@@ -87,6 +87,12 @@ router.put('/:id',
   asyncHandler(ordenesController.updateOrden)
 );
 
+// DELETE /api/v1/ordenes/:id - Eliminar orden
+router.delete('/:id',
+  requireRole(['admin']),
+  asyncHandler(ordenesController.deleteOrden)
+);
+
 // PATCH /api/v1/ordenes/:id/estado - Cambiar estado de orden
 router.patch('/:id/estado',
   asyncHandler(ordenesController.cambiarEstadoOrden)

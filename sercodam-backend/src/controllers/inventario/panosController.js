@@ -647,13 +647,34 @@ const panosController = {
                 throw new NotFoundError('Paño no encontrado');
             }
 
-            // Verificar si el paño está siendo usado en alguna orden
-            const ordenesUsandoPano = await trx('orden_produccion_detalle')
-                .where('id_item', id)
+            // Verificar si el paño está siendo usado en alguna orden (excepto cancelada)
+            const ordenesUsandoPano = await trx('trabajo_corte as tc')
+                .join('orden_produccion as op', 'tc.id_op', 'op.id_op')
+                .where('tc.id_item', id)
+                .whereNot('op.estado', 'cancelada') // Permitir eliminar solo si está en orden cancelada
+                .select('op.id_op', 'op.numero_op', 'op.estado')
                 .first();
 
             if (ordenesUsandoPano) {
-                throw new ValidationError('No se puede eliminar el paño porque está siendo usado en una orden de producción');
+                throw new ValidationError(
+                    `No se puede eliminar el paño porque está siendo usado en la orden ${ordenesUsandoPano.numero_op} (estado: ${ordenesUsandoPano.estado}). ` +
+                    `Los paños solo se pueden eliminar si están ligados a órdenes canceladas.`
+                );
+            }
+
+            // Verificar también en orden_produccion_detalle para materiales extras (excepto cancelada)
+            const materialesUsandoPano = await trx('orden_produccion_detalle as opd')
+                .join('orden_produccion as op', 'opd.id_op', 'op.id_op')
+                .where('opd.id_item', id)
+                .whereNot('op.estado', 'cancelada') // Permitir eliminar solo si está en orden cancelada
+                .select('op.id_op', 'op.numero_op', 'op.estado', 'opd.tipo_item')
+                .first();
+
+            if (materialesUsandoPano) {
+                throw new ValidationError(
+                    `No se puede eliminar el paño porque está siendo usado como ${materialesUsandoPano.tipo_item} en la orden ${materialesUsandoPano.numero_op} (estado: ${materialesUsandoPano.estado}). ` +
+                    `Los materiales solo se pueden eliminar si están ligados a órdenes canceladas.`
+                );
             }
 
             // Eliminar paño
@@ -1290,14 +1311,16 @@ const panosController = {
                 }
             }
 
-            // LÓGICA CORREGIDA: El paño padre siempre se consume cuando se hace un corte
-            // ya que se convierte en remanentes más pequeños
-                await trx('pano').where('id_item', id_item).update({ estado_trabajo: 'Consumido' });
+            // LÓGICA CORREGIDA: El paño debe mantenerse en estado "Libre" hasta que se apruebe la orden
+            // Solo se marcará como "Consumido" cuando se ejecute el corte
+            // NO cambiar el estado aquí - se cambiará cuando se apruebe la orden a "Reservado"
+            // y cuando se ejecute el corte a "Consumido"
 
-            logger.info('Paño padre marcado como Consumido:', {
+            logger.info('Trabajo de corte creado - paño mantiene estado Libre:', {
                 id_item,
                 job_id,
-                remnants_count: remnants.length
+                remnants_count: remnants.length,
+                estado_actual: 'Libre'
             });
 
             return job_id;

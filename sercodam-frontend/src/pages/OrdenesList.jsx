@@ -40,10 +40,11 @@ import {
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
   Pause as PauseIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchOrdenes, cambiarEstadoOrden, approveOrden } from '../store/slices/ordenesSlice';
+import { fetchOrdenes, cambiarEstadoOrden, approveOrden, deleteOrden } from '../store/slices/ordenesSlice';
 import { useSnackbar } from 'notistack';
 
 const getEstadoColor = (estado) => {
@@ -145,6 +146,17 @@ const OrdenesList = () => {
     navigate(`/ordenes/${id}/editar`);
   };
 
+  const handleEliminarOrden = (orden) => {
+    const estadoText = orden.estado === 'cancelada' ? 'cancelada' : 'completada';
+    setConfirmDialog({
+      open: true,
+      orden,
+      action: 'eliminar',
+      title: 'Eliminar Orden',
+      message: `¿Estás seguro de que quieres eliminar la orden ${orden.numero_op} (${estadoText})? Esta acción no se puede deshacer y eliminará todos los datos asociados.`
+    });
+  };
+
   const handleCambiarEstado = (orden, nuevoEstado) => {
     const acciones = {
       'por aprobar': { title: 'Aprobar Orden', message: '¿Estás seguro de que quieres aprobar esta orden? Esto iniciará la producción y bloqueará los paños seleccionados.' },
@@ -165,7 +177,13 @@ const OrdenesList = () => {
 
   const confirmarAccion = async () => {
     try {
-      if (confirmDialog.action === 'en_proceso' && confirmDialog.orden.estado === 'por aprobar') {
+      if (confirmDialog.action === 'eliminar') {
+        // Eliminar orden
+        await dispatch(deleteOrden(confirmDialog.orden.id_op)).unwrap();
+        enqueueSnackbar('Orden eliminada exitosamente', { 
+          variant: 'success' 
+        });
+      } else if (confirmDialog.action === 'en_proceso' && confirmDialog.orden.estado === 'por aprobar') {
         // Usar approveOrden para órdenes en 'por aprobar'
         await dispatch(approveOrden(confirmDialog.orden.id_op)).unwrap();
         enqueueSnackbar('Orden aprobada exitosamente', { 
@@ -173,14 +191,14 @@ const OrdenesList = () => {
         });
       } else {
         // Usar cambiarEstadoOrden para otros cambios de estado
-      await dispatch(cambiarEstadoOrden({ 
-        id: confirmDialog.orden.id_op, 
-        estado: confirmDialog.action 
-      })).unwrap();
-      
-      enqueueSnackbar(`Estado cambiado exitosamente a ${getEstadoText(confirmDialog.action)}`, { 
-        variant: 'success' 
-      });
+        await dispatch(cambiarEstadoOrden({ 
+          id: confirmDialog.orden.id_op, 
+          estado: confirmDialog.action 
+        })).unwrap();
+        
+        enqueueSnackbar(`Estado cambiado exitosamente a ${getEstadoText(confirmDialog.action)}`, { 
+          variant: 'success' 
+        });
       }
       
       loadOrdenes(); // Recargar la lista
@@ -424,6 +442,20 @@ const OrdenesList = () => {
                               color="error"
                             >
                               <CancelIcon />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      )}
+
+                      {(orden.estado === 'cancelada' || orden.estado === 'completada') && (
+                        <Tooltip title="Eliminar">
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleEliminarOrden(orden)}
+                              color="error"
+                            >
+                              <DeleteIcon />
                             </IconButton>
                           </span>
                         </Tooltip>

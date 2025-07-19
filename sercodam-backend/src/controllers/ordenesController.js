@@ -888,6 +888,68 @@ const ordenesController = {
             // Guardar estado anterior para logging
             const estadoAnterior = orden.estado;
 
+            // VALIDACIÓN ESPECIAL PARA ESTADO "COMPLETADA"
+            if (estado === 'completada') {
+                logger.info('Validando paños para completar orden:', { orden_id: id });
+                
+                // Obtener todos los paños relacionados con esta orden (padres, no remanentes)
+                const pañosRelacionados = await trx('trabajo_corte as tc')
+                    .join('pano as p', 'tc.id_item', 'p.id_item')
+                    .where('tc.id_op', id)
+                    .select('p.id_item', 'p.estado_trabajo', 'tc.job_id', 'tc.estado as estado_corte');
+                
+                logger.info('Paños relacionados encontrados:', {
+                    orden_id: id,
+                    total_paños: pañosRelacionados.length,
+                    paños: pañosRelacionados.map(p => ({
+                        id_item: p.id_item,
+                        estado_trabajo: p.estado_trabajo,
+                        estado_corte: p.estado_corte
+                    }))
+                });
+                
+                // Verificar que todos los paños estén en estado "Consumido"
+                const pañosNoConsumidos = pañosRelacionados.filter(p => p.estado_trabajo !== 'Consumido');
+                
+                if (pañosNoConsumidos.length > 0) {
+                    const pañosIds = pañosNoConsumidos.map(p => p.id_item);
+                    logger.warn('No se puede completar la orden - paños no consumidos:', {
+                        orden_id: id,
+                        paños_no_consumidos: pañosIds,
+                        estados: pañosNoConsumidos.map(p => ({
+                            id_item: p.id_item,
+                            estado_trabajo: p.estado_trabajo,
+                            estado_corte: p.estado_corte
+                        }))
+                    });
+                    
+                    throw new ValidationError(
+                        `No se puede completar la orden. Los siguientes paños no han sido consumidos: ${pañosIds.join(', ')}. ` +
+                        `Todos los paños deben estar en estado "Consumido" para completar la orden.`
+                    );
+                }
+                
+                // Verificar que todos los trabajos de corte estén completados
+                const trabajosPendientes = pañosRelacionados.filter(p => 
+                    p.estado_corte !== 'Confirmado' && p.estado_corte !== 'Desviado'
+                );
+                
+                if (trabajosPendientes.length > 0) {
+                    const trabajosIds = trabajosPendientes.map(p => p.job_id);
+                    logger.warn('No se puede completar la orden - trabajos de corte pendientes:', {
+                        orden_id: id,
+                        trabajos_pendientes: trabajosIds
+                    });
+                    
+                    throw new ValidationError(
+                        `No se puede completar la orden. Los siguientes trabajos de corte no han sido completados: ${trabajosIds.join(', ')}. ` +
+                        `Todos los cortes deben estar confirmados o desviados para completar la orden.`
+                    );
+                }
+                
+                logger.info('Validación exitosa - todos los paños están consumidos y cortes completados:', { orden_id: id });
+            }
+
             // Actualizar estado en orden_produccion
             await trx('orden_produccion')
                 .where('id_op', id)
@@ -1509,9 +1571,9 @@ const ordenesController = {
                 throw new NotFoundError('Orden de producción no encontrada');
             }
 
-            // Verificar que la orden no esté en proceso
-            if (orden.estado === 'en_proceso') {
-                throw new ValidationError('No se puede eliminar una orden en proceso');
+            // Verificar que la orden esté cancelada o completada
+            if (orden.estado === 'en_proceso' || orden.estado === 'por aprobar' || orden.estado === 'pausada') {
+                throw new ValidationError('Solo se pueden eliminar órdenes canceladas o completadas');
             }
 
             // Eliminar detalles de la orden

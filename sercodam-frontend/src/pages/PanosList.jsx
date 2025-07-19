@@ -169,43 +169,163 @@ const PanosList = () => {
   // const filteredPanos = panosArray.filter(pano => { ... });
 
   const renderSpecifications = (pano) => {
-    // Usar directamente el campo especificaciones generado por el backend
+    // Si el backend ya generó las especificaciones, usarlas directamente
     if (pano.especificaciones) {
       return (
-        <Typography 
-          variant="caption" 
-          color="text.secondary" 
-          style={{ whiteSpace: 'pre-line', fontSize: '0.75rem' }}
-        >
+        <Typography variant="caption" style={{ whiteSpace: 'pre-line' }} color="text.secondary">
           {pano.especificaciones}
         </Typography>
       );
     }
-    return <Typography variant="caption" color="text.secondary">Sin especificaciones</Typography>;
+    
+    // Fallback: generar especificaciones desde campos individuales
+    switch (pano.tipo_red) {
+      case 'nylon':
+        return (
+          <Box>
+            <Typography variant="caption" display="block" color="text.secondary">
+              Calibre: {pano.calibre || 'N/A'}
+            </Typography>
+            <Typography variant="caption" display="block" color="text.secondary">
+              Cuadro: {pano.cuadro || 'N/A'}
+            </Typography>
+            <Typography variant="caption" display="block" color="text.secondary">
+              Torsión: {pano.torsion || 'N/A'}
+            </Typography>
+            {pano.refuerzo !== undefined && pano.refuerzo !== null && (
+              <Typography variant="caption" display="block" color="text.secondary">
+                Refuerzo: {pano.refuerzo === true || pano.refuerzo === 't' ? 'Sí' : 'No'}
+              </Typography>
+            )}
+          </Box>
+        );
+      case 'lona':
+        return (
+          <Box>
+            <Typography variant="caption" display="block" color="text.secondary">
+              Color: {pano.color || 'N/A'}
+            </Typography>
+            <Typography variant="caption" display="block" color="text.secondary">
+              Presentación: {pano.presentacion || 'N/A'}
+            </Typography>
+          </Box>
+        );
+      case 'polipropileno':
+        return (
+          <Box>
+            <Typography variant="caption" display="block" color="text.secondary">
+              Grosor: {pano.grosor || 'N/A'}
+            </Typography>
+            <Typography variant="caption" display="block" color="text.secondary">
+              Cuadro: {pano.cuadro || 'N/A'}
+            </Typography>
+          </Box>
+        );
+      case 'malla sombra':
+        return (
+          <Box>
+            <Typography variant="caption" display="block" color="text.secondary">
+              Color/Tipo: {pano.color_tipo_red || 'N/A'}
+            </Typography>
+            <Typography variant="caption" display="block" color="text.secondary">
+              Presentación: {pano.presentacion || 'N/A'}
+            </Typography>
+          </Box>
+        );
+      default:
+        return <Typography variant="caption" color="text.secondary">Sin especificaciones</Typography>;
+    }
   };
 
   const renderDetailSpecifications = (pano) => {
-    // Usar directamente el campo especificaciones generado por el backend
+    // Si el backend ya generó las especificaciones, mostrarlas directamente
     if (pano.especificaciones) {
       return (
         <Grid item xs={12}>
           <Typography variant="subtitle2" color="text.secondary" gutterBottom>
             Especificaciones:
           </Typography>
-          <Typography 
-            variant="body2" 
-            style={{ whiteSpace: 'pre-line' }}
-          >
+          <Typography variant="body2" style={{ whiteSpace: 'pre-line' }}>
             {pano.especificaciones}
           </Typography>
         </Grid>
       );
     }
-    return (
-      <Grid item xs={12}>
-        <Typography variant="body2" color="text.secondary">Sin especificaciones disponibles</Typography>
-      </Grid>
-    );
+    
+    // Fallback: mostrar campos individuales
+    switch (pano.tipo_red) {
+      case 'nylon':
+        return (
+          <>
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle2" color="text.secondary">Calibre:</Typography>
+              <Typography variant="body2">{pano.calibre || 'N/A'}</Typography>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle2" color="text.secondary">Cuadro:</Typography>
+              <Typography variant="body2">{pano.cuadro || 'N/A'}</Typography>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle2" color="text.secondary">Torsión:</Typography>
+              <Typography variant="body2">{pano.torsion || 'N/A'}</Typography>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle2" color="text.secondary">Refuerzo:</Typography>
+              <Typography variant="body2">
+                {pano.refuerzo !== undefined && pano.refuerzo !== null 
+                  ? (pano.refuerzo === true || pano.refuerzo === 't' ? 'Sí' : 'No')
+                  : 'N/A'
+                }
+              </Typography>
+            </Grid>
+          </>
+        );
+      case 'lona':
+        return (
+          <>
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle2" color="text.secondary">Color:</Typography>
+              <Typography variant="body2">{pano.color || 'N/A'}</Typography>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle2" color="text.secondary">Presentación:</Typography>
+              <Typography variant="body2">{pano.presentacion || 'N/A'}</Typography>
+            </Grid>
+          </>
+        );
+      case 'polipropileno':
+        return (
+          <>
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle2" color="text.secondary">Grosor:</Typography>
+              <Typography variant="body2">{pano.grosor || 'N/A'}</Typography>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle2" color="text.secondary">Cuadro:</Typography>
+              <Typography variant="body2">{pano.cuadro || 'N/A'}</Typography>
+            </Grid>
+          </>
+        );
+      case 'malla sombra':
+        return (
+          <>
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle2" color="text.secondary">Color/Tipo:</Typography>
+              <Typography variant="body2">{pano.color_tipo_red || 'N/A'}</Typography>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle2" color="text.secondary">Presentación:</Typography>
+              <Typography variant="body2">{pano.presentacion || 'N/A'}</Typography>
+            </Grid>
+          </>
+        );
+      default:
+        return (
+          <Grid item xs={12}>
+            <Typography variant="body2" color="text.secondary">Sin especificaciones disponibles</Typography>
+          </Grid>
+        );
+    }
   };
 
   const handlePageChange = (event, newPage) => {
