@@ -235,6 +235,15 @@ class PDFService {
                             .text(`• Dimensiones requeridas: ${cut.altura_req} m x ${cut.ancho_req} m`, 90, doc.y + 3)
                             .text(`• Área requerida: ${(cut.altura_req * cut.ancho_req).toFixed(2)} m²`, 90, doc.y + 3);
                         
+                        // Mostrar cortes individuales si el modo de corte es 'individuales' y existen cortes
+                        if (cut.modo_corte === 'individuales' && cut.cortes_individuales && Array.isArray(cut.cortes_individuales) && cut.cortes_individuales.length > 0) {
+                            doc.text(`• Cortes individuales a realizar:`, 90, doc.y + 3);
+                            cut.cortes_individuales.forEach((corte, corteIdx) => {
+                                const areaCorte = (parseFloat(corte.largo) * parseFloat(corte.ancho)).toFixed(2);
+                                doc.text(`  - Corte ${corte.seq}: ${corte.largo} m x ${corte.ancho} m = ${areaCorte} m² (${corte.cantidad} pieza${corte.cantidad > 1 ? 's' : ''})`, 110, doc.y + 3);
+                            });
+                        }
+                        
                         if (cut.plans && Array.isArray(cut.plans)) {
                             doc.text(`• Plan de corte guillotina:`, 90, doc.y + 3);
                             cut.plans.forEach((plan, planIdx) => {

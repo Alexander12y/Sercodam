@@ -124,4 +124,16 @@ router.get('/:id/pdf',
   asyncHandler(ordenesController.generarPDF)
 );
 
+// GET /api/v1/ordenes/check-trabajo-corte-modo - Verificar estado de modo_corte
+router.get('/check-trabajo-corte-modo',
+  requireRole(['admin']),
+  asyncHandler(ordenesController.checkTrabajoCorteModo)
+);
+
+// GET /api/v1/ordenes/:id/trabajos-corte - Obtener trabajos de corte de una orden
+router.get('/:id/trabajos-corte',
+  requireRole(['operador', 'admin']),
+  asyncHandler(ordenesController.getTrabajosCorte)
+);
+
 module.exports = router;

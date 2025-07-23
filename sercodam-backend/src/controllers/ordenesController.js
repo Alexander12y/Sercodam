@@ -461,6 +461,17 @@ const ordenesController = {
                 });
             }
 
+            // Determinar el modo_corte general de la orden basándose en los paños
+            let modoCorteOrden = 'simple';
+            if (panos.length > 0) {
+                // Si al menos un paño tiene cortes individuales, la orden es de cortes individuales
+                const tieneCortesIndividuales = panos.some(pano => 
+                    pano.modo_corte === 'individuales' || 
+                    (pano.cortes_individuales && Array.isArray(pano.cortes_individuales) && pano.cortes_individuales.length > 0)
+                );
+                modoCorteOrden = tieneCortesIndividuales ? 'individuales' : 'simple';
+            }
+
             // 2. Crear orden de producción
             const [ordenCreada] = await trx('orden_produccion')
                 .insert({
@@ -473,7 +484,8 @@ const ordenesController = {
                     prioridad,
                     fecha_inicio: fecha_inicio ? new Date(fecha_inicio) : null,
                     fecha_fin: fecha_fin ? new Date(fecha_fin) : null,
-                    estado: 'por aprobar'
+                    estado: 'por aprobar',
+                    modo_corte: modoCorteOrden
                 })
                 .returning('id_op');
             const id_op = ordenCreada.id_op;
@@ -502,7 +514,7 @@ const ordenesController = {
                 
                 const selectedPano = suitablePanos[0]; // El más pequeño
                 
-                // Crear trabajo de corte
+                // Crear trabajo de corte (modo_corte ya no se pasa a trabajo_corte)
                 const job_id = await panosController.createCutJob(trx, id_op, selectedPano.id_item, panoReq.altura_req, panoReq.ancho_req, panoReq.umbral_sobrante_m2 || 5.0, i + 1, req.user.id);
                 
                 // Si hay cortes individuales, guardarlos en la tabla cortes_individuales
@@ -621,6 +633,12 @@ const ordenesController = {
                             .where('job_id', job.job_id)
                             .orderBy('seq')
                             .select('*');
+                        
+                        // Obtener cortes individuales para este trabajo
+                        job.cortes_individuales = await db('cortes_individuales')
+                            .where('job_id', job.job_id)
+                            .orderBy('seq')
+                            .select('*');
                     }
 
                     // Obtener sobrantes (remnants) para esta orden
@@ -734,7 +752,8 @@ const ordenesController = {
                                 altura_plan: plan.altura_plan,
                                 ancho_plan: plan.ancho_plan,
                                 seq: plan.seq
-                            }))
+                            })),
+                            cortes_individuales: job.cortes_individuales || []
                         })),
                         // Add remnants data
                         sobrantes: sobrantes.map(sobrante => ({
@@ -1301,6 +1320,8 @@ const ordenesController = {
                             id_item: job.id_item,
                             altura_req: job.altura_req,
                             ancho_req: job.ancho_req,
+                            umbral_sobrante_m2: job.umbral_sobrante_m2 || 5.0,
+                            modo_corte: orden.modo_corte || 'simple', // Agregar modo_corte
                             pano_original: {
                                 largo: job.pano_largo,
                                 ancho: job.pano_ancho,
@@ -1311,7 +1332,8 @@ const ordenesController = {
                                 altura_plan: plan.altura_plan,
                                 ancho_plan: plan.ancho_plan,
                                 seq: plan.seq
-                            }))
+                            })),
+                            cortes_individuales: job.cortes_individuales || []
                         })),
                         // Add remnants data
                         sobrantes: sobrantes.map(sobrante => ({
@@ -1708,6 +1730,12 @@ const ordenesController = {
                     .where('job_id', job.job_id)
                     .orderBy('seq')
                     .select('*');
+                
+                // Obtener cortes individuales para este trabajo
+                job.cortes_individuales = await db('cortes_individuales')
+                    .where('job_id', job.job_id)
+                    .orderBy('seq')
+                    .select('*');
             }
 
             // Obtener sobrantes (remnants) para esta orden
@@ -1809,6 +1837,8 @@ const ordenesController = {
                     id_item: job.id_item,
                     altura_req: job.altura_req,
                     ancho_req: job.ancho_req,
+                    umbral_sobrante_m2: job.umbral_sobrante_m2 || 5.0,
+                    modo_corte: orden.modo_corte || 'simple', // Agregar modo_corte
                     pano_original: {
                         largo: job.pano_largo,
                         ancho: job.pano_ancho,
@@ -1819,7 +1849,8 @@ const ordenesController = {
                         altura_plan: plan.altura_plan,
                         ancho_plan: plan.ancho_plan,
                         seq: plan.seq
-                    }))
+                    })),
+                    cortes_individuales: job.cortes_individuales || []
                 })),
                 // Add remnants data
                 sobrantes: sobrantes.map(sobrante => ({
@@ -1929,6 +1960,12 @@ const ordenesController = {
                         .where('job_id', job.job_id)
                         .orderBy('seq')
                         .select('*');
+                    
+                    // Obtener cortes individuales para este trabajo
+                    job.cortes_individuales = await db('cortes_individuales')
+                        .where('job_id', job.job_id)
+                        .orderBy('seq')
+                        .select('*');
                 }
 
                 // Obtener sobrantes (remnants) para esta orden
@@ -2030,6 +2067,8 @@ const ordenesController = {
                         id_item: job.id_item,
                         altura_req: job.altura_req,
                         ancho_req: job.ancho_req,
+                        umbral_sobrante_m2: job.umbral_sobrante_m2 || 5.0,
+                        modo_corte: orden.modo_corte || 'simple', // Agregar modo_corte
                         pano_original: {
                             largo: job.pano_largo,
                             ancho: job.pano_ancho,
@@ -2040,7 +2079,8 @@ const ordenesController = {
                             altura_plan: plan.altura_plan,
                             ancho_plan: plan.ancho_plan,
                             seq: plan.seq
-                        }))
+                        })),
+                        cortes_individuales: job.cortes_individuales || []
                     })),
                     // Add remnants data
                     sobrantes: sobrantes.map(sobrante => ({
@@ -2339,6 +2379,12 @@ const ordenesController = {
                     .where('job_id', job.job_id)
                     .orderBy('seq')
                     .select('*');
+                
+                // Obtener cortes individuales para este trabajo
+                job.cortes_individuales = await trx('cortes_individuales')
+                    .where('job_id', job.job_id)
+                    .orderBy('seq')
+                    .select('*');
             }
 
             // Obtener sobrantes (remnants) para esta orden
@@ -2437,6 +2483,8 @@ const ordenesController = {
                 id_item: job.id_item,
                 altura_req: job.altura_req,
                 ancho_req: job.ancho_req,
+                umbral_sobrante_m2: job.umbral_sobrante_m2 || 5.0,
+                modo_corte: orden.modo_corte || 'simple', // Agregar modo_corte
                 pano_original: {
                     largo: job.pano_largo,
                     ancho: job.pano_ancho,
@@ -2447,7 +2495,8 @@ const ordenesController = {
                     altura_plan: plan.altura_plan,
                     ancho_plan: plan.ancho_plan,
                     seq: plan.seq
-                }))
+                })),
+                cortes_individuales: job.cortes_individuales || []
             }));
 
             // Add remnants data
@@ -3638,6 +3687,52 @@ const ordenesController = {
             await trx.rollback();
             logger.error('Error en submitIndividualCut:', error);
             throw error;
+        }
+    },
+
+    // Endpoint para verificar el estado de modo_corte en trabajo_corte
+    checkTrabajoCorteModo: async (req, res) => {
+        try {
+            const stats = await db('trabajo_corte')
+                .select('modo_corte')
+                .count('* as count')
+                .groupBy('modo_corte');
+
+            const total = await db('trabajo_corte').count('* as total').first();
+            
+            res.json({
+                total_trabajos: total.total,
+                distribucion_modo_corte: stats,
+                mensaje: 'Estadísticas de modo_corte en trabajo_corte'
+            });
+        } catch (error) {
+            logger.error('Error verificando modo_corte:', error);
+            res.status(500).json({ error: 'Error interno del servidor' });
+        }
+    },
+
+    // Endpoint para obtener trabajos de corte de una orden específica
+    getTrabajosCorte: async (req, res) => {
+        try {
+            const { id } = req.params;
+            
+            const trabajos = await db('trabajo_corte as tc')
+                .where('tc.id_op', id)
+                .select('tc.*')
+                .orderBy('tc.order_seq');
+
+            // Obtener cortes individuales para cada trabajo
+            for (const trabajo of trabajos) {
+                trabajo.cortes_individuales = await db('cortes_individuales')
+                    .where('job_id', trabajo.job_id)
+                    .orderBy('seq')
+                    .select('*');
+            }
+
+            res.json(trabajos);
+        } catch (error) {
+            logger.error('Error obteniendo trabajos de corte:', error);
+            res.status(500).json({ error: 'Error interno del servidor' });
         }
     }
 };

@@ -239,7 +239,9 @@ const CreateOrden = () => {
       tipo_red: p.tipo_red || 'nylon',  // Asumir default si no hay
       umbral_sobrante_m2: p.umbral_sobrante_m2 || 5.0,
       cantidad: p.cantidad || 1,
-        notas: p.notas || ''
+      notas: p.notas || '',
+      modo_corte: p.modo_corte || 'simple',  // Incluir modo_corte
+      cortes_individuales: p.cortes_individuales || null  // Incluir cortes_individuales
     }));
     
     // Preparar materiales payload (solo extras)

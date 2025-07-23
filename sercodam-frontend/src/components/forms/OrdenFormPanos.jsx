@@ -233,7 +233,8 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
           ancho_tomar: anchoTomar,
           cantidad: 1,
           area_tomar: areaTomar,
-          umbral_sobrante_m2: umbralSobrante // Include threshold
+          umbral_sobrante_m2: umbralSobrante, // Include threshold
+          modo_corte: 'simple' // Agregar modo_corte para cortes simples
         }
       ];
       setPanosSeleccionados(newPanosSeleccionados);
@@ -268,13 +269,16 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
   const handleConfirmarCortesIndividuales = (datosCortes) => {
     const { cortesIndividuales, areaTotal, dimensionesRecomendadas, numeroCortes } = datosCortes;
     
+    // Calcular área real basada en las dimensiones a tomar
+    const areaReal = dimensionesRecomendadas.largo * dimensionesRecomendadas.ancho;
+    
     // Crear el paño con información de cortes individuales
     const panoConCortes = {
       ...panoParaCortesIndividuales,
       largo_tomar: dimensionesRecomendadas.largo,
       ancho_tomar: dimensionesRecomendadas.ancho,
       cantidad: numeroCortes,
-      area_tomar: areaTotal,
+      area_tomar: areaReal, // Usar área real en lugar de areaTotal
       umbral_sobrante_m2: umbralSobrante,
       cortes_individuales: cortesIndividuales,
       modo_corte: 'individuales'
@@ -316,7 +320,11 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
 
   // Calcular estadísticas
   const panosArray = Array.isArray(panosSeleccionados) ? panosSeleccionados : [];
-  const totalArea = panosArray.reduce((sum, p) => sum + (Number(p.cantidad) || 0), 0);
+  const totalArea = panosArray.reduce((sum, p) => {
+    // Calcular área real: largo_tomar * ancho_tomar
+    const areaPano = (Number(p.largo_tomar) || 0) * (Number(p.ancho_tomar) || 0);
+    return sum + areaPano;
+  }, 0);
   const totalPiezas = panosArray.length;
   const tiposUnicos = [...new Set(panosArray.map(p => p.tipo_red))];
 
@@ -432,6 +440,7 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                       <TableCell><strong>Dimensiones Disponibles</strong></TableCell>
                       <TableCell><strong>Dimensiones a Tomar</strong></TableCell>
                       <TableCell><strong>Área a Tomar (m²)</strong></TableCell>
+                      <TableCell><strong>Piezas</strong></TableCell>
                       <TableCell><strong>Umbral Remanente (m²)</strong></TableCell>
                       <TableCell><strong>Modo de Corte</strong></TableCell>
                       <TableCell><strong>Estado</strong></TableCell>
@@ -467,7 +476,14 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2" fontWeight="medium" color="success.main">
-                            {(Number(p.cantidad) || 0).toFixed(2)}
+                            {((Number(p.largo_tomar) || 0) * (Number(p.ancho_tomar) || 0)).toFixed(2)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight="medium" color="info.main">
+                            {p.modo_corte === 'individuales' && p.cortes_individuales 
+                              ? p.cortes_individuales.length 
+                              : (Number(p.cantidad) || 1)}
                           </Typography>
                         </TableCell>
                         <TableCell>
@@ -482,11 +498,6 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                             color={p.modo_corte === 'individuales' ? 'info' : 'default'}
                             variant="outlined"
                           />
-                          {p.modo_corte === 'individuales' && p.cortes_individuales && (
-                            <Typography variant="caption" display="block" color="textSecondary">
-                              {p.cortes_individuales.length} piezas
-                            </Typography>
-                          )}
                         </TableCell>
                         <TableCell>
                           <Chip 
