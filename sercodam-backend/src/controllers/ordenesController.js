@@ -503,7 +503,24 @@ const ordenesController = {
                 const selectedPano = suitablePanos[0]; // El más pequeño
                 
                 // Crear trabajo de corte
-                await panosController.createCutJob(trx, id_op, selectedPano.id_item, panoReq.altura_req, panoReq.ancho_req, panoReq.umbral_sobrante_m2 || 5.0, i + 1, req.user.id);
+                const job_id = await panosController.createCutJob(trx, id_op, selectedPano.id_item, panoReq.altura_req, panoReq.ancho_req, panoReq.umbral_sobrante_m2 || 5.0, i + 1, req.user.id);
+                
+                // Si hay cortes individuales, guardarlos en la tabla cortes_individuales
+                if (panoReq.cortes_individuales && Array.isArray(panoReq.cortes_individuales)) {
+                    for (let j = 0; j < panoReq.cortes_individuales.length; j++) {
+                        const corte = panoReq.cortes_individuales[j];
+                        const area_corte = (parseFloat(corte.largo) || 0) * (parseFloat(corte.ancho) || 0);
+                        
+                        await trx('cortes_individuales').insert({
+                            job_id,
+                            seq: j + 1,
+                            largo: parseFloat(corte.largo) || 0,
+                            ancho: parseFloat(corte.ancho) || 0,
+                            cantidad: parseInt(corte.cantidad) || 1,
+                            area_total: area_corte * (parseInt(corte.cantidad) || 1)
+                        });
+                    }
+                }
             }
 
             // 3. Agregar materiales a la orden (sin descontar stock aún)
@@ -706,6 +723,7 @@ const ordenesController = {
                             id_item: job.id_item,
                             altura_req: job.altura_req,
                             ancho_req: job.ancho_req,
+                            umbral_sobrante_m2: job.umbral_sobrante_m2 || 5.0, // Agregar umbral
                             pano_original: {
                                 largo: job.pano_largo,
                                 ancho: job.pano_ancho,

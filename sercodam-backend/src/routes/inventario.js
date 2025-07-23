@@ -99,6 +99,11 @@ router.get('/panos/catalogos/malla-sombra/full',
     asyncHandler(panosController.getMallaSombraFullData)
 );
 
+// POST /api/v1/inventario/panos/calculate-dimensions - Calcular dimensiones recomendadas para múltiples cortes
+router.post('/panos/calculate-dimensions', 
+    asyncHandler(panosController.calculateRecommendedDimensions)
+);
+
 // GET /api/v1/inventario/panos/:id - Obtener paño específico
 router.get('/panos/:id', 
     validateIdParam,

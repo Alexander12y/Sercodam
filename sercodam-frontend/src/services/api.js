@@ -88,6 +88,9 @@ export const ordenesApi = {
   // Eliminar orden
   deleteOrden: (id) => api.delete(`/ordenes/${id}`),
   
+  // Eliminar orden
+  deleteOrden: (id) => api.delete(`/ordenes/${id}`),
+  
   // Agregar materiales a orden
   agregarMateriales: (id, data) => api.post(`/ordenes/${id}/materiales`, data),
   

@@ -65,6 +65,84 @@ const panosController = {
         return result;
     },
 
+    // POST /api/v1/inventario/panos/calculate-dimensions - Calcular dimensiones recomendadas
+    calculateRecommendedDimensions: async (req, res) => {
+        try {
+            console.log('🔍 calculateRecommendedDimensions llamado con:', req.body);
+            
+            const { id_item, cortes_individuales } = req.body;
+            
+            if (!id_item || !cortes_individuales || !Array.isArray(cortes_individuales)) {
+                console.log('❌ Validación fallida:', { id_item, cortes_individuales });
+                return res.status(400).json({
+                    success: false,
+                    message: 'Se requiere id_item y cortes_individuales válidos'
+                });
+            }
+
+            // Obtener información del paño
+            console.log('🔍 Buscando paño con id_item:', id_item);
+            const pano = await db('pano').where('id_item', id_item).first();
+            if (!pano) {
+                console.log('❌ Paño no encontrado para id_item:', id_item);
+                return res.status(404).json({
+                    success: false,
+                    message: 'Paño no encontrado'
+                });
+            }
+            console.log('✅ Paño encontrado:', pano);
+
+            // Calcular área total de los cortes
+            console.log('🔍 Calculando área total de cortes:', cortes_individuales);
+            const areaTotal = cortes_individuales.reduce((total, corte) => {
+                const largo = parseFloat(corte.largo) || 0;
+                const ancho = parseFloat(corte.ancho) || 0;
+                const cantidad = parseInt(corte.cantidad) || 1;
+                const areaCorte = largo * ancho * cantidad;
+                console.log(`  Corte: ${largo}x${ancho}x${cantidad} = ${areaCorte} m²`);
+                return total + areaCorte;
+            }, 0);
+            console.log('✅ Área total calculada:', areaTotal);
+
+            // Validar que el área total no exceda el área del paño
+            const areaPano = parseFloat(pano.area_m2) || 0;
+            console.log('🔍 Comparando áreas - Total requerida:', areaTotal, 'vs Disponible:', areaPano);
+            
+            if (areaTotal > areaPano) {
+                console.log('❌ Área excede lo disponible');
+                return res.status(400).json({
+                    success: false,
+                    message: `El área total requerida (${areaTotal.toFixed(2)} m²) excede el área disponible del paño (${areaPano.toFixed(2)} m²)`
+                });
+            }
+
+            // Calcular dimensiones recomendadas
+            console.log('🔍 Calculando dimensiones recomendadas...');
+            const dimensionesRecomendadas = panosController.calculateRecommendedDimensionsHelper(pano, areaTotal);
+            console.log('✅ Dimensiones recomendadas:', dimensionesRecomendadas);
+
+            const response = {
+                success: true,
+                data: {
+                    areaTotal,
+                    dimensionesRecomendadas,
+                    areaPano,
+                    utilizacion: ((areaTotal / areaPano) * 100).toFixed(1)
+                }
+            };
+            
+            console.log('📤 Enviando respuesta:', response);
+            res.json(response);
+
+        } catch (error) {
+            logger.error('Error calculando dimensiones recomendadas:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor'
+            });
+        }
+    },
+
     // GET /api/v1/inventario/panos - Obtener paños con filtros
     getPanos: async (req, res) => {
         try {
@@ -1227,6 +1305,83 @@ const panosController = {
         const validRemnants = remnants.filter(r => r.altura_m > 0 && r.ancho_m > 0);
 
         return { remnants: validRemnants, waste, consume_full: validRemnants.length === 0 };
+    },
+
+    // Nueva función: Calcular dimensiones recomendadas para múltiples cortes
+    calculateRecommendedDimensionsHelper: (pano, areaTotal) => {
+        console.log('🔍 calculateRecommendedDimensionsHelper llamado con:', { pano, areaTotal });
+        
+        if (areaTotal <= 0) {
+            console.log('❌ Área total <= 0, retornando dimensiones 0');
+            return { largo: 0, ancho: 0 };
+        }
+
+        const panoLargo = parseFloat(pano.largo_m) || 0;
+        const panoAncho = parseFloat(pano.ancho_m) || 0;
+        
+        console.log('🔍 Dimensiones del paño:', { panoLargo, panoAncho });
+        
+        // Determinar cuál es la dimensión mayor del paño (altura)
+        const dimensionMayor = Math.max(panoLargo, panoAncho);
+        const dimensionMenor = Math.min(panoLargo, panoAncho);
+        
+        console.log('🔍 Dimensiones ordenadas:', { dimensionMayor, dimensionMenor });
+        
+        // NUEVO ALGORITMO: Calcular dimensiones más equilibradas
+        // Buscar la mejor combinación de largo y ancho que se ajuste al paño
+        let mejorLargo = 0;
+        let mejorAncho = 0;
+        let mejorRatio = Infinity; // Buscar el ratio más cercano a 1 (cuadrado)
+        
+        // Probar diferentes combinaciones de largo y ancho
+        for (let largo = 0.1; largo <= dimensionMayor; largo += 0.1) {
+            const ancho = areaTotal / largo;
+            
+            // Verificar que las dimensiones quepan en el paño
+            if (largo <= dimensionMayor && ancho <= dimensionMenor) {
+                const ratio = Math.max(largo, ancho) / Math.min(largo, ancho);
+                if (ratio < mejorRatio) {
+                    mejorRatio = ratio;
+                    mejorLargo = largo;
+                    mejorAncho = ancho;
+                }
+            }
+            
+            // También probar con ancho como dimensión mayor
+            if (ancho <= dimensionMayor && largo <= dimensionMenor) {
+                const ratio = Math.max(ancho, largo) / Math.min(ancho, largo);
+                if (ratio < mejorRatio) {
+                    mejorRatio = ratio;
+                    mejorLargo = ancho;
+                    mejorAncho = largo;
+                }
+            }
+        }
+        
+        // Si no se encontró una combinación válida, usar el algoritmo anterior como fallback
+        if (mejorLargo === 0 || mejorAncho === 0) {
+            console.log('⚠️ Usando algoritmo fallback');
+            const alturaRecomendada = dimensionMayor;
+            const anchoRecomendado = areaTotal / alturaRecomendada;
+            
+            if (anchoRecomendado > dimensionMenor) {
+                mejorLargo = dimensionMenor;
+                mejorAncho = areaTotal / dimensionMenor;
+            } else {
+                mejorLargo = alturaRecomendada;
+                mejorAncho = anchoRecomendado;
+            }
+        }
+        
+        const resultado = {
+            largo: Math.round(mejorLargo * 1000) / 1000, // Redondear a 3 decimales
+            ancho: Math.round(mejorAncho * 1000) / 1000
+        };
+        
+        console.log('✅ Dimensiones calculadas (equilibradas):', resultado);
+        console.log('📊 Ratio largo/ancho:', Math.max(resultado.largo, resultado.ancho) / Math.min(resultado.largo, resultado.ancho));
+        
+        return resultado;
     },
 
     // Nueva función: Crear trabajo de corte y plan de piezas

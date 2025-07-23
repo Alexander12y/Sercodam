@@ -1,0 +1,20 @@
+{
+  "text_content": "\n--- PAGE 1 ---\n#\n \n📋\n \nARQUITECTURA\n \nCOMPLETA\n \nDEL\n \nPROYECTO\n \n-\n \nANÁLISIS\n \nEXHAUSTIVO\n \n \n¡Perfecto!\n \nTe\n \nvoy\n \na\n \nexplicar\n \n**TODO**\n \nel\n \nproyecto\n \nde\n \npies\n \na\n \ncabeza\n \npara\n \nque\n \npuedan\n \nintegrarlo\n \nperfectamente\n \ncon\n \nla\n \nFASE\n \n4.\n \n \n---\n \n \n##\n \n🏗\n \n**ARQUITECTURA\n \nGENERAL**\n \n \n###\n \n**Stack\n \nTecnológico**\n \n-\n \n**Framework**:\n \nNext.js\n \n14\n \n(App\n \nRouter)\n \n-\n \n**Lenguaje**:\n \nTypeScript\n \n+\n \nJavaScript\n \n-\n \n**Base\n \nde\n \nDatos**:\n \nSQLite\n \n(Prisma\n \nORM)\n \n-\n \n**Estilos**:\n \nTailwind\n \nCSS\n \n+\n \nShadcn/ui\n \n-\n \n**Estado**:\n \nReact\n \nHooks\n \n(useState,\n \nuseEffect)\n \n-\n \n**Autenticación**:\n \nNextAuth.js\n \n(preparado,\n \nno\n \nimplementado)\n \n-\n \n**APIs**:\n \nRESTful\n \ncon\n \nApp\n \nRouter\n \n \n---\n \n \n##\n \n🗄\n \n**ESTRUCTURA\n \nDE\n \nBASE\n \nDE\n \nDATOS\n \n(PRISMA)**\n \n \n###\n \n**Esquema\n \nActual\n \n(schema.prisma)**\n \n \n```prisma\n \nmodel\n \nClient\n \n{\n \n  \nid\n        \nString\n   \n@id\n \n@default(cuid())\n \n  \nname\n      \nString\n \n  \nemail\n     \nString\n   \n@unique\n \n  \nphone\n     \nString?\n \n  \nrfc\n       \nString?\n \n  \nbusinessName\n \nString?\n \n  \n//\n \nDirección\n \nfiscal\n \n  \nstreet\n    \nString?\n \n  \nneighborhood\n \nString?\n \n  \ncity\n      \nString?\n \n  \nstate\n     \nString?\n \n  \nzipCode\n   \nString?\n \n  \ncountry\n   \nString?\n  \n@default(\"México\")\n \n  \n//\n \nMetadatos\n \n  \nstatus\n    \nClientStatus\n \n@default(ACTIVE)\n \n  \ncreatedAt\n \nDateTime\n \n@default(now())\n \n  \nupdatedAt\n \nDateTime\n \n@updatedAt\n \n  \n \n  \n//\n \nRelaciones\n \n  \ndocuments\n      \nDocument[]\n \n  \ninvoices\n       \nInvoice[]\n \n  \nemailMessages\n  \nEmailMessage[]\n \n--- PAGE 2 ---\n  \nquotations\n     \nQuotation[]\n \n}\n \n \nmodel\n \nDocument\n \n{\n \n  \nid\n          \nString\n   \n@id\n \n@default(cuid())\n \n  \nfileName\n    \nString\n \n  \nfilePath\n    \nString\n \n  \nfileSize\n    \nInt?\n \n  \nmimeType\n    \nString?\n \n  \n \n  \n//\n \nClasificación\n \nautomática\n \npor\n \nIA\n \n  \ndocumentType\n \nString\n  \n//\n \n'FISCAL_DOCUMENT',\n \n'PAYMENT_RECEIPT',\n \netc.\n \n  \ncategory\n    \nDocumentCategory\n \n  \nconfidence\n  \nFloat?\n   \n//\n \nConfianza\n \nde\n \nla\n \nIA\n \n(0-1)\n \n  \n \n  \n//\n \nEstados\n \ny\n \nrevisión\n \n  \nstatus\n      \nDocumentStatus\n \n@default(UPLOADED)\n \n  \nreviewedAt\n  \nDateTime?\n \n  \nreviewNotes\n \nString?\n \n  \n \n  \n//\n \nProcesamiento\n \n  \nanalysisResult\n \nJson?\n  \n//\n \nDatos\n \nextraídos\n \npor\n \nIA\n \n  \nocrText\n       \nString?\n \n//\n \nTexto\n \nextraído\n \n  \n \n  \n//\n \nRelaciones\n \n  \nclientId\n    \nString\n \n  \nclient\n      \nClient\n   \n@relation(fields:\n \n[clientId],\n \nreferences:\n \n[id])\n \n  \n \n  \n//\n \nEmail\n \n(si\n \nviene\n \nde\n \ncorreo)\n \n  \nemailMessageId\n \nString?\n \n  \nemailMessage\n   \nEmailMessage?\n \n@relation(fields:\n \n[emailMessageId],\n \nreferences:\n \n[id])\n \n  \n \n  \ncreatedAt\n   \nDateTime\n \n@default(now())\n \n  \nupdatedAt\n   \nDateTime\n \n@updatedAt\n \n}\n \n \nmodel\n \nInvoice\n \n{\n \n  \nid\n        \nString\n   \n@id\n \n@default(cuid())\n \n  \n \n  \n//\n \nDatos\n \nSAT/CFDI\n \n  \nserie\n     \nString?\n \n  \nfolio\n     \nInt?\n \n  \nuuid\n      \nString?\n  \n//\n \nFolio\n \nfiscal\n \ndel\n \nSAT\n \n  \n \n  \n//\n \nDatos\n \ndel\n \nemisor\n \n(SERCOD",
+  "architecture_info": {
+    "total_pages": 12,
+    "technologies": [
+      "React",
+      "PostgreSQL",
+      "Java"
+    ],
+    "database_tables": [],
+    "patterns": [],
+    "features": [
+      "cotizacion",
+      "cliente",
+      "factura",
+      "pago"
+    ],
+    "structure": {}
+  }
+}

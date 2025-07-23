@@ -220,8 +220,8 @@ class PDFService {
                     ordenData.cuts.forEach((cut, idx) => {
                         // Calcular altura requerida para este corte completo
                         const cutInfoHeight = 80; // Texto de información del corte
-                        const diagramHeight = 250; // Altura del diagrama completo
-                        const totalCutHeight = cutInfoHeight + diagramHeight + 20; // +20 para espaciado
+                        const diagramHeight = 280; // Altura del diagrama completo (aumentada)
+                        const totalCutHeight = cutInfoHeight + diagramHeight + 30; // +30 para espaciado
                         
                         // Verificar si necesitamos nueva página para este corte
                         this.addPageIfNeeded(doc, totalCutHeight);
@@ -246,7 +246,7 @@ class PDFService {
                         
                         // Dibujo simple del corte - centrado
                         const pageWidth = 595; // A4 width in points
-                        const diagramX = (pageWidth - 300) / 2; // Center the 300px wide diagram
+                        const diagramX = (pageWidth - 350) / 2; // Center the 350px wide diagram
                         this.drawCutDiagram(doc, cut, diagramX, doc.y + 5);
                         
                         doc.moveDown(1);
@@ -593,8 +593,8 @@ class PDFService {
 
     // Dibujar diagrama simple del corte
     drawCutDiagram(doc, cut, x, y) {
-        const diagramWidth = 300; // Más espacio horizontal
-        const diagramHeight = 200; // Más espacio vertical
+        const diagramWidth = 350; // Aumentar ancho para más espacio
+        const diagramHeight = 250; // Aumentar altura para más espacio
         const margin = 15;
         
         // Marco del diagrama
@@ -606,10 +606,10 @@ class PDFService {
            .text('Diagrama de Corte Guillotina', x + 5, y + 5);
         
         // Dimensiones del paño original
-        const originalWidth = diagramWidth - 80; // Más espacio para ejes
-        const originalHeight = 100; // Más altura para el diagrama
-        const originalX = x + 50; // Más espacio para eje Y
-        const originalY = y + 30;
+        const originalWidth = diagramWidth - 100; // Más espacio para ejes
+        const originalHeight = 120; // Más altura para el diagrama
+        const originalX = x + 60; // Más espacio para eje Y
+        const originalY = y + 40;
         
         // Dibujar paño original
         doc.rect(originalX, originalY, originalWidth, originalHeight)
@@ -617,10 +617,10 @@ class PDFService {
            .stroke();
         
         // Texto del paño original en negro
-        doc.fontSize(8).font('Helvetica')
+        doc.fontSize(9).font('Helvetica')
            .fillColor('#000000')
            .text(`Original: ${cut.pano_original.largo}m x ${cut.pano_original.ancho}m`, 
-                 originalX + 5, originalY + 5);
+                 originalX + 8, originalY + 8);
         
         // Líneas de corte si hay planes - ALGORITMO GUILLOTINA PERFECTO
         if (cut.plans && cut.plans.length > 0) {
@@ -656,12 +656,12 @@ class PDFService {
                    .fill('#ff6b6b')
                    .stroke();
                 
-                // Texto del objetivo más pequeño para que quepa
-                doc.fontSize(6).font('Helvetica-Bold')
+                // Texto del objetivo con mejor espaciado
+                doc.fontSize(7).font('Helvetica-Bold')
                    .fillColor('#ffffff')
-                   .text('OBJ', objetivoX + 3, objetivoY + 3);
-                doc.fontSize(5).font('Helvetica')
-                   .text(`${parseFloat(Hreq || 0).toFixed(3)}x${parseFloat(Wreq || 0).toFixed(3)}`, objetivoX + 3, objetivoY + 10);
+                   .text('OBJ', objetivoX + 5, objetivoY + 5);
+                doc.fontSize(6).font('Helvetica')
+                   .text(`${parseFloat(Hreq || 0).toFixed(3)}x${parseFloat(Wreq || 0).toFixed(3)}`, objetivoX + 5, objetivoY + 15);
                 
                 // Algoritmo de líneas de corte guillotina
                 doc.strokeColor('#000000')
@@ -699,6 +699,13 @@ class PDFService {
                     // Usar las dimensiones reales del remanente del sistema
                     const remH = parseFloat(remanente.altura_plan || 0);
                     const remW = parseFloat(remanente.ancho_plan || 0);
+                    const areaRemanente = remH * remW;
+                    
+                    // Obtener umbral del corte (valor por defecto 5.0 m²)
+                    const umbral = parseFloat(cut.umbral_sobrante_m2) || 5.0;
+                    
+                    // Determinar si el remanente es desperdicio (área menor al umbral)
+                    const esDesperdicio = areaRemanente < umbral;
                     
                     if (idx === 0 && needsHorizontalCut) {
                         // Remanente 1: Franja superior (corte horizontal)
@@ -718,16 +725,27 @@ class PDFService {
                     }
                     
                     if (remanenteWidth > 0 && remanenteHeight > 0) {
+                        // Elegir color según si es desperdicio o no
+                        const colorRelleno = esDesperdicio ? '#808080' : '#90EE90'; // Gris para desperdicio, verde para remanente útil
+                        const etiqueta = esDesperdicio ? 'DESP' : `REM ${idx + 1}`;
+                        
                         doc.rect(remanenteX, remanenteY, remanenteWidth, remanenteHeight)
-                           .fill('#90EE90')
+                           .fill(colorRelleno)
                            .stroke();
                         
-                        // Texto del remanente en negro
-                        doc.fontSize(6).font('Helvetica-Bold')
+                        // Texto del remanente con mejor espaciado
+                        doc.fontSize(7).font('Helvetica-Bold')
                            .fillColor('#000000')
-                           .text(`REM ${idx + 1}`, remanenteX + 3, remanenteY + 3);
-                        doc.fontSize(5).font('Helvetica')
-                           .text(`${Math.max(remH, remW).toFixed(3)}x${Math.min(remH, remW).toFixed(3)}`, remanenteX + 3, remanenteY + 12);
+                           .text(etiqueta, remanenteX + 5, remanenteY + 5);
+                        doc.fontSize(6).font('Helvetica')
+                           .text(`${Math.max(remH, remW).toFixed(3)}x${Math.min(remH, remW).toFixed(3)}`, remanenteX + 5, remanenteY + 15);
+                        
+                        // Agregar indicador de área si es desperdicio
+                        if (esDesperdicio) {
+                            doc.fontSize(5).font('Helvetica')
+                               .fillColor('#FF0000') // Rojo para destacar que es desperdicio
+                               .text(`${areaRemanente.toFixed(2)} m²`, remanenteX + 5, remanenteY + 25);
+                        }
                     }
                 });
                 
@@ -792,10 +810,10 @@ class PDFService {
            .stroke();
         
         // Etiquetas de los ejes - REVERTIDO: sistema original
-        doc.fontSize(7).font('Helvetica-Bold')
+        doc.fontSize(8).font('Helvetica-Bold')
            .fillColor('#000000')
-           .text('Y (Ancho)', axisY - 15, axisYEnd - 15) // Y es ancho (dimensión menor)
-           .text('X (Altura)', axisXEnd + 10, axisX + 5); // X es altura (dimensión mayor) - más espacio
+           .text('Y (Ancho)', axisY - 20, axisYEnd - 20) // Y es ancho (dimensión menor)
+           .text('X (Altura)', axisXEnd + 15, axisX + 8); // X es altura (dimensión mayor) - más espacio
         
         // Marcas de escala en los ejes - CORREGIDO: determinar cuál es mayor
         const H = parseFloat(cut.pano_original.largo);
@@ -812,8 +830,9 @@ class PDFService {
             doc.moveTo(axisY - 2, markY)
                .lineTo(axisY + 2, markY)
                .stroke();
-            doc.fontSize(6).font('Helvetica')
-               .text(valueY, axisY - 15, markY - 3);
+            doc.fontSize(7).font('Helvetica')
+               .fillColor('#000000')
+               .text(valueY, axisY - 18, markY - 4);
         }
         
         // Marcas en eje X (altura - dimensión mayor) - de izquierda a derecha
@@ -823,21 +842,29 @@ class PDFService {
             doc.moveTo(markX, axisX - 2)
                .lineTo(markX, axisX + 2)
                .stroke();
-            doc.fontSize(6).font('Helvetica')
-               .text(valueX, markX - 8, axisX + 10);
+            doc.fontSize(7).font('Helvetica')
+               .fillColor('#000000')
+               .text(valueX, markX - 10, axisX + 12);
         }
         
-        // Texto del objetivo debajo del diagrama (más pequeño)
-        doc.fontSize(7).font('Helvetica-Bold')
+        // Texto del objetivo debajo del diagrama
+        doc.fontSize(8).font('Helvetica-Bold')
            .fillColor('#000000')
-           .text(`Objetivo: ${parseFloat(cut.altura_req || 0).toFixed(3)}m x ${parseFloat(cut.ancho_req || 0).toFixed(3)}m - Color Rojo`, x + 5, y + diagramHeight - 45);
+           .text(`Objetivo: ${parseFloat(cut.altura_req || 0).toFixed(3)}m x ${parseFloat(cut.ancho_req || 0).toFixed(3)}m - Color Rojo`, x + 5, y + diagramHeight - 65);
         
         // Leyenda en negro
+        doc.fontSize(8).font('Helvetica')
+           .fillColor('#000000')
+           .text('Rojo: Pieza Objetivo', x + 5, y + diagramHeight - 48)
+           .text('Verde: Remanentes Útiles', x + 5, y + diagramHeight - 38)
+           .text('Gris: Desperdicio (< umbral)', x + 5, y + diagramHeight - 28)
+           .text('Líneas Negras: Cortes Guillotina', x + 5, y + diagramHeight - 18);
+        
+        // Información del umbral
+        const umbral = parseFloat(cut.umbral_sobrante_m2) || 5.0;
         doc.fontSize(7).font('Helvetica')
            .fillColor('#000000')
-           .text('Rojo: Pieza Objetivo', x + 5, y + diagramHeight - 28)
-           .text('Verde: Remanentes', x + 5, y + diagramHeight - 21)
-           .text('Líneas Negras: Cortes Guillotina', x + 5, y + diagramHeight - 14);
+           .text(`Umbral de desperdicio: ${umbral.toFixed(2)} m²`, x + 5, y + diagramHeight - 10);
     }
 
     // Genera especificaciones técnicas dinámicas según el tipo de red y atributos presentes
