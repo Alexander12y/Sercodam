@@ -156,6 +156,7 @@ export const panosApi = {
   getPolipropilenoFullData: () => api.get('/inventario/panos/catalogos/polipropileno/full'),
   getLonaFullData: () => api.get('/inventario/panos/catalogos/lona/full'),
   getMallaSombraFullData: () => api.get('/inventario/panos/catalogos/malla-sombra/full'),
+  calculateRecommendedDimensions: (data) => api.post('/inventario/panos/calculate-dimensions', data),
 };
 
 // API de materiales

@@ -361,6 +361,15 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
       setError('El ancho debe ser mayor a 0');
       return false;
     }
+    
+    // Validar que el largo sea mayor que el ancho
+    const largo = parseFloat(formData.largo_m);
+    const ancho = parseFloat(formData.ancho_m);
+    if (largo <= ancho) {
+      setError('El largo debe ser mayor que el ancho. Por convención del sistema, el largo representa la dimensión más grande del paño.');
+      return false;
+    }
+    
     if (!formData.estado) {
       setError('El estado es requerido');
       return false;
@@ -710,6 +719,15 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
           <Divider sx={{ width: '100%', my: 2 }} />
 
           {/* Dimensiones */}
+          <Grid item xs={12}>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              <Typography variant="body2">
+                <strong>Convención de dimensiones:</strong> El largo debe ser mayor que el ancho. 
+                El largo representa la dimensión más grande del paño (altura), mientras que el ancho 
+                representa la dimensión menor (anchura).
+              </Typography>
+            </Alert>
+          </Grid>
           <Grid item xs={12} md={6}>
             <TextField
               fullWidth
@@ -719,6 +737,7 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
               onChange={handleChange('largo_m')}
               inputProps={{ min: 0, step: 0.001 }}
               required
+              helperText="Dimensión más grande del paño"
             />
           </Grid>
           <Grid item xs={12} md={6}>
@@ -730,6 +749,7 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
               onChange={handleChange('ancho_m')}
               inputProps={{ min: 0, step: 0.001 }}
               required
+              helperText="Dimensión menor del paño"
             />
           </Grid>
 

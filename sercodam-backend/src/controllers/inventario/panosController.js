@@ -1409,10 +1409,14 @@ const panosController = {
             // Insertar remanentes temporales si hay
             for (const remnant of remnants) {
                 if (remnant.altura_m * remnant.ancho_m >= umbral_sobrante_m2) {
+                    // Asegurar que altura_m sea siempre la dimensión mayor
+                    const altura_m = Math.max(remnant.altura_m, remnant.ancho_m);
+                    const ancho_m = Math.min(remnant.altura_m, remnant.ancho_m);
+                    
                     await trx('panos_sobrantes').insert({
                         id_item_padre: id_item,
-                        altura_m: remnant.altura_m,
-                        ancho_m: remnant.ancho_m,
+                        altura_m: altura_m,
+                        ancho_m: ancho_m,
                         id_op,
                         estado: 'Pendiente'
                     });

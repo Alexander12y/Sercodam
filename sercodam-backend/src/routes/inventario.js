@@ -20,7 +20,8 @@ const {
     validateDisponibilidad,
     validateQueryParams,
     validateIdParam,
-    validateHerramientaUpdate
+    validateHerramientaUpdate,
+    validatePanoCreacion
 } = require('../validators/inventarioValidator');
 
 // Middleware de autenticación para todas las rutas
@@ -113,6 +114,7 @@ router.get('/panos/:id',
 // POST /api/v1/inventario/panos - Crear nuevo paño
 router.post('/panos', 
     requireRole(['admin', 'supervisor']),
+    validatePanoCreacion,
     asyncHandler(panosController.createPano)
 );
 

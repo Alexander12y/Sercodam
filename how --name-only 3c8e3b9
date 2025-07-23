@@ -1,0 +1,10 @@
+[33m3c8e3b9[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m feat: Implementación completa de cortes individuales y mejoras en PDF
+[33me20c1c9[m Update api.js
+[33m9ee881e[m docs: Actualizar README.md con documentación completa del proyecto - Agregar descripción detallada del sistema - Incluir instrucciones de instalación y configuración - Documentar funcionalidades principales - Agregar estructura del proyecto y tecnologías - Incluir endpoints de API y scripts disponibles
+[33m8177ddd[m feat: Actualizar controladores y rutas del sistema de inventario y órdenes de producción - Mejorar controlador de paños con funciones de corte guillotine - Actualizar controlador de materiales - Mejorar controlador de órdenes - Actualizar rutas de órdenes - Mejorar componentes del frontend - Agregar .gitignore para excluir archivos innecesarios
+[33m2baaffa[m fix: Resolver bucle infinito en OrdenFormPanos al buscar tipos de paños inexistentes
+[33m05260c4[m fix: Corregir especificaciones de paños en frontend y agregar enlace Wiger
+[33m0c2fd4a[m update project
+[33m04af8ac[m feat(cliente-autocomplete): improve UX (clear icon, debounced search, messages, validation) and update .gitignore
+[33m2503ca6[m feat: actualización masiva backend y frontend, integración webhook y fixes varios
+[33m28ad885[m Subida inicial de todo el proyecto a Sercodam

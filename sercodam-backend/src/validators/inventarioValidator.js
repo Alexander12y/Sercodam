@@ -542,6 +542,82 @@ const validateQueryParams = [
     handleValidationErrors
 ];
 
+// Validaciones para creación de paños
+const validatePanoCreacion = [    
+    body('largo_m')
+        .notEmpty()
+        .withMessage('Largo es requerido')
+        .isNumeric()
+        .withMessage('Largo debe ser un número')
+        .custom((value) => {
+            if (value <= 0) {
+                throw new Error('Largo debe ser mayor a 0');
+            }
+            return true;
+        }),
+    
+    body('ancho_m')
+        .notEmpty()
+        .withMessage('Ancho es requerido')
+        .isNumeric()
+        .withMessage('Ancho debe ser un número')
+        .custom((value) => {
+            if (value <= 0) {
+                throw new Error('Ancho debe ser mayor a 0');
+            }
+            return true;
+        }),
+    
+    // Validar que el largo sea mayor que el ancho
+    body('largo_m')
+        .custom((value, { req }) => {
+            const largo = parseFloat(value);
+            const ancho = parseFloat(req.body.ancho_m);
+            if (largo <= ancho) {
+                throw new Error('El largo debe ser mayor que el ancho. Por convención del sistema, el largo representa la dimensión más grande del paño.');
+            }
+            return true;
+        }),
+    
+    body('estado')
+        .notEmpty()
+        .withMessage('Estado es requerido')
+        .isIn(['bueno', 'regular', 'malo', '50%'])
+        .withMessage('Estado debe ser: bueno, regular, malo, 50%'),
+    
+    body('ubicacion')
+        .notEmpty()
+        .withMessage('Ubicación es requerida')
+        .trim()
+        .isLength({ min: 2, max: 100 })
+        .withMessage('Ubicación debe tener entre 2 y 100 caracteres'),
+    
+    body('precio_x_unidad')
+        .optional()
+        .isNumeric()
+        .withMessage('Precio debe ser un número')
+        .custom((value) => {
+            if (value < 0) {
+                throw new Error('Precio no puede ser negativo');
+            }
+            return true;
+        }),
+    
+    body('stock_minimo')
+        .optional()
+        .custom((value) => {
+            if (value !== undefined && value !== null && value !== '') {
+                const num = parseFloat(value);
+                if (isNaN(num) || num < 0) {
+                    throw new Error('Stock mínimo debe ser un número mayor o igual a 0');
+                }
+            }
+            return true;
+        }),
+    
+    handleValidationErrors
+];
+
 // Validaciones para parámetros de ID
 const validateIdParam = [
     param('id')
@@ -563,5 +639,6 @@ module.exports = {
     validateDisponibilidad,
     validateQueryParams,
     validateIdParam,
+    validatePanoCreacion,
     handleValidationErrors
 };

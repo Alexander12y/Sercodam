@@ -33,11 +33,13 @@ import {
   Clear as ClearIcon,
   Inventory as InventoryIcon,
   FilterList as FilterIcon,
-  Info as InfoIcon
+  Info as InfoIcon,
+  ContentCut as ScissorsIcon
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchPanos } from '../../store/slices/panosSlice';
 import { panosApi } from '../../services/api';
+import CortesIndividualesModal from './CortesIndividualesModal';
 
 const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave }) => {
   const dispatch = useDispatch();
@@ -52,6 +54,11 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
   const [errorStock, setErrorStock] = useState("");
   const [umbralSobrante, setUmbralSobrante] = useState(0.5); // Default to 0.5, user can change
   const [datosInicialsCargados, setDatosInicialesCargados] = useState(false);
+  
+  // Estados para cortes individuales
+  const [modalCortesIndividualesOpen, setModalCortesIndividualesOpen] = useState(false);
+  const [panoParaCortesIndividuales, setPanoParaCortesIndividuales] = useState(null);
+  const [successMessage, setSuccessMessage] = useState('');
   
   // Filtros
   const [filtros, setFiltros] = useState({
@@ -252,6 +259,41 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
     saveDraftOnChange(newPanosSeleccionados);
   };
 
+  // Funciones para cortes individuales
+  const handleAbrirCortesIndividuales = (pano) => {
+    setPanoParaCortesIndividuales(pano);
+    setModalCortesIndividualesOpen(true);
+  };
+
+  const handleConfirmarCortesIndividuales = (datosCortes) => {
+    const { cortesIndividuales, areaTotal, dimensionesRecomendadas, numeroCortes } = datosCortes;
+    
+    // Crear el paño con información de cortes individuales
+    const panoConCortes = {
+      ...panoParaCortesIndividuales,
+      largo_tomar: dimensionesRecomendadas.largo,
+      ancho_tomar: dimensionesRecomendadas.ancho,
+      cantidad: numeroCortes,
+      area_tomar: areaTotal,
+      umbral_sobrante_m2: umbralSobrante,
+      cortes_individuales: cortesIndividuales,
+      modo_corte: 'individuales'
+    };
+
+    const newPanosSeleccionados = [...panosSeleccionados, panoConCortes];
+    setPanosSeleccionados(newPanosSeleccionados);
+    saveDraftOnChange(newPanosSeleccionados);
+    
+    // Cerrar modales y mostrar mensaje de éxito
+    setModalCortesIndividualesOpen(false);
+    setModalOpen(false);
+    setPanoParaCortesIndividuales(null);
+    setSuccessMessage(`✅ Paño agregado con ${numeroCortes} cortes individuales`);
+    
+    // Limpiar mensaje después de 3 segundos
+    setTimeout(() => setSuccessMessage(''), 3000);
+  };
+
   const getEstadoColor = (estado) => {
     switch (estado?.toLowerCase()) {
       case 'bueno': return 'success';
@@ -280,6 +322,15 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
 
   return (
     <Grid container spacing={3}>
+      {/* Mensaje de éxito */}
+      {successMessage && (
+        <Grid item xs={12}>
+          <Alert severity="success" onClose={() => setSuccessMessage('')}>
+            {successMessage}
+          </Alert>
+        </Grid>
+      )}
+      
       {/* Header con información */}
       <Grid item xs={12}>
         <Card>
@@ -381,7 +432,8 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                       <TableCell><strong>Dimensiones Disponibles</strong></TableCell>
                       <TableCell><strong>Dimensiones a Tomar</strong></TableCell>
                       <TableCell><strong>Área a Tomar (m²)</strong></TableCell>
-                      <TableCell><strong>Umbral Remanente (m²)</strong></TableCell> {/* New column */}
+                      <TableCell><strong>Umbral Remanente (m²)</strong></TableCell>
+                      <TableCell><strong>Modo de Corte</strong></TableCell>
                       <TableCell><strong>Estado</strong></TableCell>
                       <TableCell><strong>Ubicación</strong></TableCell>
                       <TableCell><strong>Acciones</strong></TableCell>
@@ -422,6 +474,19 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                           <Typography variant="body2" color="secondary">
                             {p.umbral_sobrante_m2 !== undefined ? Number(p.umbral_sobrante_m2).toFixed(2) : '-'}
                           </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Chip 
+                            label={p.modo_corte === 'individuales' ? 'Cortes Individuales' : 'Corte Simple'} 
+                            size="small" 
+                            color={p.modo_corte === 'individuales' ? 'info' : 'default'}
+                            variant="outlined"
+                          />
+                          {p.modo_corte === 'individuales' && p.cortes_individuales && (
+                            <Typography variant="caption" display="block" color="textSecondary">
+                              {p.cortes_individuales.length} piezas
+                            </Typography>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Chip 
@@ -866,6 +931,18 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                             helperText="Remanentes menores a este valor serán descartados como desperdicio."
                           />
                         </Grid>
+                        <Grid item xs={12} md={8}>
+                          <Button
+                            variant="outlined"
+                            startIcon={<ScissorsIcon />}
+                            onClick={() => handleAbrirCortesIndividuales(panoSeleccionado)}
+                            size="small"
+                            fullWidth
+                            sx={{ mt: 1 }}
+                          >
+                            Especificar Cortes Individuales
+                          </Button>
+                        </Grid>
                       </Grid>
                     </Box>
                   </Grid>
@@ -885,6 +962,16 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Modal de cortes individuales */}
+      <CortesIndividualesModal
+        open={modalCortesIndividualesOpen}
+        onClose={() => setModalCortesIndividualesOpen(false)}
+        panoSeleccionado={panoParaCortesIndividuales}
+        onConfirm={handleConfirmarCortesIndividuales}
+        umbralSobrante={umbralSobrante}
+        setUmbralSobrante={setUmbralSobrante}
+      />
     </Grid>
   );
 };
