@@ -221,9 +221,9 @@ const OrdenFormMain = ({ formData, formErrors, handleInputChange, handleClienteC
                   <Typography variant="body2" fontWeight="medium">
                     {option.nombre_cliente}
                   </Typography>
-                  {(option.email || option.telefono) && (
+                  {(option.email_cliente || option.telefono_cliente) && (
                     <Typography variant="body2" color="text.secondary">
-                      {[option.email, option.telefono].filter(Boolean).join(' • ')}
+                      {[option.email_cliente, option.telefono_cliente].filter(Boolean).join(' • ')}
                     </Typography>
                   )}
                 </Box>

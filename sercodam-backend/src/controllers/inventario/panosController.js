@@ -157,12 +157,25 @@ const panosController = {
                 ancho_min,
                 ancho_max,
                 search,
+                // Filtros de especificaciones por tipo de red
+                calibre,
+                cuadro,
+                torsion,
+                refuerzo,
+                color,
+                presentacion,
+                grosor,
+                color_tipo_red,
                 page = 1,
                 limit = 50
             } = req.query;
 
             // Función para construir la consulta base con JOINs a las tablas hijas
             const buildBaseQuery = () => {
+                console.log('🔍 buildBaseQuery - Filtros de especificaciones recibidos:', {
+                    calibre, cuadro, torsion, refuerzo, color, presentacion, grosor, color_tipo_red
+                });
+
                 let query = db('pano as p')
                     .select(
                         'p.*',
@@ -232,6 +245,48 @@ const panosController = {
                     });
                 }
 
+                // Filtros de especificaciones por tipo de red
+                if (calibre) {
+                    console.log('🔍 Aplicando filtro calibre:', calibre);
+                    query = query.where('n.calibre', calibre);
+                }
+                if (cuadro) {
+                    console.log('🔍 Aplicando filtro cuadro:', cuadro);
+                    query = query.where(function() {
+                        this.where('n.cuadro', cuadro)
+                            .orWhere('pp.cuadro', cuadro);
+                    });
+                }
+                if (torsion) {
+                    console.log('🔍 Aplicando filtro torsion:', torsion);
+                    query = query.where('n.torsion', torsion);
+                }
+                if (refuerzo !== undefined && refuerzo !== null && refuerzo !== '') {
+                    const refuerzoBool = refuerzo === 'true' || refuerzo === 'Sí' || refuerzo === 'sí';
+                    console.log('🔍 Aplicando filtro refuerzo:', refuerzo, '->', refuerzoBool);
+                    query = query.where('n.refuerzo', refuerzoBool);
+                }
+                if (color) {
+                    console.log('🔍 Aplicando filtro color:', color);
+                    query = query.where('l.color', color);
+                }
+                if (presentacion) {
+                    console.log('🔍 Aplicando filtro presentacion:', presentacion);
+                    query = query.where(function() {
+                        this.where('l.presentacion', presentacion)
+                            .orWhere('ms.presentacion', presentacion);
+                    });
+                }
+                if (grosor) {
+                    console.log('🔍 Aplicando filtro grosor:', grosor);
+                    query = query.where('pp.grosor', grosor);
+                }
+                if (color_tipo_red) {
+                    console.log('🔍 Aplicando filtro color_tipo_red:', color_tipo_red);
+                    query = query.where('ms.color_tipo_red', color_tipo_red);
+                }
+
+                console.log('🔍 buildBaseQuery - Consulta construida con todos los filtros');
                 return query;
             };
 
@@ -246,6 +301,7 @@ const panosController = {
                 const dataQuery = buildBaseQuery();
                 panos = await dataQuery.orderBy('p.id_item', 'desc');
                 total = panos.length;
+                console.log('🔍 Consulta sin paginación - Resultados obtenidos:', total);
             } else {
                 // Contar total para paginación (consulta separada y simple)
                 try {
@@ -280,6 +336,7 @@ const panosController = {
                     .orderBy('p.id_item', 'desc')
                     .limit(limit)
                     .offset(offset);
+                console.log('🔍 Consulta con paginación - Resultados obtenidos:', panos.length);
             }
 
             const panosWithDetails = panos.map((pano) => {
@@ -472,7 +529,7 @@ const panosController = {
                 throw new ValidationError('El id_mcr es requerido');
             }
 
-            const estadosValidos = ['bueno', 'regular', 'malo', '50%'];
+            const estadosValidos = ['bueno', 'regular', 'malo', 'usado 50%'];
             if (!estadosValidos.includes(estado)) {
                 throw new ValidationError('Estado inválido');
             }
@@ -576,7 +633,7 @@ const panosController = {
                 throw new ValidationError('Tipo de paño inválido');
             }
 
-            const estadosValidos = ['bueno', 'regular', 'malo', '50%'];
+            const estadosValidos = ['bueno', 'regular', 'malo', 'usado 50%'];
             if (estado && !estadosValidos.includes(estado)) {
                 throw new ValidationError('Estado inválido');
             }

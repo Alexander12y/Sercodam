@@ -1,0 +1,90 @@
+{
+  "request_config": {
+    "url": "https://tu-ngrok-url.ngrok.io/api/v1/leads/webhook",
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  },
+  "body_content": {
+    "email_remitente": "cliente@ejemplo.com",
+    "nombre_remitente": "Juan Pérez",
+    "asunto_email": "Cotización para proyecto de cortinas",
+    "contenido_email": "Hola, necesito cotización para cortinas para mi oficina. El proyecto es urgente y mi presupuesto es de $50,000 MXN. Mi teléfono es 555-123-4567 y trabajo en la empresa ABC Corp. Ubicación: Ciudad de México. Gracias.",
+    "contenido_interpretado": "Cliente solicita cotización de cortinas para oficina. Presupuesto: $50,000 MXN. Urgencia: Alta. Ubicación: CDMX.",
+    
+    "gmail_id": "18c1234567890abcdef",
+    "gmail_thread_id": "18c1234567890abcdef",
+    "gmail_labels": "INBOX, UNREAD",
+    "gmail_snippet": "Hola, necesito cotización para cortinas...",
+    
+    "extracted_phone": "555-123-4567",
+    "extracted_company": "ABC Corp",
+    "extracted_budget": "50000",
+    "extracted_location": "Ciudad de México",
+    "extracted_project_type": "cortinas",
+    "extracted_deadline": "2024-02-15",
+    "extracted_requirements": "Cortinas para oficina",
+    "extracted_urgency": "alta",
+    "extracted_area": "100 m2",
+    
+    "telefono": "555-123-4567",
+    "empresa": "ABC Corp",
+    "requerimientos": "Cortinas para oficina con sistema automático",
+    "presupuesto_estimado": "50000",
+    
+    "ai_analysis": "Cliente potencial con presupuesto definido y urgencia alta",
+    "sentiment_score": "0.8",
+    "priority_score": "0.9",
+    "intent_detected": "cotización",
+    
+    "tipo_proyecto": "cortinas",
+    "area_proyecto": "100",
+    "ubicacion_proyecto": "Ciudad de México",
+    "fecha_requerida": "2024-02-15",
+    "urgencia": "alta",
+    
+    "fuente": "email",
+    "estado": "nuevo"
+  },
+  "make_com_config": {
+    "step_1": "Gmail Trigger",
+    "step_2": "AI Analysis (OpenAI/Claude)",
+    "step_3": "Data Extraction",
+    "step_4": "HTTP Request to Webhook",
+    "webhook_fields_mapping": {
+      "email_remitente": "{{gmail.from}}",
+      "nombre_remitente": "{{gmail.fromName}}",
+      "asunto_email": "{{gmail.subject}}",
+      "contenido_email": "{{gmail.textBody}}",
+      "gmail_id": "{{gmail.id}}",
+      "gmail_thread_id": "{{gmail.threadId}}",
+      "gmail_labels": "{{gmail.labels}}",
+      "gmail_snippet": "{{gmail.snippet}}",
+      "extracted_phone": "{{ai_extracted_phone}}",
+      "extracted_company": "{{ai_extracted_company}}",
+      "extracted_budget": "{{ai_extracted_budget}}",
+      "extracted_location": "{{ai_extracted_location}}",
+      "extracted_project_type": "{{ai_extracted_project_type}}",
+      "extracted_deadline": "{{ai_extracted_deadline}}",
+      "extracted_requirements": "{{ai_extracted_requirements}}",
+      "extracted_urgency": "{{ai_extracted_urgency}}",
+      "extracted_area": "{{ai_extracted_area}}",
+      "telefono": "{{ai_extracted_phone}}",
+      "empresa": "{{ai_extracted_company}}",
+      "requerimientos": "{{ai_extracted_requirements}}",
+      "presupuesto_estimado": "{{ai_extracted_budget}}",
+      "ai_analysis": "{{ai_analysis_summary}}",
+      "sentiment_score": "{{ai_sentiment_score}}",
+      "priority_score": "{{ai_priority_score}}",
+      "intent_detected": "{{ai_intent_detected}}",
+      "tipo_proyecto": "{{ai_extracted_project_type}}",
+      "area_proyecto": "{{ai_extracted_area}}",
+      "ubicacion_proyecto": "{{ai_extracted_location}}",
+      "fecha_requerida": "{{ai_extracted_deadline}}",
+      "urgencia": "{{ai_extracted_urgency}}",
+      "fuente": "email",
+      "estado": "nuevo"
+    }
+  }
+} 

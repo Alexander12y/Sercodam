@@ -568,13 +568,13 @@ const validatePanoCreacion = [
             return true;
         }),
     
-    // Validar que el largo sea mayor que el ancho
+    // Validar que el largo sea mayor o igual que el ancho
     body('largo_m')
         .custom((value, { req }) => {
             const largo = parseFloat(value);
             const ancho = parseFloat(req.body.ancho_m);
-            if (largo <= ancho) {
-                throw new Error('El largo debe ser mayor que el ancho. Por convención del sistema, el largo representa la dimensión más grande del paño.');
+            if (largo < ancho) {
+                throw new Error('El largo debe ser mayor o igual que el ancho. Por convención del sistema, el largo representa la dimensión más grande del paño.');
             }
             return true;
         }),
@@ -582,8 +582,8 @@ const validatePanoCreacion = [
     body('estado')
         .notEmpty()
         .withMessage('Estado es requerido')
-        .isIn(['bueno', 'regular', 'malo', '50%'])
-        .withMessage('Estado debe ser: bueno, regular, malo, 50%'),
+        .isIn(['bueno', 'regular', 'malo', 'usado 50%'])
+        .withMessage('Estado debe ser: bueno, regular, malo, usado 50%'),
     
     body('ubicacion')
         .notEmpty()

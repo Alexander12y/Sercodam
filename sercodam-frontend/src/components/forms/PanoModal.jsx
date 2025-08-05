@@ -41,6 +41,20 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
+  // Función para normalizar el tipo_red
+  const normalizeTipoRed = (tipo) => {
+    if (!tipo) return '';
+    const normalized = tipo.toLowerCase().trim();
+    const mapping = {
+      'nylon': 'nylon',
+      'lona': 'lona',
+      'polipropileno': 'polipropileno',
+      'malla sombra': 'malla sombra',
+      'malla': 'malla sombra'
+    };
+    return mapping[normalized] || '';
+  };
+
   // Catálogos completos
   const [nylonCatalogos, setNylonCatalogos] = useState({
     calibres: [],
@@ -76,7 +90,7 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
   });
 
   const tiposValidos = ['lona', 'nylon', 'polipropileno', 'malla sombra'];
-  const estadosValidos = ['bueno', 'regular', 'malo', '50%'];
+  const estadosValidos = ['bueno', 'regular', 'malo', 'usado 50%'];
   const ubicacionesValidas = ['Bodega CDMX', 'Querétaro', 'Oficina', 'Instalación'];
 
   const isEditing = !!pano;
@@ -99,6 +113,24 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
     }
   }, [formData.tipo_red]);
 
+  // Cargar catálogos cuando se está editando un paño (para pre-cargar las especificaciones)
+  useEffect(() => {
+    if (isEditing && pano && pano.tipo_red && open) {
+      const tipoNormalizado = normalizeTipoRed(pano.tipo_red);
+      
+      // Cargar los catálogos específicos del tipo de red del paño que se está editando
+      if (tipoNormalizado === 'nylon') {
+        loadNylonCatalogos();
+      } else if (tipoNormalizado === 'polipropileno') {
+        loadPolipropilenoCatalogos();
+      } else if (tipoNormalizado === 'lona') {
+        loadLonaCatalogos();
+      } else if (tipoNormalizado === 'malla sombra') {
+        loadMallaSombraCatalogos();
+      }
+    }
+  }, [isEditing, pano, open]);
+
   // Filtrar opciones cuando cambian las selecciones
   useEffect(() => {
     if (formData.tipo_red === 'nylon') {
@@ -112,6 +144,28 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
     }
   }, [formData.tipo_red, formData.calibre, formData.grosor, formData.color, formData.color_tipo_red, catalogData]);
 
+  // Filtrar opciones cuando se está editando un paño y los catálogos están cargados
+  useEffect(() => {
+    const tipoNormalizado = normalizeTipoRed(pano?.tipo_red);
+    
+    if (isEditing && pano && pano.tipo_red && catalogData[tipoNormalizado] && catalogData[tipoNormalizado].length > 0) {
+      // Esperar un poco para que los catálogos se carguen completamente
+      const timer = setTimeout(() => {
+        if (tipoNormalizado === 'nylon') {
+          filterNylonOptions();
+        } else if (tipoNormalizado === 'polipropileno') {
+          filterPolipropilenoOptions();
+        } else if (tipoNormalizado === 'lona') {
+          filterLonaOptions();
+        } else if (tipoNormalizado === 'malla sombra') {
+          filterMallaSombraOptions();
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isEditing, pano, catalogData]);
+
   const loadNylonCatalogos = async () => {
     try {
       const response = await panosApi.getNylonCatalogos();
@@ -119,7 +173,6 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
       
       // Cargar datos completos para filtrar
       const fullDataResponse = await panosApi.getNylonFullData();
-      console.log('🔍 Datos completos de nylon cargados:', fullDataResponse.data.data);
       setCatalogData(prev => ({ ...prev, nylon: fullDataResponse.data.data }));
     } catch (error) {
       console.error('Error cargando catálogos de nylon:', error);
@@ -171,18 +224,10 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
       setFilteredOptions(prev => ({ ...prev, cuadros: [], torsiones: [] }));
       return;
     }
-
-    console.log('🔍 Filtrando nylon - calibre seleccionado:', formData.calibre);
-    console.log('🔍 Datos de nylon disponibles:', catalogData.nylon);
     
     const filtered = catalogData.nylon.filter(item => item.calibre === formData.calibre);
-    console.log('🔍 Elementos filtrados por calibre:', filtered);
-    
     const cuadros = [...new Set(filtered.map(item => item.cuadro))].filter(Boolean);
     const torsiones = [...new Set(filtered.map(item => item.torsion))].filter(Boolean);
-    
-    console.log('🔍 Cuadros disponibles:', cuadros);
-    console.log('🔍 Torsiones disponibles:', torsiones);
 
     setFilteredOptions(prev => ({ ...prev, cuadros, torsiones }));
   };
@@ -307,8 +352,10 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
 
   useEffect(() => {
     if (pano) {
+      const tipoNormalizado = normalizeTipoRed(pano.tipo_red);
+      
       setFormData({
-        tipo_red: pano.tipo_red || '',
+        tipo_red: tipoNormalizado,
         largo_m: pano.largo_m || '',
         ancho_m: pano.ancho_m || '',
         estado: pano.estado || '',
@@ -362,11 +409,11 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
       return false;
     }
     
-    // Validar que el largo sea mayor que el ancho
+    // Validar que el largo sea mayor o igual que el ancho
     const largo = parseFloat(formData.largo_m);
     const ancho = parseFloat(formData.ancho_m);
-    if (largo <= ancho) {
-      setError('El largo debe ser mayor que el ancho. Por convención del sistema, el largo representa la dimensión más grande del paño.');
+    if (largo < ancho) {
+      setError('El largo debe ser mayor o igual que el ancho. Por convención del sistema, el largo representa la dimensión más grande del paño.');
       return false;
     }
     
@@ -445,7 +492,7 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
       case 'bueno': return 'success';
       case 'regular': return 'warning';
       case 'malo': return 'error';
-      case '50%': return 'info';
+      case 'usado 50%': return 'info';
       default: return 'default';
     }
   };

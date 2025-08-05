@@ -20,6 +20,7 @@ import {
   Button,
   Link,
   Chip,
+  Tooltip,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -38,6 +39,35 @@ import {
   Security as SecurityIcon,
   People as PeopleIcon,
   ContentCutOutlined as ScissorsIcon,
+  Notifications as NotificationsIcon,
+  Description as DescriptionIcon,
+  LightMode as LightModeIcon,
+  DarkMode as DarkModeIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
+  Home as HomeIcon,
+  Business as BusinessIcon,
+  ShoppingCart as ShoppingCartIcon,
+  Assessment as AssessmentIcon,
+  Group as GroupIcon,
+  Email as EmailIcon,
+  Folder as FolderIcon,
+  Engineering as EngineeringIcon,
+  // Iconos outline para mejor control de color
+  HomeOutlined as HomeOutlinedIcon,
+  EmailOutlined as EmailOutlinedIcon,
+  DescriptionOutlined as DescriptionOutlinedIcon,
+  AssignmentOutlined as AssignmentOutlinedIcon,
+  GroupOutlined as GroupOutlinedIcon,
+  InventoryOutlined as InventoryOutlinedIcon,
+  SettingsOutlined as SettingsOutlinedIcon,
+  CategoryOutlined as CategoryOutlinedIcon,
+  ShoppingCartOutlined as ShoppingCartOutlinedIcon,
+  BuildOutlined as BuildOutlinedIcon,
+  AddOutlined as AddOutlinedIcon,
+  AssessmentOutlined as AssessmentOutlinedIcon,
+  EngineeringOutlined as EngineeringOutlinedIcon,
+  FolderOutlined as FolderOutlinedIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
@@ -46,24 +76,42 @@ import { logout } from '../store/slices/authSlice';
 import { authApi } from '../services/api';
 
 const drawerWidth = 240;
+const collapsedDrawerWidth = 64;
 
 const menuItems = [
-  { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
-  { text: 'Órdenes', icon: <AssignmentIcon />, path: '/ordenes' },
-  { text: 'Nueva Orden', icon: <AddIcon />, path: '/ordenes/nueva' },
-  { text: 'Clientes', icon: <PeopleIcon />, path: '/clientes' },
+  { text: 'Dashboard', icon: <HomeOutlinedIcon />, path: '/' },
+  { text: 'Leads', icon: <EmailOutlinedIcon />, path: '/leads' },
   { 
-    text: 'Inventario', 
-    icon: <InventoryIcon />, 
-    path: '/inventario',
+    text: 'Cotizaciones', 
+    icon: <DescriptionOutlinedIcon />, 
+    path: '/cotizaciones',
     submenu: [
-      { text: 'Paños', icon: <CategoryIcon />, path: '/inventario/panos' },
-      { text: 'Materiales', icon: <CategoryIcon />, path: '/inventario/materiales' },
-      { text: 'Herramientas', icon: <BuildIcon />, path: '/inventario/herramientas' },
+      { text: 'Lista de Cotizaciones', icon: <FolderOutlinedIcon />, path: '/cotizaciones' },
+      { text: 'Nueva Cotización', icon: <AddOutlinedIcon />, path: '/cotizaciones/nueva' },
     ]
   },
-  { text: 'Ejecutar un Corte', icon: <ScissorsIcon />, path: '/ejecutar-corte', roles: ['operador', 'admin'] },
-  { text: 'Configuración', icon: <SettingsIcon />, path: '/configuracion' },
+  { 
+    text: 'Órdenes de Producción', 
+    icon: <AssignmentOutlinedIcon />, 
+    path: '/ordenes',
+    submenu: [
+      { text: 'Lista de Órdenes', icon: <AssessmentOutlinedIcon />, path: '/ordenes' },
+      { text: 'Nueva Orden', icon: <AddOutlinedIcon />, path: '/ordenes/nueva' },
+      { text: 'Ejecutar un Corte', icon: <EngineeringOutlinedIcon />, path: '/ejecutar-corte', roles: ['operador', 'admin'] },
+    ]
+  },
+  { text: 'Clientes', icon: <GroupOutlinedIcon />, path: '/clientes' },
+  { 
+    text: 'Inventario', 
+    icon: <InventoryOutlinedIcon />, 
+    path: '/inventario',
+    submenu: [
+      { text: 'Paños', icon: <CategoryOutlinedIcon />, path: '/inventario/panos' },
+      { text: 'Materiales', icon: <ShoppingCartOutlinedIcon />, path: '/inventario/materiales' },
+      { text: 'Herramientas', icon: <BuildOutlinedIcon />, path: '/inventario/herramientas' },
+    ]
+  },
+  { text: 'Configuración', icon: <SettingsOutlinedIcon />, path: '/configuracion' },
 ];
 
 const Layout = ({ children }) => {
@@ -73,7 +121,7 @@ const Layout = ({ children }) => {
   const location = useLocation();
   const dispatch = useDispatch();
   
-  const { sidebarOpen } = useSelector((state) => state.ui);
+  const { sidebarOpen, sidebarCollapsed } = useSelector((state) => state.ui);
   const { user } = useSelector((state) => state.auth);
   const [openSubmenu, setOpenSubmenu] = useState('');
   const [anchorEl, setAnchorEl] = useState(null);
@@ -147,12 +195,14 @@ const Layout = ({ children }) => {
           }}
           selected={selected}
           sx={{
-            pl: level * 2 + 2,
-            pr: 2,
+            pl: sidebarCollapsed ? 1 : level * 2 + 2,
+            pr: sidebarCollapsed ? 1 : 2,
             py: 1,
-            mx: 1,
+            mx: sidebarCollapsed ? 0.5 : 1,
             borderRadius: 1,
             mb: 0.5,
+            minHeight: 48,
+            justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
             '&.Mui-selected': {
               backgroundColor: 'primary.main',
               color: 'white',
@@ -170,35 +220,39 @@ const Layout = ({ children }) => {
         >
           <ListItemIcon sx={{ 
             color: selected ? 'white' : 'text.secondary',
-            minWidth: 40,
+            minWidth: sidebarCollapsed ? 32 : 40,
             '& .MuiSvgIcon-root': {
-              fontSize: '1.25rem',
+              fontSize: sidebarCollapsed ? '1.25rem' : '1.25rem',
             }
           }}>
             {item.icon}
           </ListItemIcon>
-          <ListItemText 
-            primary={item.text} 
-            sx={{ 
-              color: selected ? 'white' : 'text.primary',
-              '& .MuiTypography-root': {
-                fontWeight: selected ? 600 : 500,
-                fontSize: '0.875rem',
-              }
-            }}
-          />
-          {hasSubmenu && (
-            <Box sx={{ 
-              color: selected ? 'white' : 'text.secondary',
-              transition: 'transform 0.2s',
-              transform: isSubmenuOpen ? 'rotate(180deg)' : 'rotate(0deg)'
-            }}>
-              <ExpandLess />
-            </Box>
+          {!sidebarCollapsed && (
+            <>
+              <ListItemText 
+                primary={item.text} 
+                sx={{ 
+                  color: selected ? 'white' : 'text.primary',
+                  '& .MuiTypography-root': {
+                    fontWeight: selected ? 600 : 500,
+                    fontSize: '0.875rem',
+                  }
+                }}
+              />
+              {hasSubmenu && (
+                <Box sx={{ 
+                  color: selected ? 'white' : 'text.secondary',
+                  transition: 'transform 0.2s',
+                  transform: isSubmenuOpen ? 'rotate(180deg)' : 'rotate(0deg)'
+                }}>
+                  <ExpandLess />
+                </Box>
+              )}
+            </>
           )}
         </ListItem>
         
-        {hasSubmenu && (
+        {hasSubmenu && !sidebarCollapsed && (
           <Collapse in={isSubmenuOpen} timeout="auto" unmountOnExit>
             <List component="div" disablePadding>
               {item.submenu.map((subItem) => renderMenuItem(subItem, level + 1))}
@@ -211,34 +265,28 @@ const Layout = ({ children }) => {
 
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Header del sidebar */}
+      {/* Botón para colapsar/expandir sidebar */}
       <Box sx={{ 
-        p: 2, 
+        p: 1, 
+        display: 'flex', 
+        justifyContent: 'flex-end',
         borderBottom: '1px solid',
-        borderColor: 'divider',
-        bgcolor: 'background.paper'
+        borderColor: 'divider'
       }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Box sx={{ 
-            width: 32, 
-            height: 32, 
-            bgcolor: 'primary.main', 
-            borderRadius: 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            <Typography variant="h6" sx={{ color: 'white', fontWeight: 'bold' }}>
-              S
-            </Typography>
-          </Box>
-          <Typography variant="h6" sx={{ fontWeight: 600, color: 'primary.main' }}>
-            SERCODAM
-          </Typography>
-        </Box>
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-          Sistema de Órdenes
-        </Typography>
+        <Tooltip title={sidebarCollapsed ? "Expandir sidebar" : "Colapsar sidebar"}>
+          <IconButton
+            onClick={() => dispatch(toggleSidebar())}
+            size="small"
+            sx={{
+              color: 'text.secondary',
+              '&:hover': {
+                backgroundColor: 'action.hover',
+              }
+            }}
+          >
+            {sidebarCollapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+          </IconButton>
+        </Tooltip>
       </Box>
       
       {/* Menú de navegación */}
@@ -259,26 +307,29 @@ const Layout = ({ children }) => {
         p: 2, 
         borderTop: '1px solid',
         borderColor: 'divider',
-        bgcolor: 'background.paper'
+        bgcolor: 'background.paper',
       }}>
-        <Typography variant="caption" color="text.secondary" align="center" display="block">
-          v1.0.0
-        </Typography>
+        {!sidebarCollapsed && (
+          <Typography variant="caption" color="text.secondary" align="center" display="block" sx={{ fontWeight: 500 }}>
+            v1.0.0
+          </Typography>
+        )}
       </Box>
     </Box>
   );
 
   return (
-    <Box sx={{ display: 'flex' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      {/* Header que ocupa todo el ancho */}
       <AppBar
-        position="fixed"
+        position="static"
         elevation={0}
         sx={{
-          width: { md: `calc(100% - ${drawerWidth}px)` },
-          ml: { md: `${drawerWidth}px` },
+          width: '100%',
           bgcolor: 'background.paper',
           borderBottom: '1px solid',
           borderColor: 'divider',
+          zIndex: 1200,
         }}
       >
         <Toolbar sx={{ minHeight: 64 }}>
@@ -298,16 +349,44 @@ const Layout = ({ children }) => {
             sx={{ 
               flexGrow: 1,
               color: 'text.primary',
-              fontWeight: 600,
-              fontSize: '1.125rem'
+              fontWeight: 700,
+              fontSize: '1.25rem',
+              letterSpacing: '-0.02em'
             }}
           >
-            Sistema de Órdenes de Producción
+            <Box component="span" sx={{ color: 'text.primary' }}>
+              SERCO
+            </Box>
+            <Box component="span" sx={{ color: 'primary.main' }}>
+              DAM
+            </Box>
           </Typography>
           
           {/* Usuario y menú de logout */}
           {user && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              {/* Botón de cambio de tema */}
+              <Tooltip title={window.currentTheme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}>
+                <IconButton
+                  onClick={() => window.toggleTheme()}
+                  sx={{
+                    bgcolor: 'action.hover',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    '&:hover': {
+                      bgcolor: 'action.selected',
+                      transform: 'rotate(180deg)',
+                    },
+                    transition: 'all 0.3s ease-in-out',
+                  }}
+                >
+                  {window.currentTheme === 'dark' ? 
+                    <LightModeIcon sx={{ color: '#fbbf24' }} /> : 
+                    <DarkModeIcon sx={{ color: '#6b7280' }} />
+                  }
+                </IconButton>
+              </Tooltip>
+              
               <Chip
                 label={user.rol || 'Usuario'}
                 size="small"
@@ -409,132 +488,145 @@ const Layout = ({ children }) => {
         </Toolbar>
       </AppBar>
 
-      <Box
-        component="nav"
-        sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}
-      >
-        {/* Mobile drawer */}
-        <Drawer
-          variant="temporary"
-          open={sidebarOpen && isMobile}
-          onClose={handleDrawerToggle}
-          ModalProps={{
-            keepMounted: true, // Better open performance on mobile.
-          }}
-          sx={{
-            display: { xs: 'block', md: 'none' },
-            '& .MuiDrawer-paper': { 
-              boxSizing: 'border-box', 
-              width: drawerWidth,
-              border: 'none',
-              boxShadow: '2px 0 8px rgba(0,0,0,0.1)',
-            },
-          }}
-        >
-          {drawer}
-        </Drawer>
-        
-        {/* Desktop drawer */}
-        <Drawer
-          variant="permanent"
-          sx={{
-            display: { xs: 'none', md: 'block' },
-            '& .MuiDrawer-paper': { 
-              boxSizing: 'border-box', 
-              width: drawerWidth,
-              border: 'none',
-              borderRight: '1px solid',
-              borderColor: 'divider',
-              bgcolor: 'background.paper',
-            },
-          }}
-          open
-        >
-          {drawer}
-        </Drawer>
-      </Box>
-
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          p: 3,
-          width: { md: `calc(100% - ${drawerWidth}px)` },
-          mt: '64px', // Height of AppBar
-          bgcolor: 'background.default',
-          minHeight: 'calc(100vh - 64px)',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        <Box sx={{ flexGrow: 1, pb: 4 }}>
-          {children}
-        </Box>
-        
-        {/* Footer */}
+      {/* Contenido principal con sidebar */}
+      <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* Sidebar */}
         <Box
-          component="footer"
-          sx={{
-            mt: 'auto',
-            bgcolor: 'primary.main',
-            color: 'white',
-            py: 3,
-            px: 4,
-            borderRadius: '8px 8px 0 0',
-            boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
-            position: 'relative',
-            '&::before': {
-              content: '""',
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: '2px',
-              background: 'linear-gradient(90deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.1) 100%)',
-            }
+          component="nav"
+          sx={{ 
+            width: { md: sidebarCollapsed ? collapsedDrawerWidth : drawerWidth }, 
+            flexShrink: { md: 0 },
+            zIndex: 1100,
           }}
         >
-          <Typography
-            variant="body2"
+          {/* Mobile drawer */}
+          <Drawer
+            variant="temporary"
+            open={sidebarOpen && isMobile}
+            onClose={handleDrawerToggle}
+            ModalProps={{
+              keepMounted: true, // Better open performance on mobile.
+            }}
             sx={{
-              fontSize: '0.8rem',
-              fontWeight: 400,
-              opacity: 0.9,
-              fontStyle: 'italic',
-              textAlign: 'left',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
+              display: { xs: 'block', md: 'none' },
+              '& .MuiDrawer-paper': { 
+                boxSizing: 'border-box', 
+                width: drawerWidth,
+                border: 'none',
+                boxShadow: '2px 0 8px rgba(0,0,0,0.1)',
+                top: '64px', // Empieza donde termina el header
+                height: 'calc(100% - 64px)', // Altura restante
+              },
             }}
           >
-            <Box
-              component="span"
+            {drawer}
+          </Drawer>
+          
+          {/* Desktop drawer */}
+          <Drawer
+            variant="permanent"
+            sx={{
+              display: { xs: 'none', md: 'block' },
+              '& .MuiDrawer-paper': { 
+                boxSizing: 'border-box', 
+                width: sidebarCollapsed ? collapsedDrawerWidth : drawerWidth,
+                border: 'none',
+                borderRight: '1px solid',
+                borderColor: 'divider',
+                bgcolor: 'background.paper',
+                transition: 'width 0.2s ease-in-out',
+                top: '64px', // Empieza donde termina el header
+                height: 'calc(100% - 64px)', // Altura restante
+              },
+            }}
+            open
+          >
+            {drawer}
+          </Drawer>
+        </Box>
+
+        {/* Contenido principal */}
+        <Box
+          component="main"
+          sx={{
+            flexGrow: 1,
+            p: 3,
+            width: { md: `calc(100% - ${sidebarCollapsed ? collapsedDrawerWidth : drawerWidth}px)` },
+            bgcolor: 'background.default',
+            overflow: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            transition: 'width 0.2s ease-in-out',
+          }}
+        >
+          <Box sx={{ flexGrow: 1, pb: 4 }}>
+            {children}
+          </Box>
+          
+          {/* Footer */}
+          <Box
+            component="footer"
+            sx={{
+              mt: 'auto',
+              background: 'transparent',
+              color: 'text.primary',
+              py: 3,
+              px: 3,
+              borderRadius: '12px 12px 0 0',
+              position: 'relative',
+              border: '1px solid rgba(59, 130, 246, 0.2)',
+              borderBottom: 'none',
+            }}
+          >
+            <Typography
+              variant="body2"
               sx={{
-                width: '4px',
-                height: '4px',
-                borderRadius: '50%',
-                bgcolor: 'rgba(255,255,255,0.6)',
-                display: 'inline-block',
-              }}
-            />
-            Planeado y desarrollado por{' '}
-            <Link
-              href="https://wiger.ai/"
-              target="_blank"
-              rel="noopener noreferrer"
-              sx={{
-                color: 'inherit',
-                textDecoration: 'none',
+                fontSize: '0.8rem',
                 fontWeight: 500,
-                '&:hover': {
-                  textDecoration: 'underline',
-                  opacity: 0.8,
-                }
+                opacity: 0.9,
+                textAlign: 'left',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+                letterSpacing: '-0.02em',
               }}
             >
-              Wiger
-            </Link>
-          </Typography>
+              <Box
+                component="span"
+                sx={{
+                  width: '4px',
+                  height: '4px',
+                  borderRadius: '50%',
+                  bgcolor: 'rgba(59, 130, 246, 0.6)',
+                  display: 'inline-block',
+                }}
+              />
+              Planeado y desarrollado por{' '}
+              <Link
+                href="https://wiger.ai/"
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{
+                  color: 'primary.main',
+                  textDecoration: 'none',
+                  fontWeight: 600,
+                  background: 'transparent',
+                  px: 1.5,
+                  py: 0.25,
+                  borderRadius: 1.5,
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  transition: 'all 0.2s ease-in-out',
+                  '&:hover': {
+                    background: 'rgba(59, 130, 246, 0.05)',
+                    border: '1px solid rgba(59, 130, 246, 0.5)',
+                    transform: 'translateY(-1px)',
+                  }
+                }}
+              >
+                Wiger
+              </Link>
+            </Typography>
+          </Box>
         </Box>
       </Box>
     </Box>

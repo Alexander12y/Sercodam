@@ -234,19 +234,19 @@ const ClientesList = () => {
                   </TableCell>
                   <TableCell>
                     <Box>
-                      {cliente.email && (
+                      {cliente.email_cliente && (
                         <Box display="flex" alignItems="center" gap={1} mb={0.5}>
                           <EmailIcon fontSize="small" color="action" />
                           <Typography variant="body2" color="text.secondary">
-                            {cliente.email}
+                            {cliente.email_cliente}
                           </Typography>
                         </Box>
                       )}
-                      {cliente.telefono && (
+                      {cliente.telefono_cliente && (
                         <Box display="flex" alignItems="center" gap={1}>
                           <PhoneIcon fontSize="small" color="action" />
                           <Typography variant="body2" color="text.secondary">
-                            {cliente.telefono}
+                            {cliente.telefono_cliente}
                           </Typography>
                         </Box>
                       )}

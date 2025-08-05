@@ -61,7 +61,7 @@ const PanosList = () => {
   const [panoToDelete, setPanoToDelete] = useState(null);
 
   const tiposValidos = ['lona', 'nylon', 'polipropileno', 'malla sombra'];
-  const estadosValidos = ['Bueno', 'Regular', 'Malo', '50%'];
+  const estadosValidos = ['Bueno', 'Regular', 'Malo', 'Usado 50%'];
 
   useEffect(() => {
     loadPanos();
@@ -140,7 +140,7 @@ const PanosList = () => {
       'bueno': 'success',
       'regular': 'warning',
       'malo': 'error',
-      '50%': 'info',
+      'usado 50%': 'info',
     };
     return colors[normalized] || 'default';
   };

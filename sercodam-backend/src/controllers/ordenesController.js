@@ -290,7 +290,7 @@ const ordenesController = {
             const orden = await db('orden_produccion as op')
                 .leftJoin('cliente as c', 'op.id_cliente', 'c.id_cliente')
                 .where('op.id_op', id)
-                .select('op.*', 'c.nombre_cliente', 'c.email as cliente_email', 'c.telefono as cliente_telefono')
+                .select('op.*', 'c.nombre_cliente', 'c.email_cliente as cliente_email', 'c.telefono_cliente as cliente_telefono')
                 .first();
 
             if (!orden) {
@@ -2140,7 +2140,7 @@ const ordenesController = {
 
             // Log del SQL que se va a ejecutar
             const query = db('cliente')
-                .select('id_cliente', 'nombre_cliente', 'email', 'telefono')
+                .select('id_cliente', 'nombre_cliente', 'email_cliente', 'telefono_cliente')
                 .where('nombre_cliente', 'ilike', `%${searchTerm}%`)
                 .orderBy('nombre_cliente', 'asc')
                 .limit(10);
@@ -2611,12 +2611,12 @@ const ordenesController = {
                     'op.fecha_op',
                     'op.prioridad',
                     'c.nombre_cliente',
-                    'c.email as cliente_email',
-                    'c.telefono as cliente_telefono',
+                    'c.email_cliente as cliente_email',
+                    'c.telefono_cliente as cliente_telefono',
                     db.raw('COUNT(tc.job_id) as total_cuts'),
                     db.raw('COUNT(tc.job_id) as pending_cuts')
                 )
-                .groupBy('op.id_op', 'op.numero_op', 'op.cliente', 'op.fecha_op', 'op.prioridad', 'c.nombre_cliente', 'c.email', 'c.telefono')
+                .groupBy('op.id_op', 'op.numero_op', 'op.cliente', 'op.fecha_op', 'op.prioridad', 'c.nombre_cliente', 'c.email_cliente', 'c.telefono_cliente')
                 .orderBy('op.fecha_op', 'desc');
 
             // Para cada orden, obtener los trabajos de corte detallados
@@ -2693,13 +2693,13 @@ const ordenesController = {
                     'op.fecha_op',
                     'op.prioridad',
                     'c.nombre_cliente',
-                    'c.email as cliente_email',
-                    'c.telefono as cliente_telefono',
+                    'c.email_cliente as cliente_email',
+                    'c.telefono_cliente as cliente_telefono',
                     db.raw('COUNT(tc.job_id) as total_cuts'),
                     db.raw('COUNT(CASE WHEN tc.estado IN (\'Confirmado\', \'Desviado\') THEN 1 END) as completed_cuts'),
                     db.raw('MAX(tc.completed_at) as last_completed_date')
                 )
-                .groupBy('op.id_op', 'op.numero_op', 'op.cliente', 'op.fecha_op', 'op.prioridad', 'c.nombre_cliente', 'c.email', 'c.telefono')
+                .groupBy('op.id_op', 'op.numero_op', 'op.cliente', 'op.fecha_op', 'op.prioridad', 'c.nombre_cliente', 'c.email_cliente', 'c.telefono_cliente')
                 .orderBy('last_completed_date', 'desc');
 
             // Contar total para paginación
@@ -3213,8 +3213,8 @@ const ordenesController = {
                 .select(
                     'op.*',
                     'c.nombre_cliente',
-                    'c.email as cliente_email',
-                    'c.telefono as cliente_telefono'
+                    'c.email_cliente as cliente_email',
+                    'c.telefono_cliente as cliente_telefono'
                 )
                 .first();
             

@@ -301,6 +301,66 @@ try {
         console.log('⚠️  Continuando sin rutas de clientes (pueden no estar implementadas)');
     }
 
+    try {
+        console.log('Cargando rutas de leads...');
+        const leadsRoutes = require('./routes/leads');
+        app.use(`/api/${API_VERSION}/leads`, leadsRoutes);
+        console.log('✅ Rutas de leads cargadas');
+    } catch (error) {
+        console.error('❌ Error cargando rutas de leads:', error.message);
+        console.log('⚠️  Continuando sin rutas de leads (pueden no estar implementadas)');
+    }
+
+    try {
+        console.log('Cargando rutas de cotizaciones...');
+        const cotizacionesRoutes = require('./routes/cotizaciones');
+        app.use(`/api/${API_VERSION}/cotizaciones`, cotizacionesRoutes);
+        console.log('✅ Rutas de cotizaciones cargadas');
+    } catch (error) {
+        console.error('❌ Error cargando rutas de cotizaciones:', error.message);
+        console.log('⚠️  Continuando sin rutas de cotizaciones (pueden no estar implementadas)');
+    }
+
+    try {
+        console.log('Cargando rutas de drafts de cotizaciones...');
+        const cotizacionesDraftsRoutes = require('./routes/cotizacionesDrafts');
+        app.use(`/api/${API_VERSION}/cotizaciones-drafts`, cotizacionesDraftsRoutes);
+        console.log('✅ Rutas de drafts de cotizaciones cargadas');
+    } catch (error) {
+        console.error('❌ Error cargando rutas de drafts de cotizaciones:', error.message);
+        console.log('⚠️  Continuando sin rutas de drafts de cotizaciones (pueden no estar implementadas)');
+    }
+
+    // ========== INICIALIZACIÓN DEL PROCESAMIENTO AUTOMÁTICO DE EMAILS ==========
+    try {
+        console.log('Configurando procesamiento automático de emails...');
+        const emailConfig = require('./config/emailConfig');
+        const emailScheduler = require('./services/emailScheduler');
+        
+        // Validar configuración
+        if (emailConfig.validate()) {
+            console.log('✅ Configuración de email válida');
+            
+            // Iniciar procesamiento automático si está habilitado
+            if (emailConfig.autoProcessingEnabled) {
+                emailScheduler.start(emailConfig.processingInterval);
+                console.log(`✅ Procesamiento automático iniciado cada ${emailConfig.processingInterval} minutos`);
+            } else {
+                console.log('ℹ️ Procesamiento automático deshabilitado');
+            }
+            
+            // Log de configuración
+            const configLog = emailConfig.getConfigForLogging();
+            console.log('📧 Configuración de email:', configLog);
+            
+        } else {
+            console.log('⚠️ Configuración de email incompleta, procesamiento automático no iniciado');
+        }
+    } catch (error) {
+        console.error('❌ Error configurando procesamiento de emails:', error.message);
+        console.log('⚠️ Continuando sin procesamiento automático de emails');
+    }
+
     // Error handling middleware
     app.use(notFound);
     app.use(errorHandler);

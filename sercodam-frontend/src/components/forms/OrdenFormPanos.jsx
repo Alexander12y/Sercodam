@@ -74,8 +74,54 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
     area_max: ''
   });
 
+  // Estados para especificaciones de paños por tipo de red
+  const [nylonCatalogos, setNylonCatalogos] = useState({
+    calibres: [],
+    cuadros: [],
+    torsiones: []
+  });
+  const [polipropilenoCatalogos, setPolipropilenoCatalogos] = useState({
+    grosores: [],
+    cuadros: []
+  });
+  const [lonaCatalogos, setLonaCatalogos] = useState({
+    colores: [],
+    presentaciones: []
+  });
+  const [mallaSombraCatalogos, setMallaSombraCatalogos] = useState({
+    colorTiposRed: [],
+    presentaciones: []
+  });
+
+  // Opciones filtradas basadas en selecciones previas
+  const [filteredOptions, setFilteredOptions] = useState({
+    cuadros: [],
+    torsiones: [],
+    presentaciones: []
+  });
+
+  // Datos completos del catálogo para filtrar
+  const [catalogData, setCatalogData] = useState({
+    nylon: [],
+    lona: [],
+    polipropileno: [],
+    mallaSombra: []
+  });
+
+  // Estados para filtros de especificaciones por tipo de red
+  const [filtrosEspecificaciones, setFiltrosEspecificaciones] = useState({
+    calibre: '',
+    cuadro: '',
+    torsion: '',
+    refuerzo: '',
+    color: '',
+    presentacion: '',
+    grosor: '',
+    color_tipo_red: ''
+  });
+
   const tiposRed = ['nylon', 'lona', 'polipropileno', 'malla sombra'];
-  const estados = ['bueno', 'regular', 'malo', '50%'];
+  const estados = ['bueno', 'regular', 'malo', 'usado 50%'];
   const ubicaciones = ['Bodega CDMX', 'Querétaro', 'Oficina', 'Instalación'];
 
   // Cargar datos iniciales cuando se monta el componente (SOLO UNA VEZ, SIN FILTROS)
@@ -141,6 +187,59 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
     }
   }, [panosRedux, filtros]);
 
+  // Cargar catálogos cuando se selecciona un tipo de red en los filtros
+  useEffect(() => {
+    if (filtros.tipo_red) {
+      const tipoRed = filtros.tipo_red.toLowerCase();
+      if (tipoRed === 'nylon') {
+        loadNylonCatalogos();
+      } else if (tipoRed === 'polipropileno') {
+        loadPolipropilenoCatalogos();
+      } else if (tipoRed === 'lona') {
+        loadLonaCatalogos();
+      } else if (tipoRed === 'malla sombra') {
+        loadMallaSombraCatalogos();
+      }
+    }
+  }, [filtros.tipo_red]);
+
+  // Filtrar opciones cuando cambian las especificaciones
+  useEffect(() => {
+    if (filtros.tipo_red) {
+      const tipoRed = filtros.tipo_red.toLowerCase();
+      if (tipoRed === 'nylon') {
+        filterNylonOptions();
+      } else if (tipoRed === 'polipropileno') {
+        filterPolipropilenoOptions();
+      } else if (tipoRed === 'lona') {
+        filterLonaOptions();
+      } else if (tipoRed === 'malla sombra') {
+        filterMallaSombraOptions();
+      }
+    }
+  }, [filtrosEspecificaciones, catalogData]);
+
+  // Limpiar especificaciones cuando se cierra el modal
+  useEffect(() => {
+    if (!modalOpen) {
+      setFiltrosEspecificaciones({
+        calibre: '',
+        cuadro: '',
+        torsion: '',
+        refuerzo: '',
+        color: '',
+        presentacion: '',
+        grosor: '',
+        color_tipo_red: ''
+      });
+      setFilteredOptions({
+        cuadros: [],
+        torsiones: [],
+        presentaciones: []
+      });
+    }
+  }, [modalOpen]);
+
   // Función para guardar draft cuando cambian los paños
   const saveDraftOnChange = (newPanosSeleccionados) => {
     if (onDraftSave) {
@@ -163,6 +262,355 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
     }
   };
 
+  // Funciones para cargar catálogos
+  const loadNylonCatalogos = async () => {
+    try {
+      const response = await panosApi.getNylonCatalogos();
+      setNylonCatalogos(response.data.data);
+      
+      // Cargar datos completos para filtrar
+      const fullDataResponse = await panosApi.getNylonFullData();
+      setCatalogData(prev => ({ ...prev, nylon: fullDataResponse.data.data }));
+    } catch (error) {
+      console.error('Error cargando catálogos de nylon:', error);
+    }
+  };
+
+  const loadPolipropilenoCatalogos = async () => {
+    try {
+      const response = await panosApi.getPolipropilenoCatalogos();
+      setPolipropilenoCatalogos(response.data.data);
+      
+      // Cargar datos completos para filtrar
+      const fullDataResponse = await panosApi.getPolipropilenoFullData();
+      setCatalogData(prev => ({ ...prev, polipropileno: fullDataResponse.data.data }));
+    } catch (error) {
+      console.error('Error cargando catálogos de polipropileno:', error);
+    }
+  };
+
+  const loadLonaCatalogos = async () => {
+    try {
+      const response = await panosApi.getLonaCatalogos();
+      setLonaCatalogos(response.data.data);
+      
+      // Cargar datos completos para filtrar
+      const fullDataResponse = await panosApi.getLonaFullData();
+      setCatalogData(prev => ({ ...prev, lona: fullDataResponse.data.data }));
+    } catch (error) {
+      console.error('Error cargando catálogos de lona:', error);
+    }
+  };
+
+  const loadMallaSombraCatalogos = async () => {
+    try {
+      const response = await panosApi.getMallaSombraCatalogos();
+      setMallaSombraCatalogos(response.data.data);
+      
+      // Cargar datos completos para filtrar
+      const fullDataResponse = await panosApi.getMallaSombraFullData();
+      setCatalogData(prev => ({ ...prev, mallaSombra: fullDataResponse.data.data }));
+    } catch (error) {
+      console.error('Error cargando catálogos de malla sombra:', error);
+    }
+  };
+
+  // Funciones de filtrado
+  const filterNylonOptions = () => {
+    if (!filtrosEspecificaciones.calibre) {
+      setFilteredOptions(prev => ({ ...prev, cuadros: [], torsiones: [] }));
+      return;
+    }
+    
+    const filtered = catalogData.nylon.filter(item => item.calibre === filtrosEspecificaciones.calibre);
+    const cuadros = [...new Set(filtered.map(item => item.cuadro))].filter(Boolean);
+    const torsiones = [...new Set(filtered.map(item => item.torsion))].filter(Boolean);
+
+    setFilteredOptions(prev => ({ ...prev, cuadros, torsiones }));
+  };
+
+  const filterPolipropilenoOptions = () => {
+    if (!filtrosEspecificaciones.grosor) {
+      setFilteredOptions(prev => ({ ...prev, cuadros: [] }));
+      return;
+    }
+
+    const filtered = catalogData.polipropileno.filter(item => item.grosor === filtrosEspecificaciones.grosor);
+    const cuadros = [...new Set(filtered.map(item => item.cuadro))].filter(Boolean);
+
+    setFilteredOptions(prev => ({ ...prev, cuadros }));
+  };
+
+  const filterLonaOptions = () => {
+    if (!filtrosEspecificaciones.color) {
+      setFilteredOptions(prev => ({ ...prev, presentaciones: [] }));
+      return;
+    }
+
+    const filtered = catalogData.lona.filter(item => item.color === filtrosEspecificaciones.color);
+    const presentaciones = [...new Set(filtered.map(item => item.presentacion))].filter(Boolean);
+
+    setFilteredOptions(prev => ({ ...prev, presentaciones }));
+  };
+
+  const filterMallaSombraOptions = () => {
+    if (!filtrosEspecificaciones.color_tipo_red) {
+      setFilteredOptions(prev => ({ ...prev, presentaciones: [] }));
+      return;
+    }
+
+    const filtered = catalogData.mallaSombra.filter(item => item.color_tipo_red === filtrosEspecificaciones.color_tipo_red);
+    const presentaciones = [...new Set(filtered.map(item => item.presentacion))].filter(Boolean);
+
+    setFilteredOptions(prev => ({ ...prev, presentaciones }));
+  };
+
+  // Funciones para manejar cambios en especificaciones
+  const handleEspecificacionChange = (field) => (event) => {
+    const value = event.target.value;
+    setFiltrosEspecificaciones(prev => {
+      const newData = { ...prev, [field]: value };
+      
+      // Limpiar campos dependientes
+      if (field === 'calibre') {
+        newData.cuadro = '';
+        newData.torsion = '';
+        newData.refuerzo = '';
+      } else if (field === 'grosor') {
+        newData.cuadro = '';
+      } else if (field === 'color') {
+        newData.presentacion = '';
+      } else if (field === 'color_tipo_red') {
+        newData.presentacion = '';
+      }
+      
+      return newData;
+    });
+  };
+
+  // Función para renderizar filtros de especificaciones por tipo de red
+  const renderFiltrosEspecificaciones = () => {
+    if (!filtros.tipo_red) return null;
+
+    const tipoRed = filtros.tipo_red.toLowerCase();
+
+    switch (tipoRed) {
+      case 'nylon':
+        return (
+          <>
+            <Grid item xs={12} md={3}>
+              <FormControl fullWidth>
+                <InputLabel>Filtrar por Calibre</InputLabel>
+                <Select
+                  value={filtrosEspecificaciones.calibre}
+                  onChange={handleEspecificacionChange('calibre')}
+                  label="Filtrar por Calibre"
+                >
+                  <MenuItem value="">
+                    <em>Todos los calibres</em>
+                  </MenuItem>
+                  {nylonCatalogos.calibres.map(calibre => (
+                    <MenuItem key={calibre} value={calibre}>
+                      {calibre}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <FormControl fullWidth disabled={!filtrosEspecificaciones.calibre}>
+                <InputLabel>Filtrar por Cuadro</InputLabel>
+                <Select
+                  value={filtrosEspecificaciones.cuadro}
+                  onChange={handleEspecificacionChange('cuadro')}
+                  label="Filtrar por Cuadro"
+                >
+                  <MenuItem value="">
+                    <em>Todos los cuadros</em>
+                  </MenuItem>
+                  {filteredOptions.cuadros.map(cuadro => (
+                    <MenuItem key={cuadro} value={cuadro}>
+                      {cuadro}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <FormControl fullWidth disabled={!filtrosEspecificaciones.calibre}>
+                <InputLabel>Filtrar por Torsión</InputLabel>
+                <Select
+                  value={filtrosEspecificaciones.torsion}
+                  onChange={handleEspecificacionChange('torsion')}
+                  label="Filtrar por Torsión"
+                >
+                  <MenuItem value="">
+                    <em>Todas las torsiones</em>
+                  </MenuItem>
+                  {filteredOptions.torsiones.map(torsion => (
+                    <MenuItem key={torsion} value={torsion}>
+                      {torsion}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <FormControl fullWidth disabled={!filtrosEspecificaciones.calibre}>
+                <InputLabel>Filtrar por Refuerzo</InputLabel>
+                <Select
+                  value={filtrosEspecificaciones.refuerzo}
+                  onChange={handleEspecificacionChange('refuerzo')}
+                  label="Filtrar por Refuerzo"
+                >
+                  <MenuItem value="">
+                    <em>Todos</em>
+                  </MenuItem>
+                  <MenuItem value="Sí">Con Refuerzo</MenuItem>
+                  <MenuItem value="No">Sin Refuerzo</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          </>
+        );
+      
+      case 'lona':
+        return (
+          <>
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth>
+                <InputLabel>Filtrar por Color</InputLabel>
+                <Select
+                  value={filtrosEspecificaciones.color}
+                  onChange={handleEspecificacionChange('color')}
+                  label="Filtrar por Color"
+                >
+                  <MenuItem value="">
+                    <em>Todos los colores</em>
+                  </MenuItem>
+                  {lonaCatalogos.colores.map(color => (
+                    <MenuItem key={color} value={color}>
+                      {color}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth disabled={!filtrosEspecificaciones.color}>
+                <InputLabel>Filtrar por Presentación</InputLabel>
+                <Select
+                  value={filtrosEspecificaciones.presentacion}
+                  onChange={handleEspecificacionChange('presentacion')}
+                  label="Filtrar por Presentación"
+                >
+                  <MenuItem value="">
+                    <em>Todas las presentaciones</em>
+                  </MenuItem>
+                  {filteredOptions.presentaciones.map(presentacion => (
+                    <MenuItem key={presentacion} value={presentacion}>
+                      {presentacion}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+          </>
+        );
+      
+      case 'polipropileno':
+        return (
+          <>
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth>
+                <InputLabel>Filtrar por Grosor</InputLabel>
+                <Select
+                  value={filtrosEspecificaciones.grosor}
+                  onChange={handleEspecificacionChange('grosor')}
+                  label="Filtrar por Grosor"
+                >
+                  <MenuItem value="">
+                    <em>Todos los grosores</em>
+                  </MenuItem>
+                  {polipropilenoCatalogos.grosores.map(grosor => (
+                    <MenuItem key={grosor} value={grosor}>
+                      {grosor}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth disabled={!filtrosEspecificaciones.grosor}>
+                <InputLabel>Filtrar por Cuadro</InputLabel>
+                <Select
+                  value={filtrosEspecificaciones.cuadro}
+                  onChange={handleEspecificacionChange('cuadro')}
+                  label="Filtrar por Cuadro"
+                >
+                  <MenuItem value="">
+                    <em>Todos los cuadros</em>
+                  </MenuItem>
+                  {filteredOptions.cuadros.map(cuadro => (
+                    <MenuItem key={cuadro} value={cuadro}>
+                      {cuadro}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+          </>
+        );
+      
+      case 'malla sombra':
+        return (
+          <>
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth>
+                <InputLabel>Filtrar por Color/Tipo</InputLabel>
+                <Select
+                  value={filtrosEspecificaciones.color_tipo_red}
+                  onChange={handleEspecificacionChange('color_tipo_red')}
+                  label="Filtrar por Color/Tipo"
+                >
+                  <MenuItem value="">
+                    <em>Todos los colores/tipos</em>
+                  </MenuItem>
+                  {mallaSombraCatalogos.colorTiposRed.map(colorTipo => (
+                    <MenuItem key={colorTipo} value={colorTipo}>
+                      {colorTipo}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth disabled={!filtrosEspecificaciones.color_tipo_red}>
+                <InputLabel>Filtrar por Presentación</InputLabel>
+                <Select
+                  value={filtrosEspecificaciones.presentacion}
+                  onChange={handleEspecificacionChange('presentacion')}
+                  label="Filtrar por Presentación"
+                >
+                  <MenuItem value="">
+                    <em>Todas las presentaciones</em>
+                  </MenuItem>
+                  {filteredOptions.presentaciones.map(presentacion => (
+                    <MenuItem key={presentacion} value={presentacion}>
+                      {presentacion}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+          </>
+        );
+      
+      default:
+        return null;
+    }
+  };
+
   // Función para aplicar filtros (solo cuando el usuario busca)
   const loadPanos = async () => {
     try {
@@ -174,6 +622,24 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
       if (filtros.estado) params.estado = filtros.estado;
       if (filtros.ubicacion) params.ubicacion = filtros.ubicacion;
       if (filtros.busqueda) params.search = filtros.busqueda;
+      
+      // Aplicar filtros de especificaciones según el tipo de red
+      const tipoRed = filtros.tipo_red?.toLowerCase();
+      if (tipoRed === 'nylon') {
+        if (filtrosEspecificaciones.calibre) params.calibre = filtrosEspecificaciones.calibre;
+        if (filtrosEspecificaciones.cuadro) params.cuadro = filtrosEspecificaciones.cuadro;
+        if (filtrosEspecificaciones.torsion) params.torsion = filtrosEspecificaciones.torsion;
+        if (filtrosEspecificaciones.refuerzo) params.refuerzo = filtrosEspecificaciones.refuerzo;
+      } else if (tipoRed === 'lona') {
+        if (filtrosEspecificaciones.color) params.color = filtrosEspecificaciones.color;
+        if (filtrosEspecificaciones.presentacion) params.presentacion = filtrosEspecificaciones.presentacion;
+      } else if (tipoRed === 'polipropileno') {
+        if (filtrosEspecificaciones.grosor) params.grosor = filtrosEspecificaciones.grosor;
+        if (filtrosEspecificaciones.cuadro) params.cuadro = filtrosEspecificaciones.cuadro;
+      } else if (tipoRed === 'malla sombra') {
+        if (filtrosEspecificaciones.color_tipo_red) params.color_tipo_red = filtrosEspecificaciones.color_tipo_red;
+        if (filtrosEspecificaciones.presentacion) params.presentacion = filtrosEspecificaciones.presentacion;
+      }
       
       // Usar Redux para cargar los paños filtrados
       await dispatch(fetchPanos(params));
@@ -200,6 +666,21 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
       ancho_max: '',
       area_min: '',
       area_max: ''
+    });
+    setFiltrosEspecificaciones({
+      calibre: '',
+      cuadro: '',
+      torsion: '',
+      refuerzo: '',
+      color: '',
+      presentacion: '',
+      grosor: '',
+      color_tipo_red: ''
+    });
+    setFilteredOptions({
+      cuadros: [],
+      torsiones: [],
+      presentaciones: []
     });
     
     // Recargar datos iniciales sin filtros
@@ -303,7 +784,7 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
       case 'bueno': return 'success';
       case 'regular': return 'warning';
       case 'malo': return 'error';
-      case '50%': return 'info';
+      case 'usado 50%': return 'info';
       default: return 'default';
     }
   };
@@ -315,6 +796,76 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
       case 'en progreso': return 'info';
       case 'consumido': return 'error';
       default: return 'success'; // Default to success for null/undefined (treated as Libre)
+    }
+  };
+
+  // Función para renderizar especificaciones de paños (copiada de PanosList.jsx)
+  const renderPanoSpecifications = (pano) => {
+    // Si el backend ya generó las especificaciones, usarlas directamente
+    if (pano.especificaciones) {
+      return (
+        <Typography variant="caption" style={{ whiteSpace: 'pre-line' }} color="text.secondary">
+          {pano.especificaciones}
+        </Typography>
+      );
+    }
+    
+    // Fallback: generar especificaciones desde campos individuales
+    switch (pano.tipo_red) {
+      case 'nylon':
+        return (
+          <Box>
+            <Typography variant="caption" display="block" color="text.secondary">
+              Calibre: {pano.calibre || 'N/A'}
+            </Typography>
+            <Typography variant="caption" display="block" color="text.secondary">
+              Cuadro: {pano.cuadro || 'N/A'}
+            </Typography>
+            <Typography variant="caption" display="block" color="text.secondary">
+              Torsión: {pano.torsion || 'N/A'}
+            </Typography>
+            {pano.refuerzo !== undefined && pano.refuerzo !== null && (
+              <Typography variant="caption" display="block" color="text.secondary">
+                Refuerzo: {pano.refuerzo === true || pano.refuerzo === 't' ? 'Sí' : 'No'}
+              </Typography>
+            )}
+          </Box>
+        );
+      case 'lona':
+        return (
+          <Box>
+            <Typography variant="caption" display="block" color="text.secondary">
+              Color: {pano.color || 'N/A'}
+            </Typography>
+            <Typography variant="caption" display="block" color="text.secondary">
+              Presentación: {pano.presentacion || 'N/A'}
+            </Typography>
+          </Box>
+        );
+      case 'polipropileno':
+        return (
+          <Box>
+            <Typography variant="caption" display="block" color="text.secondary">
+              Grosor: {pano.grosor || 'N/A'}
+            </Typography>
+            <Typography variant="caption" display="block" color="text.secondary">
+              Cuadro: {pano.cuadro || 'N/A'}
+            </Typography>
+          </Box>
+        );
+      case 'malla sombra':
+        return (
+          <Box>
+            <Typography variant="caption" display="block" color="text.secondary">
+              Color/Tipo: {pano.color_tipo_red || 'N/A'}
+            </Typography>
+            <Typography variant="caption" display="block" color="text.secondary">
+              Presentación: {pano.presentacion || 'N/A'}
+            </Typography>
+          </Box>
+        );
+      default:
+        return <Typography variant="caption" color="text.secondary">Sin especificaciones</Typography>;
     }
   };
 
@@ -690,6 +1241,23 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                   />
                 </Grid>
                 
+                {/* Filtros de especificaciones */}
+                {filtros.tipo_red && (
+                  <>
+                    <Grid item xs={12}>
+                      <Divider sx={{ my: 2 }}>
+                        <Chip 
+                          label="Filtros de Especificaciones" 
+                          color="primary" 
+                          variant="outlined"
+                          size="small"
+                        />
+                      </Divider>
+                    </Grid>
+                    {renderFiltrosEspecificaciones()}
+                  </>
+                )}
+
                 <Grid item xs={12} md={6}>
                   <Button
                     fullWidth
@@ -766,9 +1334,36 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                         hover
                         selected={panoSeleccionado?.id_item === pano.id_item}
                         onClick={() => setPanoSeleccionado(pano)}
-                        sx={{ cursor: 'pointer' }}
+                        sx={{ 
+                          cursor: 'pointer',
+                          backgroundColor: panoSeleccionado?.id_item === pano.id_item 
+                            ? 'rgba(59, 130, 246, 0.08)' 
+                            : 'transparent',
+                          border: panoSeleccionado?.id_item === pano.id_item 
+                            ? '2px solid #3b82f6' 
+                            : 'none',
+                          transition: 'all 0.2s ease',
+                          '&:hover': {
+                            backgroundColor: panoSeleccionado?.id_item === pano.id_item 
+                              ? 'rgba(59, 130, 246, 0.12)' 
+                              : 'rgba(59, 130, 246, 0.04)',
+                            transform: 'translateY(-1px)',
+                            boxShadow: '0 4px 8px rgba(59, 130, 246, 0.15)',
+                          },
+                          '&:hover .MuiTableCell-root': {
+                            backgroundColor: 'rgba(59, 130, 246, 0.04)',
+                            transition: 'background-color 0.2s ease',
+                          }
+                        }}
                       >
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Button
                             size="small"
                             variant={panoSeleccionado?.id_item === pano.id_item ? "contained" : "outlined"}
@@ -776,16 +1371,46 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                               e.stopPropagation();
                               setPanoSeleccionado(pano);
                             }}
+                            sx={{
+                              backgroundColor: panoSeleccionado?.id_item === pano.id_item 
+                                ? '#3b82f6' 
+                                : 'transparent',
+                              color: panoSeleccionado?.id_item === pano.id_item 
+                                ? 'white' 
+                                : '#3b82f6',
+                              borderColor: '#3b82f6',
+                              transition: 'all 0.2s ease',
+                              '&:hover': {
+                                backgroundColor: panoSeleccionado?.id_item === pano.id_item 
+                                  ? '#2563eb' 
+                                  : 'rgba(59, 130, 246, 0.08)',
+                                transform: 'scale(1.02)',
+                              }
+                            }}
                           >
-                            Seleccionar
+                            {panoSeleccionado?.id_item === pano.id_item ? '✓ Seleccionado' : 'Seleccionar'}
                           </Button>
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Typography variant="body2" fontWeight="medium">
                             {pano.descripcion || pano.id_item}
                           </Typography>
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Chip 
                             label={pano.tipo_red} 
                             size="small" 
@@ -793,24 +1418,52 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                             variant="outlined"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Typography variant="body2">
                             {Number(pano.largo_m || 0).toFixed(2)} × {Number(pano.ancho_m || 0).toFixed(2)} m
                           </Typography>
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Typography variant="body2" fontWeight="medium">
                             {(Number(pano.area_m2) || 0).toFixed(2)}
                           </Typography>
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Chip 
                             label={pano.estado} 
                             size="small" 
                             color={getEstadoColor(pano.estado)}
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Chip 
                             label={pano.estado_trabajo || 'Libre'} 
                             size="small" 
@@ -818,15 +1471,27 @@ const OrdenFormPanos = ({ panosSeleccionados, setPanosSeleccionados, onDraftSave
                             variant="outlined"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Typography variant="body2">
                             {pano.ubicacion || 'S/L'}
                           </Typography>
                         </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" style={{ whiteSpace: 'pre-line', fontSize: '0.75rem' }}>
-                            {pano.especificaciones || 'Sin especificaciones'}
-                          </Typography>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
+                          {renderPanoSpecifications(pano)}
                         </TableCell>
                       </TableRow>
                     ))}

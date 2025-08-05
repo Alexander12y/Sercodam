@@ -243,20 +243,20 @@ const ClienteDetail = () => {
                   Información de Contacto
                 </Typography>
                 
-                {currentCliente.email && (
+                {currentCliente.email_cliente && (
                   <Box display="flex" alignItems="center" gap={1} mb={1}>
                     <EmailIcon fontSize="small" color="action" />
                     <Typography variant="body2">
-                      {currentCliente.email}
+                      {currentCliente.email_cliente}
                     </Typography>
                   </Box>
                 )}
                 
-                {currentCliente.telefono && (
+                {currentCliente.telefono_cliente && (
                   <Box display="flex" alignItems="center" gap={1} mb={1}>
                     <PhoneIcon fontSize="small" color="action" />
                     <Typography variant="body2">
-                      {currentCliente.telefono}
+                      {currentCliente.telefono_cliente}
                     </Typography>
                   </Box>
                 )}

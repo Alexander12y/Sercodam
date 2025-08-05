@@ -184,6 +184,16 @@ export const draftsApi = {
   cleanupExpiredDrafts: () => api.post('/drafts/cleanup'),
 };
 
+// API de drafts de cotizaciones
+export const cotizacionesDraftsApi = {
+  saveDraft: (data) => api.post('/cotizaciones-drafts', data),
+  getDraftByUser: (idUsuario) => api.get(`/cotizaciones-drafts/user/${idUsuario}`),
+  getAllDrafts: (params = {}) => api.get('/cotizaciones-drafts', { params }),
+  deleteDraft: (idDraft) => api.delete(`/cotizaciones-drafts/${idDraft}`),
+  deleteUserDraft: (idUsuario) => api.delete(`/cotizaciones-drafts/user/${idUsuario}`),
+  cleanupExpiredDrafts: () => api.post('/cotizaciones-drafts/cleanup'),
+};
+
 // API de herramientas
 export const herramientasApi = {
   // Obtener todas las herramientas
@@ -243,6 +253,64 @@ export const clientesApi = {
   
   // Eliminar cliente
   deleteCliente: (id) => api.delete(`/clientes/${id}`),
+};
+
+// API de leads
+export const leadsApi = {
+  // Obtener todos los leads
+  getLeads: (params = {}) => api.get('/leads', { params }),
+  
+  // Obtener estadísticas de leads
+  getLeadsStats: () => api.get('/leads/stats'),
+  
+  // Obtener lead por ID
+  getLeadById: (id) => api.get(`/leads/${id}`),
+  
+  // Actualizar lead
+  updateLead: (id, data) => api.put(`/leads/${id}`, data),
+  
+  // Eliminar lead
+  deleteLead: (id) => api.delete(`/leads/${id}`),
+  
+  // Obtener conteo de leads no leídos
+  getUnreadLeadsCount: () => api.get('/leads/unread/count'),
+  
+  // Convertir lead a cliente
+  convertToClient: (id, data = {}) => api.post(`/leads/${id}/convert-to-client`, data),
+};
+
+// API del sistema de cotizaciones
+export const cotizacionesApi = {
+  getCotizaciones: (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    return api.get(`/cotizaciones${queryString ? `?${queryString}` : ''}`);
+  },
+  
+  getCotizacionById: (id) => api.get(`/cotizaciones/${id}`),
+  
+  createCotizacion: (data) => api.post('/cotizaciones', data),
+  
+  updateCotizacion: (id, data) => api.put(`/cotizaciones/${id}`, data),
+  
+  deleteCotizacion: (id) => api.delete(`/cotizaciones/${id}`),
+  
+  changeEstado: (id, estado, notas = '') => 
+    api.patch(`/cotizaciones/${id}/estado`, { estado, notas }),
+  
+  generatePDF: (id) => 
+    api.get(`/cotizaciones/${id}/pdf`, { responseType: 'blob' }),
+  
+  generatePDFPreview: (id) => 
+    api.get(`/cotizaciones/${id}/pdf-preview`, { responseType: 'blob' }),
+  
+  getEstadisticas: (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    return api.get(`/cotizaciones/estadisticas${queryString ? `?${queryString}` : ''}`);
+  },
+  
+  convertirAOrden: (id) => api.post(`/cotizaciones/${id}/convertir-orden`),
+  
+  sendEmail: (id) => api.post(`/cotizaciones/${id}/send-email`)
 };
 
 export default api; 

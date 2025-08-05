@@ -65,6 +65,14 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
     loadAllMateriales();
   }, []);
 
+  // Limpiar error cuando se abre el modal
+  useEffect(() => {
+    if (modalOpen) {
+      setErrorStock("");
+      setMateriales([]);
+    }
+  }, [modalOpen]);
+
   const loadAllMateriales = async () => {
     try {
       const response = await inventarioApi.getMateriales({ limit: 1000 });
@@ -108,9 +116,10 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
       params.search = busqueda;
     }
 
-    // No hacer búsqueda si no hay filtros
+    // Validar que se haya seleccionado al menos un filtro
     if (!params.categoria && !params.categorias && !params.search) {
       setMateriales([]);
+      setErrorStock("Por favor selecciona al menos un filtro (subgrupo, categoría o búsqueda) para ver los materiales disponibles.");
       setLoading(false);
       return;
     }
@@ -135,6 +144,7 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
     setCategoria('');
     setBusqueda('');
     setMateriales([]);
+    setErrorStock("");
   };
 
   const handleAgregar = () => {
@@ -453,15 +463,51 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {materiales.map(material => (
+                    {materiales.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                          <Typography variant="body1" color="text.secondary">
+                            {errorStock || "Selecciona filtros y haz clic en 'Buscar' para ver los materiales disponibles"}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      materiales.map(material => (
                       <TableRow 
                         key={material.id_item}
                         hover
                         selected={materialSeleccionado?.id_item === material.id_item}
                         onClick={() => setMaterialSeleccionado(material)}
-                        sx={{ cursor: 'pointer' }}
+                        sx={{ 
+                          cursor: 'pointer',
+                          backgroundColor: materialSeleccionado?.id_item === material.id_item 
+                            ? 'rgba(59, 130, 246, 0.08)' 
+                            : 'transparent',
+                          border: materialSeleccionado?.id_item === material.id_item 
+                            ? '2px solid #3b82f6' 
+                            : 'none',
+                          transition: 'all 0.2s ease',
+                          '&:hover': {
+                            backgroundColor: materialSeleccionado?.id_item === material.id_item 
+                              ? 'rgba(59, 130, 246, 0.12)' 
+                              : 'rgba(59, 130, 246, 0.04)',
+                            transform: 'translateY(-1px)',
+                            boxShadow: '0 4px 8px rgba(59, 130, 246, 0.15)',
+                          },
+                          '&:hover .MuiTableCell-root': {
+                            backgroundColor: 'rgba(59, 130, 246, 0.04)',
+                            transition: 'background-color 0.2s ease',
+                          }
+                        }}
                       >
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Button
                             size="small"
                             variant={materialSeleccionado?.id_item === material.id_item ? "contained" : "outlined"}
@@ -469,16 +515,46 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
                               e.stopPropagation();
                               setMaterialSeleccionado(material);
                             }}
+                            sx={{
+                              backgroundColor: materialSeleccionado?.id_item === material.id_item 
+                                ? '#3b82f6' 
+                                : 'transparent',
+                              color: materialSeleccionado?.id_item === material.id_item 
+                                ? 'white' 
+                                : '#3b82f6',
+                              borderColor: '#3b82f6',
+                              transition: 'all 0.2s ease',
+                              '&:hover': {
+                                backgroundColor: materialSeleccionado?.id_item === material.id_item 
+                                  ? '#2563eb' 
+                                  : 'rgba(59, 130, 246, 0.08)',
+                                transform: 'scale(1.02)',
+                              }
+                            }}
                           >
-                            Seleccionar
+                            {materialSeleccionado?.id_item === material.id_item ? '✓ Seleccionado' : 'Seleccionar'}
                           </Button>
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Typography variant="body2" fontWeight="medium">
                             {material.descripcion || material.id_material_extra}
                           </Typography>
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Chip 
                             label={material.categoria} 
                             size="small" 
@@ -486,12 +562,26 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
                             variant="outlined"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Typography variant="body2">
                             {material.marca || 'S/M'}
                           </Typography>
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Chip 
                             label={material.cantidad_disponible || 0}
                             size="small" 
@@ -499,20 +589,34 @@ const OrdenFormMateriales = ({ materialesSeleccionados, setMaterialesSeleccionad
                             variant="outlined"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Chip 
                             label={material.estado_calidad} 
                             size="small" 
                             color={getEstadoColor(material.estado_calidad)}
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Typography variant="body2">
                             {material.ubicacion || 'S/L'}
                           </Typography>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )))}
                   </TableBody>
                 </Table>
               </TableContainer>

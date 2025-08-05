@@ -39,7 +39,6 @@ import {
   PlayArrow as PlayArrowIcon,
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
-  Pause as PauseIcon,
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -57,8 +56,6 @@ const getEstadoColor = (estado) => {
       return 'success';
     case 'cancelada':
       return 'error';
-    case 'pausada':
-      return 'default';
     default:
       return 'default';
   }
@@ -74,8 +71,6 @@ const getEstadoText = (estado) => {
       return 'Completada';
     case 'cancelada':
       return 'Cancelada';
-    case 'pausada':
-      return 'Pausada';
     default:
       return estado;
   }
@@ -162,8 +157,7 @@ const OrdenesList = () => {
       'por aprobar': { title: 'Aprobar Orden', message: '¿Estás seguro de que quieres aprobar esta orden? Esto iniciará la producción y bloqueará los paños seleccionados.' },
       'en_proceso': { title: 'Iniciar Producción', message: '¿Estás seguro de que quieres iniciar la producción de esta orden?' },
       'completada': { title: 'Completar Orden', message: '¿Estás seguro de que quieres marcar esta orden como completada?' },
-      'cancelada': { title: 'Cancelar Orden', message: '¿Estás seguro de que quieres cancelar esta orden? Esta acción no se puede deshacer.' },
-      'pausada': { title: 'Pausar Orden', message: '¿Estás seguro de que quieres pausar esta orden?' }
+      'cancelada': { title: 'Cancelar Orden', message: '¿Estás seguro de que quieres cancelar esta orden? Esta acción no se puede deshacer.' }
     };
 
     setConfirmDialog({
@@ -216,8 +210,7 @@ const OrdenesList = () => {
 
   const canStart = (estado) => estado === 'por aprobar';
   const canComplete = (estado) => estado === 'en_proceso';
-  const canCancel = (estado) => ['en_proceso', 'pausada'].includes(estado);
-  const canPause = (estado) => estado === 'en_proceso';
+  const canCancel = (estado) => estado === 'en_proceso';
 
   if (loading && ordenes.length === 0) {
     return (
@@ -287,7 +280,6 @@ const OrdenesList = () => {
                   <MenuItem value="en_proceso">En Proceso</MenuItem>
                   <MenuItem value="completada">Completada</MenuItem>
                   <MenuItem value="cancelada">Cancelada</MenuItem>
-                  <MenuItem value="pausada">Pausada</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
@@ -419,19 +411,7 @@ const OrdenesList = () => {
                         </Tooltip>
                       )}
 
-                      {canPause(orden.estado) && (
-                        <Tooltip title="Pausar">
-                          <span>
-                            <IconButton
-                              size="small"
-                              onClick={() => handleCambiarEstado(orden, 'pausada')}
-                              color="warning"
-                            >
-                              <PauseIcon />
-                            </IconButton>
-                          </span>
-                        </Tooltip>
-                      )}
+
 
                       {canCancel(orden.estado) && (
                         <Tooltip title="Cancelar">

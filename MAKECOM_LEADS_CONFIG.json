@@ -1,0 +1,84 @@
+{
+  "webhook_url": "https://tu-ngrok-url.ngrok.io/api/v1/leads/webhook",
+  "method": "POST",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "email_remitente": "{{gmail.from}}",
+    "nombre_remitente": "{{gmail.fromName}}",
+    "asunto_email": "{{gmail.subject}}",
+    "contenido_email": "{{gmail.textBody}}",
+    "contenido_interpretado": "{{ai_interpretation}}",
+    
+    "gmail_id": "{{gmail.id}}",
+    "gmail_thread_id": "{{gmail.threadId}}",
+    "gmail_labels": "{{gmail.labels}}",
+    "gmail_snippet": "{{gmail.snippet}}",
+    
+    "datos_estructurados": {
+      "tipo_proyecto": "{{extracted_project_type}}",
+      "presupuesto": "{{extracted_budget}}",
+      "ubicacion": "{{extracted_location}}",
+      "urgencia": "{{extracted_urgency}}"
+    },
+    
+    "extracted_phone": "{{extracted_phone}}",
+    "extracted_company": "{{extracted_company}}",
+    "extracted_budget": "{{extracted_budget}}",
+    "extracted_location": "{{extracted_location}}",
+    "extracted_project_type": "{{extracted_project_type}}",
+    "extracted_deadline": "{{extracted_deadline}}",
+    
+    "telefono": "{{extracted_phone}}",
+    "empresa": "{{extracted_company}}",
+    "requerimientos": "{{extracted_requirements}}",
+    "presupuesto_estimado": "{{extracted_budget}}",
+    
+    "ai_analysis": "{{ai_analysis}}",
+    "sentiment_score": "{{sentiment_score}}",
+    "priority_score": "{{priority_score}}",
+    "intent_detected": "{{intent_detected}}",
+    
+    "tipo_proyecto": "{{extracted_project_type}}",
+    "area_proyecto": "{{extracted_area}}",
+    "ubicacion_proyecto": "{{extracted_location}}",
+    "fecha_requerida": "{{extracted_deadline}}",
+    "urgencia": "{{extracted_urgency}}",
+    
+    "fuente": "email",
+    "estado": "nuevo"
+  },
+  "variables_make_com": {
+    "gmail_fields": [
+      "{{gmail.from}}",
+      "{{gmail.fromName}}", 
+      "{{gmail.subject}}",
+      "{{gmail.textBody}}",
+      "{{gmail.htmlBody}}",
+      "{{gmail.id}}",
+      "{{gmail.threadId}}",
+      "{{gmail.labels}}",
+      "{{gmail.snippet}}",
+      "{{gmail.date}}"
+    ],
+    "ai_extraction_fields": [
+      "{{extracted_phone}}",
+      "{{extracted_company}}",
+      "{{extracted_budget}}",
+      "{{extracted_location}}",
+      "{{extracted_project_type}}",
+      "{{extracted_deadline}}",
+      "{{extracted_requirements}}",
+      "{{extracted_urgency}}",
+      "{{extracted_area}}"
+    ],
+    "ai_analysis_fields": [
+      "{{ai_analysis}}",
+      "{{sentiment_score}}",
+      "{{priority_score}}",
+      "{{intent_detected}}",
+      "{{ai_interpretation}}"
+    ]
+  }
+} 

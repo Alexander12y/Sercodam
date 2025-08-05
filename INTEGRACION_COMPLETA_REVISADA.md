@@ -529,16 +529,3 @@ ALTER TABLE orden_produccion ADD COLUMN id_cotizacion INTEGER REFERENCES cotizac
 - ⚠️ Interfaz de usuario separada inicialmente
 
 ---
-
-## 📞 **Soporte y Consultas**
-
-Para implementar este plan, necesitaremos:
-
-1. **Acceso completo** al código del otro proyecto
-2. **Esquema Prisma** completo (schema.prisma)
-3. **Datos de ejemplo** en SQLite
-4. **Documentación** de APIs existentes
-5. **Especificaciones** de negocio detalladas
-6. **Acceso** al otro integrante para consultas
-
-**¿Estás de acuerdo con esta estrategia revisada? ¿Quieres que profundice en algún aspecto específico?** 

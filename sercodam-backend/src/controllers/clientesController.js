@@ -22,7 +22,10 @@ const clientesController = {
                 query = query.where(function() {
                     this.where('nombre_cliente', 'ilike', `%${search.trim()}%`)
                         .orWhere('email', 'ilike', `%${search.trim()}%`)
-                        .orWhere('telefono', 'ilike', `%${search.trim()}%`);
+                        .orWhere('email_cliente', 'ilike', `%${search.trim()}%`)
+                        .orWhere('telefono', 'ilike', `%${search.trim()}%`)
+                        .orWhere('telefono_cliente', 'ilike', `%${search.trim()}%`)
+                        .orWhere('empresa_cliente', 'ilike', `%${search.trim()}%`);
                 });
             }
 
@@ -100,12 +103,15 @@ const clientesController = {
             const { q } = req.query;
             
             let query = db('cliente')
-                .select('id_cliente', 'nombre_cliente', 'email', 'telefono')
+                .select('id_cliente', 'nombre_cliente', 'email_cliente', 'telefono_cliente', 'empresa_cliente')
                 .orderBy('nombre_cliente', 'asc');
 
             // Si hay término de búsqueda, aplicar filtro
             if (q && q.trim().length > 0) {
-                query = query.where('nombre_cliente', 'ilike', `%${q.trim()}%`);
+                query = query.where(function() {
+                    this.where('nombre_cliente', 'ilike', `%${q.trim()}%`)
+                        .orWhere('empresa_cliente', 'ilike', `%${q.trim()}%`);
+                });
             }
 
             // Limitar resultados a 20 para no sobrecargar el dropdown
@@ -234,7 +240,15 @@ const clientesController = {
             const {
                 nombre_cliente,
                 email,
-                telefono
+                telefono,
+                empresa_cliente,
+                email_cliente,
+                telefono_cliente,
+                requerimientos,
+                presupuesto_estimado,
+                fuente,
+                notas,
+                fecha_contacto
             } = req.body;
 
             // Validaciones
@@ -244,6 +258,10 @@ const clientesController = {
 
             if (email && !isValidEmail(email)) {
                 throw new ValidationError('El email no tiene un formato válido');
+            }
+
+            if (email_cliente && !isValidEmail(email_cliente)) {
+                throw new ValidationError('El email del cliente no tiene un formato válido');
             }
 
             // Verificar si ya existe un cliente con el mismo nombre
@@ -261,6 +279,14 @@ const clientesController = {
                     nombre_cliente: nombre_cliente.trim(),
                     email: email ? email.trim() : null,
                     telefono: telefono ? telefono.trim() : null,
+                    empresa_cliente: empresa_cliente ? empresa_cliente.trim() : null,
+                    email_cliente: email_cliente ? email_cliente.trim() : null,
+                    telefono_cliente: telefono_cliente ? telefono_cliente.trim() : null,
+                    requerimientos: requerimientos || null,
+                    presupuesto_estimado: presupuesto_estimado || null,
+                    fuente: fuente || 'manual',
+                    notas: notas || null,
+                    fecha_contacto: fecha_contacto || db.fn.now(),
                     fecha_registro: db.fn.now()
                 })
                 .returning('*');
@@ -286,7 +312,15 @@ const clientesController = {
             const {
                 nombre_cliente,
                 email,
-                telefono
+                telefono,
+                empresa_cliente,
+                email_cliente,
+                telefono_cliente,
+                requerimientos,
+                presupuesto_estimado,
+                fuente,
+                notas,
+                fecha_contacto
             } = req.body;
 
             // Verificar que el cliente existe
@@ -307,6 +341,10 @@ const clientesController = {
                 throw new ValidationError('El email no tiene un formato válido');
             }
 
+            if (email_cliente && !isValidEmail(email_cliente)) {
+                throw new ValidationError('El email del cliente no tiene un formato válido');
+            }
+
             // Verificar si ya existe otro cliente con el mismo nombre
             const clienteConMismoNombre = await db('cliente')
                 .where('nombre_cliente', 'ilike', nombre_cliente.trim())
@@ -323,7 +361,15 @@ const clientesController = {
                 .update({
                     nombre_cliente: nombre_cliente.trim(),
                     email: email ? email.trim() : null,
-                    telefono: telefono ? telefono.trim() : null
+                    telefono: telefono ? telefono.trim() : null,
+                    empresa_cliente: empresa_cliente ? empresa_cliente.trim() : null,
+                    email_cliente: email_cliente ? email_cliente.trim() : null,
+                    telefono_cliente: telefono_cliente ? telefono_cliente.trim() : null,
+                    requerimientos: requerimientos || null,
+                    presupuesto_estimado: presupuesto_estimado || null,
+                    fuente: fuente || 'manual',
+                    notas: notas || null,
+                    fecha_contacto: fecha_contacto || null
                 })
                 .returning('*');
 

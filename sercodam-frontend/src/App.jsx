@@ -21,6 +21,11 @@ import Profile from './pages/Profile';
 import ChangePassword from './pages/ChangePassword';
 import Configuracion from './pages/Configuracion';
 import EjecutarCorte from './pages/EjecutarCorte';
+
+import LeadsList from './pages/LeadsList';
+import CotizacionesList from './pages/CotizacionesList';
+import CotizacionDetail from './pages/CotizacionDetail';
+import CreateCotizacion from './pages/CreateCotizacion';
 import Login from './pages/Login';
 
 function RequireAuth({ children }) {
@@ -63,12 +68,18 @@ function App() {
               <Layout>
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
+
                   <Route path="/ordenes" element={<OrdenesList />} />
                   <Route path="/ordenes/nueva" element={<CreateOrden />} />
                   <Route path="/ordenes/:id" element={<OrdenDetail />} />
                   <Route path="/ordenes/:id/editar" element={<EditOrden />} />
                   <Route path="/clientes" element={<ClientesList />} />
                   <Route path="/clientes/:id/ordenes" element={<ClienteDetail />} />
+                  <Route path="/leads" element={<LeadsList />} />
+                  <Route path="/cotizaciones" element={<CotizacionesList />} />
+                  <Route path="/cotizaciones/:id" element={<CotizacionDetail />} />
+                  <Route path="/cotizaciones/nueva" element={<CreateCotizacion />} />
+                  <Route path="/cotizaciones/editar/:id" element={<CreateCotizacion />} />
                   <Route path="/inventario/panos" element={<PanosList />} />
                   <Route path="/inventario/materiales" element={<MaterialesList />} />
                   <Route path="/inventario/herramientas" element={<HerramientasList />} />

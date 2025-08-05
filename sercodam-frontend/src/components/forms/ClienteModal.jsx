@@ -21,14 +21,21 @@ import {
 } from '@mui/icons-material';
 import { createCliente, updateCliente } from '../../store/slices/clientesSlice';
 
-const ClienteModal = ({ open, onClose, cliente = null }) => {
+const ClienteModal = ({ open, onClose, cliente = null, onClienteCreated = null }) => {
   const dispatch = useDispatch();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     nombre_cliente: '',
     email: '',
-    telefono: ''
+    telefono: '',
+    empresa_cliente: '',
+    email_cliente: '',
+    telefono_cliente: '',
+    requerimientos: '',
+    presupuesto_estimado: '',
+    fuente: 'manual',
+    notas: ''
   });
   const [formErrors, setFormErrors] = useState({});
 
@@ -39,14 +46,24 @@ const ClienteModal = ({ open, onClose, cliente = null }) => {
     if (isEditing && cliente) {
       setFormData({
         nombre_cliente: cliente.nombre_cliente || '',
-        email: cliente.email || '',
-        telefono: cliente.telefono || ''
+        empresa_cliente: cliente.empresa_cliente || '',
+        email_cliente: cliente.email_cliente || '',
+        telefono_cliente: cliente.telefono_cliente || '',
+        requerimientos: cliente.requerimientos || '',
+        presupuesto_estimado: cliente.presupuesto_estimado || '',
+        fuente: cliente.fuente || 'manual',
+        notas: cliente.notas || ''
       });
     } else {
       setFormData({
         nombre_cliente: '',
-        email: '',
-        telefono: ''
+        empresa_cliente: '',
+        email_cliente: '',
+        telefono_cliente: '',
+        requerimientos: '',
+        presupuesto_estimado: '',
+        fuente: 'manual',
+        notas: ''
       });
     }
     setFormErrors({});
@@ -81,21 +98,31 @@ const ClienteModal = ({ open, onClose, cliente = null }) => {
       errors.nombre_cliente = 'El nombre no puede exceder 255 caracteres';
     }
 
-    // Validar email (opcional)
-    if (formData.email.trim()) {
+    // Validar email_cliente (opcional)
+    if (formData.email_cliente.trim()) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(formData.email.trim())) {
-        errors.email = 'El email no tiene un formato válido';
-      } else if (formData.email.trim().length > 255) {
-        errors.email = 'El email no puede exceder 255 caracteres';
+      if (!emailRegex.test(formData.email_cliente.trim())) {
+        errors.email_cliente = 'El email del cliente no tiene un formato válido';
+      } else if (formData.email_cliente.trim().length > 255) {
+        errors.email_cliente = 'El email del cliente no puede exceder 255 caracteres';
       }
     }
 
-    // Validar teléfono (opcional)
-    if (formData.telefono.trim()) {
-      if (formData.telefono.trim().length > 50) {
-        errors.telefono = 'El teléfono no puede exceder 50 caracteres';
+    // Validar telefono_cliente (opcional)
+    if (formData.telefono_cliente.trim()) {
+      if (formData.telefono_cliente.trim().length > 50) {
+        errors.telefono_cliente = 'El teléfono del cliente no puede exceder 50 caracteres';
       }
+    }
+
+    // Validar empresa_cliente (opcional)
+    if (formData.empresa_cliente.trim() && formData.empresa_cliente.trim().length > 255) {
+      errors.empresa_cliente = 'El nombre de la empresa no puede exceder 255 caracteres';
+    }
+
+    // Validar presupuesto_estimado (opcional)
+    if (formData.presupuesto_estimado && isNaN(parseFloat(formData.presupuesto_estimado))) {
+      errors.presupuesto_estimado = 'El presupuesto debe ser un número válido';
     }
 
     setFormErrors(errors);
@@ -113,20 +140,31 @@ const ClienteModal = ({ open, onClose, cliente = null }) => {
     try {
       const clienteData = {
         nombre_cliente: formData.nombre_cliente.trim(),
-        email: formData.email.trim() || null,
-        telefono: formData.telefono.trim() || null
+        empresa_cliente: formData.empresa_cliente.trim() || null,
+        email_cliente: formData.email_cliente.trim() || null,
+        telefono_cliente: formData.telefono_cliente.trim() || null,
+        requerimientos: formData.requerimientos.trim() || null,
+        presupuesto_estimado: formData.presupuesto_estimado ? parseFloat(formData.presupuesto_estimado) : null,
+        fuente: formData.fuente,
+        notas: formData.notas.trim() || null
       };
 
+      let result;
       if (isEditing) {
-        await dispatch(updateCliente({
+        result = await dispatch(updateCliente({
           id: cliente.id_cliente,
           data: clienteData
         })).unwrap();
       } else {
-        await dispatch(createCliente(clienteData)).unwrap();
+        result = await dispatch(createCliente(clienteData)).unwrap();
       }
 
-      onClose();
+      // Si hay callback para cliente creado y no estamos editando, llamarlo
+      if (onClienteCreated && !isEditing && result && result.data) {
+        onClienteCreated(result.data);
+      } else {
+        onClose();
+      }
     } catch (err) {
       console.error('Error al guardar cliente:', err);
       setError(err.message || 'Error al guardar el cliente');
@@ -145,10 +183,10 @@ const ClienteModal = ({ open, onClose, cliente = null }) => {
     <Dialog
       open={open}
       onClose={handleClose}
-      maxWidth="sm"
+      maxWidth="md"
       fullWidth
       PaperProps={{
-        sx: { borderRadius: 2 }
+        sx: { borderRadius: 2, maxHeight: '90vh' }
       }}
     >
       <DialogTitle sx={{ pb: 1 }}>
@@ -187,32 +225,111 @@ const ClienteModal = ({ open, onClose, cliente = null }) => {
             />
           </Grid>
 
-          {/* Email */}
+          {/* Empresa del Cliente */}
           <Grid item xs={12}>
             <TextField
               fullWidth
-              label="Email"
-              type="email"
-              value={formData.email}
-              onChange={handleInputChange('email')}
-              error={!!formErrors.email}
-              helperText={formErrors.email || 'Email de contacto (opcional)'}
+              label="Empresa"
+              value={formData.empresa_cliente}
+              onChange={handleInputChange('empresa_cliente')}
+              error={!!formErrors.empresa_cliente}
+              helperText={formErrors.empresa_cliente || 'Nombre de la empresa (opcional)'}
               disabled={loading}
-              placeholder="ejemplo@empresa.com"
+              placeholder="Nombre de la empresa"
             />
           </Grid>
 
-          {/* Teléfono */}
+          {/* Email del Cliente */}
           <Grid item xs={12}>
             <TextField
               fullWidth
-              label="Teléfono"
-              value={formData.telefono}
-              onChange={handleInputChange('telefono')}
-              error={!!formErrors.telefono}
-              helperText={formErrors.telefono || 'Número de teléfono (opcional)'}
+              label="Email del Cliente"
+              type="email"
+              value={formData.email_cliente}
+              onChange={handleInputChange('email_cliente')}
+              error={!!formErrors.email_cliente}
+              helperText={formErrors.email_cliente || 'Email del cliente (opcional)'}
+              disabled={loading}
+              placeholder="cliente@empresa.com"
+            />
+          </Grid>
+
+          {/* Teléfono del Cliente */}
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Teléfono del Cliente"
+              value={formData.telefono_cliente}
+              onChange={handleInputChange('telefono_cliente')}
+              error={!!formErrors.telefono_cliente}
+              helperText={formErrors.telefono_cliente || 'Teléfono del cliente (opcional)'}
               disabled={loading}
               placeholder="+52 55 1234-5678"
+            />
+          </Grid>
+
+
+
+
+
+          {/* Presupuesto Estimado */}
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              label="Presupuesto Estimado"
+              type="number"
+              value={formData.presupuesto_estimado}
+              onChange={handleInputChange('presupuesto_estimado')}
+              error={!!formErrors.presupuesto_estimado}
+              helperText={formErrors.presupuesto_estimado || 'Presupuesto estimado en MXN (opcional)'}
+              disabled={loading}
+              placeholder="50000"
+              InputProps={{
+                startAdornment: <span>$</span>
+              }}
+            />
+          </Grid>
+
+          {/* Fuente */}
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              label="Fuente"
+              value={formData.fuente}
+              onChange={handleInputChange('fuente')}
+              disabled={loading}
+              placeholder="manual, email, landing, etc."
+              helperText="Fuente del cliente (opcional)"
+            />
+          </Grid>
+
+          {/* Requerimientos */}
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Requerimientos"
+              multiline
+              rows={3}
+              value={formData.requerimientos}
+              onChange={handleInputChange('requerimientos')}
+              disabled={loading}
+              placeholder="Descripción de los requerimientos del cliente..."
+              helperText="Requerimientos específicos del cliente (opcional)"
+            />
+          </Grid>
+
+          {/* Notas */}
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Notas"
+              multiline
+              rows={3}
+              value={formData.notas}
+              onChange={handleInputChange('notas')}
+              disabled={loading}
+              placeholder="Notas adicionales sobre el cliente..."
+              helperText="Notas adicionales (opcional)"
             />
           </Grid>
         </Grid>
@@ -221,7 +338,9 @@ const ClienteModal = ({ open, onClose, cliente = null }) => {
         <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
           <Typography variant="body2" color="text.secondary">
             <strong>Nota:</strong> El cliente se registrará automáticamente en el sistema 
-            y podrá ser asociado a órdenes de producción.
+            y podrá ser asociado a órdenes de producción y cotizaciones. Los campos marcados 
+            como "del Cliente" son específicos para la información del cliente, mientras que 
+            los campos de "Contacto" son para información adicional de contacto.
           </Typography>
         </Box>
       </DialogContent>

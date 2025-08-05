@@ -6,6 +6,8 @@ import panosReducer from './slices/panosSlice';
 import materialesReducer from './slices/materialesSlice';
 import herramientasReducer from './slices/herramientasSlice';
 import clientesReducer from './slices/clientesSlice';
+import leadsReducer from './slices/leadsSlice';
+import cotizacionesReducer from './slices/cotizacionesSlice';
 
 export const store = configureStore({
   reducer: {
@@ -16,6 +18,8 @@ export const store = configureStore({
     materiales: materialesReducer,
     herramientas: herramientasReducer,
     clientes: clientesReducer,
+    leads: leadsReducer,
+    cotizaciones: cotizacionesReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

@@ -43,7 +43,7 @@ exports.seed = async function(knex) {
       id_item: 4,
       tipo_red: 'malla sombra',
       area_m2: 12.5,
-      estado: '50%',
+      estado: 'usado 50%',
       ubicacion: 'Almacén B, Estante 2',
       precio_x_unidad: 30.00,
       descripcion: 'Malla sombra 70%',

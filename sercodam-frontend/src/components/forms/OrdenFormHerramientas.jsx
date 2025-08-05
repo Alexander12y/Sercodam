@@ -64,6 +64,14 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
     loadAllHerramientas();
   }, []);
 
+  // Limpiar error cuando se abre el modal
+  useEffect(() => {
+    if (modalOpen) {
+      setError("");
+      setHerramientas([]);
+    }
+  }, [modalOpen]);
+
   const loadAllHerramientas = async () => {
     try {
       const res = await herramientasApi.getHerramientas({ limit: 1000 });
@@ -107,10 +115,13 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
       } else if (busqueda) {
         console.log('🔍 Buscando por texto libre:', busqueda);
         params.search = busqueda;
-      } else {
-        console.log('⚠️ Sin filtros, cargando una muestra limitada.');
-        params.limit = 50;
-      }
+              } else {
+          console.log('⚠️ Sin filtros, solicitando al usuario que seleccione filtros.');
+          setHerramientas([]);
+          setError("Por favor selecciona al menos un filtro (subgrupo, categoría o búsqueda) para ver las herramientas disponibles.");
+          setLoading(false);
+          return;
+        }
 
       const response = await herramientasApi.getHerramientas(params);
       herramientasResult = response.data?.data?.herramientas || response.data?.herramientas || [];
@@ -136,7 +147,7 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
     setCategoria('');
     setBusqueda('');
     setHerramientas([]);
-    loadAllHerramientas();
+    setError("");
   };
 
   const handleAgregar = () => {
@@ -456,15 +467,51 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {herramientas.map(herramienta => (
+                    {herramientas.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                          <Typography variant="body1" color="text.secondary">
+                            {error || "Selecciona filtros y haz clic en 'Buscar' para ver las herramientas disponibles"}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      herramientas.map(herramienta => (
                       <TableRow 
                         key={herramienta.id_item}
                         hover
                         selected={herramientaSeleccionada?.id_item === herramienta.id_item}
                         onClick={() => setHerramientaSeleccionada(herramienta)}
-                        sx={{ cursor: 'pointer' }}
+                        sx={{ 
+                          cursor: 'pointer',
+                          backgroundColor: herramientaSeleccionada?.id_item === herramienta.id_item 
+                            ? 'rgba(59, 130, 246, 0.08)' 
+                            : 'transparent',
+                          border: herramientaSeleccionada?.id_item === herramienta.id_item 
+                            ? '2px solid #3b82f6' 
+                            : 'none',
+                          transition: 'all 0.2s ease',
+                          '&:hover': {
+                            backgroundColor: herramientaSeleccionada?.id_item === herramienta.id_item 
+                              ? 'rgba(59, 130, 246, 0.12)' 
+                              : 'rgba(59, 130, 246, 0.04)',
+                            transform: 'translateY(-1px)',
+                            boxShadow: '0 4px 8px rgba(59, 130, 246, 0.15)',
+                          },
+                          '&:hover .MuiTableCell-root': {
+                            backgroundColor: 'rgba(59, 130, 246, 0.04)',
+                            transition: 'background-color 0.2s ease',
+                          }
+                        }}
                       >
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Button
                             size="small"
                             variant={herramientaSeleccionada?.id_item === herramienta.id_item ? "contained" : "outlined"}
@@ -472,16 +519,46 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
                               e.stopPropagation();
                               setHerramientaSeleccionada(herramienta);
                             }}
+                            sx={{
+                              backgroundColor: herramientaSeleccionada?.id_item === herramienta.id_item 
+                                ? '#3b82f6' 
+                                : 'transparent',
+                              color: herramientaSeleccionada?.id_item === herramienta.id_item 
+                                ? 'white' 
+                                : '#3b82f6',
+                              borderColor: '#3b82f6',
+                              transition: 'all 0.2s ease',
+                              '&:hover': {
+                                backgroundColor: herramientaSeleccionada?.id_item === herramienta.id_item 
+                                  ? '#2563eb' 
+                                  : 'rgba(59, 130, 246, 0.08)',
+                                transform: 'scale(1.02)',
+                              }
+                            }}
                           >
-                            Seleccionar
+                            {herramientaSeleccionada?.id_item === herramienta.id_item ? '✓ Seleccionado' : 'Seleccionar'}
                           </Button>
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Typography variant="body2" fontWeight="medium">
                             {herramienta.descripcion || herramienta.id_herramienta || herramienta.id_item}
                           </Typography>
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Chip 
                             label={herramienta.categoria} 
                             size="small" 
@@ -489,14 +566,28 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
                             variant="outlined"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Chip 
                             label={herramienta.estado_calidad} 
                             size="small" 
                             color={getEstadoColor(herramienta.estado_calidad)}
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Chip 
                             label={herramienta.cantidad_disponible || 0}
                             size="small" 
@@ -504,13 +595,20 @@ const OrdenFormHerramientas = ({ herramientasSeleccionadas, setHerramientasSelec
                             variant="outlined"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{
+                            transition: 'background-color 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            }
+                          }}
+                        >
                           <Typography variant="body2">
                             {herramienta.ubicacion || 'S/L'}
                           </Typography>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )))}
                   </TableBody>
                 </Table>
               </TableContainer>
