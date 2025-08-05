@@ -85,6 +85,38 @@ const leadsController = {
                 throw new ValidationError('El email del remitente es requerido');
             }
 
+            // 1) Intentar encontrar cliente existente
+            const clienteExistente = await db('cliente')
+                .select('id_cliente', 'nombre_cliente', 'email_cliente', 'telefono_cliente', 'empresa_cliente')
+                .where(function() {
+                    this.where('email_cliente', email_remitente.trim());
+                    
+                    // Si hay teléfono, también buscar por teléfono
+                    if (telefono && telefono.trim()) {
+                        this.orWhere('telefono_cliente', telefono.trim());
+                    }
+                    
+                    // Si hay empresa, también buscar por empresa
+                    if (empresa && empresa.trim()) {
+                        this.orWhere('empresa_cliente', empresa.trim());
+                    }
+                })
+                .first();
+
+            // Determinar por qué criterio se hizo match
+            let matchPor = null;
+            if (clienteExistente) {
+                if (clienteExistente.email_cliente === email_remitente.trim()) {
+                    matchPor = 'email';
+                } else if (telefono && clienteExistente.telefono_cliente === telefono.trim()) {
+                    matchPor = 'telefono';
+                } else if (empresa && clienteExistente.empresa_cliente === empresa.trim()) {
+                    matchPor = 'empresa';
+                }
+                
+                logger.info(`🔍 Cliente existente encontrado: ${clienteExistente.id_cliente} - ${clienteExistente.nombre_cliente} (match por: ${matchPor})`);
+            }
+
             // Procesar datos estructurados si vienen como objeto
             let datosEstructuradosFinal = null;
             if (datos_estructurados) {
@@ -143,6 +175,14 @@ const leadsController = {
                     contact_medium: medio_contacto,
                     preferred_time: horario_preferido,
                     preferred_language: idioma_preferido
+                },
+                cliente_match: clienteExistente ? {
+                    id_cliente: clienteExistente.id_cliente,
+                    nombre_cliente: clienteExistente.nombre_cliente,
+                    match_por: matchPor,
+                    encontrado: true
+                } : {
+                    encontrado: false
                 }
             };
 
@@ -159,13 +199,15 @@ const leadsController = {
                 requerimientos: requerimientos || null,
                 presupuesto_estimado: presupuesto_estimado || extracted_budget || null,
                 fuente: fuente,
-                estado: estado,
+                estado: clienteExistente ? 'nuevo_proyecto' : 'nuevo',
                 leido: false,
                 fecha_recepcion: db.fn.now(),
                 fecha_contacto: fecha_contacto || null,
                 fecha_conversion: fecha_conversion || null,
                 notas: notas || null,
                 asignado_a: asignado_a || null,
+                id_cliente: clienteExistente ? clienteExistente.id_cliente : null,
+                match_por: matchPor,
                 creado_en: db.fn.now(),
                 actualizado_en: db.fn.now()
             };
@@ -175,7 +217,7 @@ const leadsController = {
                 .insert(leadData)
                 .returning('*');
 
-            logger.info(`✅ Nuevo lead recibido desde Make.com: ${nuevoLead.id_lead} - ${nuevoLead.email_remitente}`);
+            logger.info(`✅ Nuevo lead recibido desde Make.com: ${nuevoLead.id_lead} - ${nuevoLead.email_remitente}${clienteExistente ? ` (Cliente existente: ${clienteExistente.nombre_cliente})` : ' (Nuevo cliente)'}`);
 
             // Invalidar cache de leads no leídos
             await cache.del('leads_no_leidos');
@@ -183,7 +225,12 @@ const leadsController = {
             res.status(201).json({
                 success: true,
                 data: nuevoLead,
-                message: 'Lead recibido exitosamente',
+                message: clienteExistente ? 'Lead recibido para cliente existente' : 'Lead recibido para nuevo cliente',
+                cliente_existente: clienteExistente ? {
+                    id_cliente: clienteExistente.id_cliente,
+                    nombre_cliente: clienteExistente.nombre_cliente,
+                    match_por: matchPor
+                } : null,
                 processed_fields: {
                     email_remitente: !!email_remitente,
                     contenido_email: !!contenido_email,
@@ -218,25 +265,33 @@ const leadsController = {
             } = req.query;
 
             let query = db('leads')
-                .select('*')
+                .select(
+                    'leads.*',
+                    'cliente.nombre_cliente as cliente_nombre',
+                    'cliente.empresa_cliente as cliente_empresa',
+                    'cliente.email_cliente as cliente_email'
+                )
+                .leftJoin('cliente', 'leads.id_cliente', 'cliente.id_cliente')
                 .orderBy(sortBy, sortOrder);
 
             // Aplicar filtros
             if (estado) {
-                query = query.where('estado', estado);
+                query = query.where('leads.estado', estado);
             }
 
             if (leido !== undefined) {
-                query = query.where('leido', leido === 'true');
+                query = query.where('leads.leido', leido === 'true');
             }
 
             // Aplicar filtro de búsqueda
             if (search && search.trim().length > 0) {
                 query = query.where(function() {
-                    this.where('email_remitente', 'ilike', `%${search.trim()}%`)
-                        .orWhere('nombre_remitente', 'ilike', `%${search.trim()}%`)
-                        .orWhere('asunto_email', 'ilike', `%${search.trim()}%`)
-                        .orWhere('empresa', 'ilike', `%${search.trim()}%`);
+                    this.where('leads.email_remitente', 'ilike', `%${search.trim()}%`)
+                        .orWhere('leads.nombre_remitente', 'ilike', `%${search.trim()}%`)
+                        .orWhere('leads.asunto_email', 'ilike', `%${search.trim()}%`)
+                        .orWhere('leads.empresa', 'ilike', `%${search.trim()}%`)
+                        .orWhere('cliente.nombre_cliente', 'ilike', `%${search.trim()}%`)
+                        .orWhere('cliente.empresa_cliente', 'ilike', `%${search.trim()}%`);
                 });
             }
 
@@ -274,13 +329,16 @@ const leadsController = {
                 .select(
                     db.raw('COUNT(*) as total_leads'),
                     db.raw('COUNT(CASE WHEN estado = \'nuevo\' THEN 1 END) as leads_nuevos'),
+                    db.raw('COUNT(CASE WHEN estado = \'nuevo_proyecto\' THEN 1 END) as leads_nuevo_proyecto'),
                     db.raw('COUNT(CASE WHEN estado = \'en_revision\' THEN 1 END) as leads_en_revision'),
                     db.raw('COUNT(CASE WHEN estado = \'contactado\' THEN 1 END) as leads_contactados'),
                     db.raw('COUNT(CASE WHEN estado = \'convertido\' THEN 1 END) as leads_convertidos'),
                     db.raw('COUNT(CASE WHEN estado = \'descartado\' THEN 1 END) as leads_descartados'),
                     db.raw('COUNT(CASE WHEN leido = false THEN 1 END) as leads_no_leidos'),
                     db.raw('COUNT(CASE WHEN fecha_recepcion >= NOW() - INTERVAL \'24 hours\' THEN 1 END) as leads_hoy'),
-                    db.raw('COUNT(CASE WHEN fecha_recepcion >= NOW() - INTERVAL \'7 days\' THEN 1 END) as leads_semana')
+                    db.raw('COUNT(CASE WHEN fecha_recepcion >= NOW() - INTERVAL \'7 days\' THEN 1 END) as leads_semana'),
+                    db.raw('COUNT(CASE WHEN id_cliente IS NOT NULL THEN 1 END) as leads_clientes_existentes'),
+                    db.raw('COUNT(CASE WHEN id_cliente IS NULL THEN 1 END) as leads_clientes_nuevos')
                 )
                 .first();
 
@@ -289,13 +347,16 @@ const leadsController = {
                 stats: {
                     total_leads: parseInt(stats.total_leads || 0),
                     leads_nuevos: parseInt(stats.leads_nuevos || 0),
+                    leads_nuevo_proyecto: parseInt(stats.leads_nuevo_proyecto || 0),
                     leads_en_revision: parseInt(stats.leads_en_revision || 0),
                     leads_contactados: parseInt(stats.leads_contactados || 0),
                     leads_convertidos: parseInt(stats.leads_convertidos || 0),
                     leads_descartados: parseInt(stats.leads_descartados || 0),
                     leads_no_leidos: parseInt(stats.leads_no_leidos || 0),
                     leads_hoy: parseInt(stats.leads_hoy || 0),
-                    leads_semana: parseInt(stats.leads_semana || 0)
+                    leads_semana: parseInt(stats.leads_semana || 0),
+                    leads_clientes_existentes: parseInt(stats.leads_clientes_existentes || 0),
+                    leads_clientes_nuevos: parseInt(stats.leads_clientes_nuevos || 0)
                 }
             });
 

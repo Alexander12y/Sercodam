@@ -36,7 +36,6 @@ import {
 } from '@mui/material';
 import {
   Add as AddIcon,
-  Edit as EditIcon,
   Delete as DeleteIcon,
   Search as SearchIcon,
   Visibility as VisibilityIcon,
@@ -54,6 +53,7 @@ import {
   fetchLeadsStats,
   deleteLead, 
   convertLeadToClient,
+  updateLead,
   clearError 
 } from '../store/slices/leadsSlice';
 import LeadDetailsModal from '../components/LeadDetailsModal';
@@ -126,14 +126,23 @@ const LeadsList = () => {
     setPage(0);
   };
 
-  const handleViewLead = (lead) => {
+  const handleViewLead = async (lead) => {
     setSelectedLeadId(lead.id_lead);
     setDetailsModalOpen(true);
+    
+    // Marcar como leído si no está leído
+    if (!lead.leido) {
+      try {
+        await dispatch(updateLead(lead.id_lead, { leido: true })).unwrap();
+        // Recargar leads para actualizar el estado
+        dispatch(fetchLeads({ page: page + 1, limit: rowsPerPage }));
+      } catch (error) {
+        console.error('Error marcando lead como leído:', error);
+      }
+    }
   };
 
-  const handleEditLead = (lead) => {
-    navigate(`/leads/${lead.id_lead}/editar`);
-  };
+
 
   const handleDeleteClick = (lead) => {
     setLeadToDelete(lead);
@@ -173,7 +182,10 @@ const LeadsList = () => {
       dispatch(fetchLeads({ page: page + 1, limit: rowsPerPage }));
       
       // Mostrar mensaje de éxito
-      alert('Lead convertido a cliente exitosamente');
+      alert(leadToConvert?.id_cliente ? 
+        'Nuevo proyecto creado para cliente existente exitosamente' : 
+        'Lead convertido a cliente exitosamente'
+      );
     } catch (error) {
       console.error('Error convirtiendo lead:', error);
       alert('Error convirtiendo lead a cliente: ' + error.message);
@@ -199,6 +211,7 @@ const LeadsList = () => {
   const getEstadoColor = (estado) => {
     switch (estado) {
       case 'nuevo': return 'primary';
+      case 'nuevo_proyecto': return 'secondary';
       case 'en_revision': return 'warning';
       case 'contactado': return 'info';
       case 'convertido': return 'success';
@@ -210,6 +223,7 @@ const LeadsList = () => {
   const getEstadoLabel = (estado) => {
     switch (estado) {
       case 'nuevo': return 'Nuevo';
+      case 'nuevo_proyecto': return 'Nuevo Proyecto';
       case 'en_revision': return 'En Revisión';
       case 'contactado': return 'Contactado';
       case 'convertido': return 'Convertido';
@@ -356,6 +370,7 @@ const LeadsList = () => {
                 <TableCell>Remitente</TableCell>
                 <TableCell>Asunto</TableCell>
                 <TableCell>Empresa</TableCell>
+                <TableCell>Cliente Asociado</TableCell>
                 <TableCell>Estado</TableCell>
                 <TableCell>Fecha</TableCell>
                 <TableCell>Leído</TableCell>
@@ -401,6 +416,33 @@ const LeadsList = () => {
                       </Typography>
                     </TableCell>
                     <TableCell>
+                      <Typography variant="body2">
+                        {lead.cliente_nombre ? (
+                          <Box>
+                            <Typography variant="body2" fontWeight="medium" color="primary">
+                              {lead.cliente_nombre}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {lead.cliente_email}
+                            </Typography>
+                            {lead.match_por && (
+                              <Chip 
+                                label={`Match: ${lead.match_por}`} 
+                                size="small" 
+                                color="secondary" 
+                                variant="outlined"
+                                sx={{ mt: 0.5 }}
+                              />
+                            )}
+                          </Box>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            Nuevo cliente
+                          </Typography>
+                        )}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
                       <Chip
                         label={getEstadoLabel(lead.estado)}
                         color={getEstadoColor(lead.estado)}
@@ -431,17 +473,9 @@ const LeadsList = () => {
                             <VisibilityIcon />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Editar">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleEditLead(lead)}
-                            color="info"
-                          >
-                            <EditIcon />
-                          </IconButton>
-                        </Tooltip>
+
                         {lead.estado !== 'convertido' && (
-                          <Tooltip title="Convertir a Cliente">
+                          <Tooltip title={lead.id_cliente ? "Crear nuevo proyecto para cliente existente" : "Convertir a Cliente"}>
                             <IconButton
                               size="small"
                               onClick={() => handleConvertClick(lead)}
@@ -517,19 +551,41 @@ const LeadsList = () => {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Convertir Lead a Cliente</DialogTitle>
+        <DialogTitle>
+          {leadToConvert?.id_cliente ? 'Crear Nuevo Proyecto' : 'Convertir Lead a Cliente'}
+        </DialogTitle>
         <DialogContent>
           <Typography sx={{ mb: 2 }}>
-            ¿Estás seguro de que quieres convertir el lead de{' '}
-            <strong>{leadToConvert?.nombre_remitente || leadToConvert?.email_remitente}</strong> a cliente?
+            {leadToConvert?.id_cliente ? (
+              <>
+                ¿Estás seguro de que quieres crear un nuevo proyecto para el cliente{' '}
+                <strong>{leadToConvert?.cliente_nombre || 'existente'}</strong>?
+              </>
+            ) : (
+              <>
+                ¿Estás seguro de que quieres convertir el lead de{' '}
+                <strong>{leadToConvert?.nombre_remitente || leadToConvert?.email_remitente}</strong> a cliente?
+              </>
+            )}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Esta acción:
           </Typography>
           <ul style={{ margin: 0, paddingLeft: 20 }}>
-            <li>Creará un nuevo registro en la tabla de clientes</li>
-            <li>Actualizará el estado del lead a "convertido"</li>
-            <li>Mantendrá el historial del lead para auditoría</li>
+            {leadToConvert?.id_cliente ? (
+              <>
+                <li>Actualizará los datos del cliente existente si hay información nueva</li>
+                <li>Agregará las notas del nuevo proyecto al cliente</li>
+                <li>Actualizará el estado del lead a "convertido"</li>
+                <li>Mantendrá el historial del lead para auditoría</li>
+              </>
+            ) : (
+              <>
+                <li>Creará un nuevo registro en la tabla de clientes</li>
+                <li>Actualizará el estado del lead a "convertido"</li>
+                <li>Mantendrá el historial del lead para auditoría</li>
+              </>
+            )}
           </ul>
           <TextField
             fullWidth
@@ -538,7 +594,7 @@ const LeadsList = () => {
             label="Notas adicionales (opcional)"
             value={notasConversion}
             onChange={(e) => setNotasConversion(e.target.value)}
-            placeholder="Agregar notas sobre la conversión..."
+            placeholder={leadToConvert?.id_cliente ? "Agregar notas sobre el nuevo proyecto..." : "Agregar notas sobre la conversión..."}
             sx={{ mt: 2 }}
           />
         </DialogContent>
@@ -547,7 +603,7 @@ const LeadsList = () => {
             Cancelar
           </Button>
           <Button onClick={handleConvertConfirm} color="success" variant="contained">
-            Convertir a Cliente
+            {leadToConvert?.id_cliente ? 'Crear Proyecto' : 'Convertir a Cliente'}
           </Button>
         </DialogActions>
       </Dialog>

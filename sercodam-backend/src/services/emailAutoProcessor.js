@@ -147,6 +147,54 @@ class EmailAutoProcessor {
             actualizado_en: db.fn.now()
           };
 
+          // 1) Intentar encontrar cliente existente
+          const clienteExistente = await db('cliente')
+            .select('id_cliente', 'nombre_cliente', 'email_cliente', 'telefono_cliente', 'empresa_cliente')
+            .where(function() {
+              this.where('email_cliente', processedData.email);
+              
+              // Si hay teléfono, también buscar por teléfono
+              if (processedData.phone && processedData.phone.trim()) {
+                this.orWhere('telefono_cliente', processedData.phone.trim());
+              }
+              
+              // Si hay empresa, también buscar por empresa
+              if (processedData.company && processedData.company.trim()) {
+                this.orWhere('empresa_cliente', processedData.company.trim());
+              }
+            })
+            .first();
+
+          // Determinar por qué criterio se hizo match
+          let matchPor = null;
+          if (clienteExistente) {
+            if (clienteExistente.email_cliente === processedData.email) {
+              matchPor = 'email';
+            } else if (processedData.phone && clienteExistente.telefono_cliente === processedData.phone.trim()) {
+              matchPor = 'telefono';
+            } else if (processedData.company && clienteExistente.empresa_cliente === processedData.company.trim()) {
+              matchPor = 'empresa';
+            }
+            
+            logger.info(`🔍 Cliente existente encontrado: ${clienteExistente.id_cliente} - ${clienteExistente.nombre_cliente} (match por: ${matchPor})`);
+          }
+
+          // Actualizar datos estructurados con información del cliente
+          datosEstructurados.cliente_match = clienteExistente ? {
+            id_cliente: clienteExistente.id_cliente,
+            nombre_cliente: clienteExistente.nombre_cliente,
+            match_por: matchPor,
+            encontrado: true
+          } : {
+            encontrado: false
+          };
+
+          // Actualizar datos del lead con información del cliente
+          leadData.datos_estructurados = JSON.stringify(datosEstructurados);
+          leadData.estado = clienteExistente ? 'nuevo_proyecto' : 'nuevo';
+          leadData.id_cliente = clienteExistente ? clienteExistente.id_cliente : null;
+          leadData.match_por = matchPor;
+
           // Crear el lead
           const [nuevoLead] = await db('leads')
             .insert(leadData)

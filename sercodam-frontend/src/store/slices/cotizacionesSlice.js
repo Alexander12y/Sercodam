@@ -163,6 +163,7 @@ const cotizacionesSlice = createSlice({
       state.currentCotizacion = {
         // Sección 1: Información General
         id_cliente: null,
+        lead_id: null, // Campo para referenciar leads
         nombre_cliente: '',
         empresa_cliente: '',
         email_cliente: '',
@@ -173,6 +174,10 @@ const cotizacionesSlice = createSlice({
         dias_validez: 15,
         tiempo_entrega: '',
         tiempo_instalacion: '',
+        
+        // Campos adicionales para leads
+        lead_requerimientos: '',
+        lead_presupuesto_estimado: null,
         
         // Sección 2: Productos (se inicializa vacío)
         detalle: [],

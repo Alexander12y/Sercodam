@@ -49,6 +49,7 @@ import {
 import { updateCurrentCotizacion, addItem, updateItem, removeItem, calculateTotals } from '../../../store/slices/cotizacionesSlice';
 import { fetchPanos } from '../../../store/slices/panosSlice';
 import { fetchMateriales } from '../../../store/slices/materialesSlice';
+import { fetchLeads } from '../../../store/slices/leadsSlice';
 import { panosApi, inventarioApi } from '../../../services/api';
 import { SUBGRUPOS_CATEGORIAS_MATERIALES } from '../../../constants/materialesConstants';
 
@@ -56,6 +57,12 @@ import { SUBGRUPOS_CATEGORIAS_MATERIALES } from '../../../constants/materialesCo
 export const SeccionGeneral = ({ cotizacion, onUpdate }) => {
   const dispatch = useDispatch();
   const { clientes } = useSelector((state) => state.clientes);
+  const { leads } = useSelector((state) => state.leads);
+
+  // Cargar leads al montar el componente
+  useEffect(() => {
+    dispatch(fetchLeads({ limit: 1000 })); // Cargar todos los leads disponibles
+  }, [dispatch]);
 
   // Definir los tipos de proyectos y sus títulos correspondientes (usando valores exactos del enum)
   const tiposProyectos = {
@@ -138,18 +145,98 @@ export const SeccionGeneral = ({ cotizacion, onUpdate }) => {
     if (onUpdate) onUpdate(updatedData);
   };
 
-  const handleClienteChange = (cliente) => {
-    if (cliente) {
-      const updatedData = {
-        id_cliente: cliente.id_cliente,
-        nombre_cliente: cliente.nombre_cliente,
-        empresa_cliente: cliente.empresa_cliente || '',
-        email_cliente: cliente.email_cliente || '',
-        telefono_cliente: cliente.telefono_cliente || ''
-      };
+  const handleClienteChange = (selectedItem) => {
+    if (selectedItem) {
+      let updatedData;
+      
+      if (selectedItem.type === 'lead') {
+        // Es un lead
+        updatedData = {
+          id_cliente: null, // No hay cliente asociado
+          lead_id: selectedItem.id_lead,
+          nombre_cliente: selectedItem.nombre_remitente,
+          empresa_cliente: selectedItem.empresa || '',
+          email_cliente: selectedItem.email_remitente || '',
+          telefono_cliente: selectedItem.telefono || '',
+          // Agregar información del lead
+          lead_requerimientos: selectedItem.requerimientos,
+          lead_presupuesto_estimado: selectedItem.presupuesto_estimado
+        };
+      } else {
+        // Es un cliente
+        updatedData = {
+          id_cliente: selectedItem.id_cliente,
+          lead_id: null, // Limpiar lead_id si se selecciona un cliente
+          nombre_cliente: selectedItem.nombre_cliente,
+          empresa_cliente: selectedItem.empresa_cliente || '',
+          email_cliente: selectedItem.email_cliente || '',
+          telefono_cliente: selectedItem.telefono_cliente || ''
+        };
+      }
+      
       dispatch(updateCurrentCotizacion(updatedData));
       if (onUpdate) onUpdate(updatedData);
     }
+  };
+
+  // Preparar opciones combinadas de clientes y leads
+  const getClienteOptions = () => {
+    const options = [];
+    
+    // Agregar sección de clientes
+    if (clientes && clientes.length > 0) {
+      options.push({
+        type: 'header',
+        label: '👥 CLIENTES',
+        disabled: true
+      });
+      
+      clientes.forEach(cliente => {
+        options.push({
+          ...cliente,
+          type: 'cliente',
+          displayLabel: `${cliente.nombre_cliente}${cliente.empresa_cliente ? ` - ${cliente.empresa_cliente}` : ''}`
+        });
+      });
+    }
+    
+    // Agregar sección de leads
+    if (leads && leads.length > 0) {
+      options.push({
+        type: 'header',
+        label: '📧 LEADS',
+        disabled: true
+      });
+      
+      leads.forEach(lead => {
+        options.push({
+          ...lead,
+          type: 'lead',
+          displayLabel: `${lead.nombre_remitente || 'Sin nombre'}${lead.empresa ? ` - ${lead.empresa}` : ''} (Lead)`
+        });
+      });
+    }
+    
+    return options;
+  };
+
+  // Encontrar el valor seleccionado
+  const getSelectedValue = () => {
+    const options = getClienteOptions();
+    
+    if (cotizacion.id_cliente) {
+      // Buscar cliente
+      return options.find(option => 
+        option.type === 'cliente' && option.id_cliente === cotizacion.id_cliente
+      );
+    } else if (cotizacion.lead_id) {
+      // Buscar lead
+      return options.find(option => 
+        option.type === 'lead' && option.id_lead === cotizacion.lead_id
+      );
+    }
+    
+    return null;
   };
 
   return (
@@ -160,19 +247,56 @@ export const SeccionGeneral = ({ cotizacion, onUpdate }) => {
         </Typography>
         
         <Grid container spacing={3}>
-          {/* Selección de Cliente */}
+          {/* Selección de Cliente o Lead */}
           <Grid item xs={12} md={6}>
             <Autocomplete
-              options={clientes || []}
-              getOptionLabel={(option) => `${option.nombre_cliente}${option.empresa_cliente ? ` - ${option.empresa_cliente}` : ''}`}
-              value={clientes?.find(c => c.id_cliente === cotizacion.id_cliente) || null}
+              options={getClienteOptions()}
+              getOptionLabel={(option) => {
+                if (option.type === 'header') return option.label;
+                return option.displayLabel || option.nombre_cliente || option.nombre_remitente || 'Sin nombre';
+              }}
+              value={getSelectedValue()}
               onChange={(event, newValue) => handleClienteChange(newValue)}
+              isOptionEqualToValue={(option, value) => {
+                if (option.type === 'header') return false;
+                if (option.type === 'lead' && value.type === 'lead') {
+                  return option.id_lead === value.id_lead;
+                }
+                if (option.type === 'cliente' && value.type === 'cliente') {
+                  return option.id_cliente === value.id_cliente;
+                }
+                return false;
+              }}
+              renderOption={(props, option) => {
+                if (option.type === 'header') {
+                  return (
+                    <Box component="li" {...props} sx={{ 
+                      fontWeight: 'bold', 
+                      backgroundColor: 'grey.100',
+                      color: 'text.secondary',
+                      fontSize: '0.875rem',
+                      py: 1
+                    }}>
+                      {option.label}
+                    </Box>
+                  );
+                }
+                return (
+                  <Box component="li" {...props} sx={{ 
+                    pl: option.type === 'lead' ? 4 : 2,
+                    fontSize: option.type === 'lead' ? '0.875rem' : '1rem'
+                  }}>
+                    {option.displayLabel}
+                  </Box>
+                );
+              }}
               renderInput={(params) => (
                 <TextField
                   {...params}
-                  label="Cliente"
+                  label="Cliente o Lead"
                   required
                   fullWidth
+                  helperText={cotizacion.lead_id ? "Seleccionado desde leads" : cotizacion.id_cliente ? "Cliente existente" : ""}
                 />
               )}
             />

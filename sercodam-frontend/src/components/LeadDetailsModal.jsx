@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import {
   Dialog,
   DialogTitle,
@@ -31,6 +32,7 @@ import { fetchLeadById } from '../store/slices/leadsSlice';
 
 const LeadDetailsModal = ({ open, onClose, leadId }) => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const [lead, setLead] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -61,9 +63,29 @@ const LeadDetailsModal = ({ open, onClose, leadId }) => {
   };
 
   const handleCotizacion = () => {
-    // TODO: Implementar funcionalidad de cotización
-    console.log('Generar cotización para:', lead?.nombre_remitente);
-    alert('Funcionalidad de cotización en desarrollo');
+    // Navegar a la página de nueva cotización con los datos del lead
+    const cotizacionData = {
+      cliente: {
+        nombre: lead?.nombre_remitente,
+        email: lead?.email_remitente,
+        telefono: lead?.telefono,
+        empresa: lead?.empresa,
+        id_cliente: lead?.id_cliente // Si es cliente existente
+      },
+      proyecto: {
+        requerimientos: lead?.requerimientos,
+        presupuesto_estimado: lead?.presupuesto_estimado,
+        fuente: lead?.fuente
+      },
+      lead_id: lead?.id_lead
+    };
+    
+    // Guardar los datos en sessionStorage para que estén disponibles en la página de cotización
+    sessionStorage.setItem('cotizacionFromLead', JSON.stringify(cotizacionData));
+    
+    // Cerrar el modal y navegar
+    onClose();
+    navigate('/cotizaciones/nueva');
   };
 
   const formatFecha = (fecha) => {
@@ -77,25 +99,27 @@ const LeadDetailsModal = ({ open, onClose, leadId }) => {
     });
   };
 
-  const getEstadoColor = (estado) => {
-    switch (estado) {
-      case 'nuevo': return 'primary';
-      case 'en_revision': return 'warning';
-      case 'contactado': return 'info';
-      case 'convertido': return 'success';
-      case 'descartado': return 'error';
-      default: return 'default';
-    }
-  };
-
   const getEstadoLabel = (estado) => {
     switch (estado) {
       case 'nuevo': return 'Nuevo';
+      case 'nuevo_proyecto': return 'Nuevo Proyecto';
       case 'en_revision': return 'En Revisión';
       case 'contactado': return 'Contactado';
       case 'convertido': return 'Convertido';
       case 'descartado': return 'Descartado';
       default: return estado;
+    }
+  };
+
+  const getEstadoColor = (estado) => {
+    switch (estado) {
+      case 'nuevo': return 'primary';
+      case 'nuevo_proyecto': return 'secondary';
+      case 'en_revision': return 'warning';
+      case 'contactado': return 'info';
+      case 'convertido': return 'success';
+      case 'descartado': return 'error';
+      default: return 'default';
     }
   };
 
@@ -186,6 +210,65 @@ const LeadDetailsModal = ({ open, onClose, leadId }) => {
                 </Grid>
               </Grid>
             </Paper>
+
+            {/* Información del cliente asociado */}
+            {lead.id_cliente && (
+              <Paper sx={{ p: 3, mb: 3, backgroundColor: '#f8f9fa', border: '1px solid #e3f2fd' }}>
+                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', color: 'primary.main' }}>
+                  <PersonIcon sx={{ mr: 1 }} />
+                  Cliente Asociado
+                </Typography>
+                <Divider sx={{ mb: 2 }} />
+                
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Nombre del Cliente:
+                    </Typography>
+                    <Typography variant="body1" sx={{ mb: 2, fontWeight: 'medium' }}>
+                      {lead.cliente_nombre || 'Cliente existente'}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Email del Cliente:
+                    </Typography>
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {lead.cliente_email || 'N/A'}
+                    </Typography>
+                  </Grid>
+                  {lead.cliente_empresa && (
+                    <Grid item xs={12} md={6}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Empresa del Cliente:
+                      </Typography>
+                      <Typography variant="body1" sx={{ mb: 2 }}>
+                        {lead.cliente_empresa}
+                      </Typography>
+                    </Grid>
+                  )}
+                  {lead.match_por && (
+                    <Grid item xs={12} md={6}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Coincidencia por:
+                      </Typography>
+                      <Chip 
+                        label={lead.match_por.toUpperCase()} 
+                        color="secondary" 
+                        size="small"
+                        sx={{ mt: 0.5 }}
+                      />
+                    </Grid>
+                  )}
+                </Grid>
+                
+                <Box sx={{ mt: 2, p: 2, backgroundColor: 'white', borderRadius: 1, border: '1px solid #e0e0e0' }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                    💡 Este lead corresponde a un nuevo proyecto de un cliente ya existente en el sistema.
+                  </Typography>
+                </Box>
+              </Paper>
+            )}
 
             {/* Información del email */}
             <Paper sx={{ p: 3, mb: 3 }}>

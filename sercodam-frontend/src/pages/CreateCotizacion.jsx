@@ -116,7 +116,49 @@ const CreateCotizacion = () => {
     if (isEdit) {
       dispatch(fetchCotizacionById(id));
     } else {
-      dispatch(initNewCotizacion());
+            dispatch(initNewCotizacion());
+      
+      // Verificar si hay datos de lead en sessionStorage
+      const cotizacionFromLead = sessionStorage.getItem('cotizacionFromLead');
+      if (cotizacionFromLead) {
+        try {
+          const leadData = JSON.parse(cotizacionFromLead);
+          console.log('📋 Cargando datos del lead:', leadData);
+          
+          // Pequeño delay para asegurar que los leads se carguen
+          setTimeout(() => {
+            // Actualizar la cotización con los datos del lead
+            const cotizacionData = {
+              // Datos del cliente/lead
+              nombre_cliente: leadData.cliente.nombre,
+              email_cliente: leadData.cliente.email,
+              telefono_cliente: leadData.cliente.telefono,
+              empresa_cliente: leadData.cliente.empresa,
+              
+              // Si es cliente existente, usar id_cliente, si no usar lead_id
+              id_cliente: leadData.cliente.id_cliente || null,
+              lead_id: leadData.cliente.id_cliente ? null : leadData.lead_id,
+              
+              // Datos del proyecto
+              descripcion_servicios: leadData.proyecto.requerimientos,
+              presupuesto_estimado: leadData.proyecto.presupuesto_estimado,
+              fuente: leadData.proyecto.fuente,
+              
+              // Información adicional del lead
+              lead_requerimientos: leadData.proyecto.requerimientos,
+              lead_presupuesto_estimado: leadData.proyecto.presupuesto_estimado
+            };
+            
+            dispatch(updateCurrentCotizacion(cotizacionData));
+          }, 500);
+          
+          // Limpiar sessionStorage después de usar los datos
+          sessionStorage.removeItem('cotizacionFromLead');
+          
+        } catch (error) {
+          console.error('Error cargando datos del lead:', error);
+        }
+      }
     }
 
     return () => {
