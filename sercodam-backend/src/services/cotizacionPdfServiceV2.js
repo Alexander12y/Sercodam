@@ -105,7 +105,10 @@ class CotizacionPdfServiceV2 {
         this.drawTotales(doc, cotizacion);
 
         /* ------------------------ Ficha técnica y producto ---------------------- */
-        await this.drawFichaTecnicaSection(doc, detalle);
+        await this.drawFichaTecnicaSection(doc, detalle, cotizacion);
+        
+        // Espaciado antes de las condiciones
+        doc.moveDown(1);
 
         /* ------------------------ Condiciones de pago y entrega ------------------ */
         this.drawCondicionesSection(doc, cotizacion);
@@ -121,6 +124,9 @@ class CotizacionPdfServiceV2 {
           this.drawSection(doc, 'OBSERVACIONES', cotizacion.observaciones);
         }
         if (cotizacion.no_incluye) {
+          // Verificar espacio para evitar que el título aparezca al final de la página
+          const noIncluyeHeight = this.calculateTextHeight(cotizacion.no_incluye, doc.page.width - this.styles.margin * 2 - 40, 10) + 50;
+          this.addPageIfNeeded(doc, noIncluyeHeight);
           this.drawSection(doc, 'NO INCLUYE', cotizacion.no_incluye);
         }
         if (cotizacion.notas) {
@@ -440,10 +446,76 @@ class CotizacionPdfServiceV2 {
             value = `${item.cantidad} ${item.unidad || 'pza'}`;
             break;
           case 'producto':
-            value = item.concepto || item.nombre_producto || item.notas || 'Producto';
+            // Mostrar el título del proyecto para productos de red
+            if (item.tipo_item === 'RED_PRODUCTO') {
+              // Usar el título del proyecto para redes
+              value = 'Red de protección industrial';
+            } else {
+              value = item.concepto || item.nombre_producto || item.notas || 'Producto';
+            }
             break;
           case 'caracteristicas':
-            value = descText; // Usar texto limitado
+            // Mostrar especificaciones de la red si están disponibles
+            if (item.tipo_item === 'RED_PRODUCTO' && item.metadata && item.metadata.red_data) {
+              const redData = item.metadata.red_data;
+              const specs = [];
+              
+              // Agregar especificaciones técnicas existentes
+              if (redData.especificaciones_texto) {
+                specs.push(redData.especificaciones_texto);
+              } else if (redData.especificaciones) {
+                Object.entries(redData.especificaciones).forEach(([key, val]) => {
+                  if (val !== null && val !== undefined && val !== '') {
+                    const label = key === 'calibre' ? 'Calibre' :
+                                 key === 'cuadro' ? 'Cuadro' :
+                                 key === 'torsion' ? 'Torsión' :
+                                 key === 'refuerzo' ? 'Refuerzo' :
+                                 key === 'color' ? 'Color' :
+                                 key === 'presentacion' ? 'Presentación' :
+                                 key === 'grosor' ? 'Grosor' :
+                                 key === 'color_tipo_red' ? 'Color/Tipo' : key;
+                    specs.push(`${label}: ${val}`);
+                  }
+                });
+              }
+              
+              // Agregar dimensiones específicas de la red seleccionada
+              if (redData.largo && redData.ancho) {
+                specs.push(`Largo: ${redData.largo} m, Ancho: ${redData.ancho} m`);
+              } else if (redData.largo) {
+                specs.push(`Largo: ${redData.largo} m`);
+              } else if (redData.ancho) {
+                specs.push(`Ancho: ${redData.ancho} m`);
+              }
+              
+              // Agregar precio por m² para redes
+              if (item.precio_unitario) {
+                const precioFormateado = this.formatCurrency(item.precio_unitario);
+                specs.push(`Precio x m²: ${precioFormateado}`);
+              }
+              
+              value = specs.length > 0 ? specs.join(', ') : descText;
+            } else {
+              // Para otros productos/materiales, agregar dimensiones y precio por unidad
+              const specs = [];
+              
+              // Agregar dimensiones si están disponibles
+              if (item.largo && item.ancho) {
+                specs.push(`Largo: ${item.largo} m, Ancho: ${item.ancho} m`);
+              } else if (item.largo) {
+                specs.push(`Largo: ${item.largo} m`);
+              } else if (item.ancho) {
+                specs.push(`Ancho: ${item.ancho} m`);
+              }
+              
+              // Agregar precio por unidad para otros productos
+              if (item.precio_unitario) {
+                const precioFormateado = this.formatCurrency(item.precio_unitario);
+                specs.push(`Precio x unidad: ${precioFormateado}`);
+              }
+              
+              value = specs.length > 0 ? specs.join(', ') : descText;
+            }
             break;
           case 'precio_unitario':
             value = this.formatCurrency(item.precio_unitario);
@@ -473,24 +545,68 @@ class CotizacionPdfServiceV2 {
     const { margin, rowHeight } = this.styles;
     this.addPageIfNeeded(doc, rowHeight * 3 + 20);
 
-    const labelWidth = 100;
-    const valueWidth = 100;
-    const startX = doc.page.width - margin - labelWidth - valueWidth;
-    const yStart = doc.y + 10;
+    // Crear datos para la tabla de totales
+    const totalesData = [
+      {
+        concepto: 'SUBTOTAL:',
+        valor: this.formatCurrency(cotizacion.subtotal),
+        isBold: false
+      },
+      {
+        concepto: 'IVA (16%):',
+        valor: this.formatCurrency(cotizacion.iva),
+        isBold: false
+      },
+      {
+        concepto: 'TOTAL:',
+        valor: this.formatCurrency(cotizacion.total),
+        isBold: true
+      }
+    ];
 
-    doc.font(this.styles.fonts.bold).fontSize(10).fillColor(this.styles.colors.primary);
-    doc.text('SUBTOTAL:', startX, yStart);
-    doc.text('IVA (16%):', startX, yStart + rowHeight);
-    doc.text('TOTAL:', startX, yStart + rowHeight * 2);
+    // Usar el mismo ancho y posición que la tabla principal
+    const tableWidth = doc.page.width - margin * 2;
+    const tableX = margin;
+    const tableY = doc.y;
+    const colWidth = tableWidth / 2;
 
-    const valueX = startX + labelWidth;
-    doc.font(this.styles.fonts.regular).fillColor('#000000');
-    doc.text(this.formatCurrency(cotizacion.subtotal), valueX, yStart, { width: valueWidth, align: 'right' });
-    doc.text(this.formatCurrency(cotizacion.iva), valueX, yStart + rowHeight, { width: valueWidth, align: 'right' });
-    doc.font(this.styles.fonts.bold).fontSize(12);
-    doc.text(this.formatCurrency(cotizacion.total), valueX, yStart + rowHeight * 2, { width: valueWidth, align: 'right' });
+    // Dibujar tabla de totales con el mismo estilo que la tabla principal
+    doc.rect(tableX, tableY, tableWidth, rowHeight * 3)
+       .fill('#FFFFFF')
+       .stroke('#DDDDDD');
 
-    doc.y = yStart + rowHeight * 3 + 10;
+    // Dibujar líneas horizontales
+    doc.moveTo(tableX, tableY + rowHeight)
+       .lineTo(tableX + tableWidth, tableY + rowHeight)
+       .stroke('#DDDDDD');
+    
+    doc.moveTo(tableX, tableY + rowHeight * 2)
+       .lineTo(tableX + tableWidth, tableY + rowHeight * 2)
+       .stroke('#DDDDDD');
+
+    // Dibujar línea vertical central
+    doc.moveTo(tableX + colWidth, tableY)
+       .lineTo(tableX + colWidth, tableY + rowHeight * 3)
+       .stroke('#DDDDDD');
+
+    // Llenar datos de la tabla
+    totalesData.forEach((row, index) => {
+      const y = tableY + (index * rowHeight) + (rowHeight / 2) - 5;
+      
+      // Concepto (izquierda)
+      doc.font(row.isBold ? this.styles.fonts.bold : this.styles.fonts.regular)
+         .fontSize(row.isBold ? 12 : 10)
+         .fillColor(this.styles.colors.primary)
+         .text(row.concepto, tableX + 10, y, { width: colWidth - 20, align: 'left' });
+      
+      // Valor (derecha)
+      doc.font(row.isBold ? this.styles.fonts.bold : this.styles.fonts.regular)
+         .fontSize(row.isBold ? 12 : 10)
+         .fillColor('#000000')
+         .text(row.valor, tableX + colWidth + 10, y, { width: colWidth - 20, align: 'right' });
+    });
+
+    doc.y = tableY + rowHeight * 3 + 10;
   }
 
   /* ------------------------------- Secciones --------------------------------- */
@@ -510,7 +626,7 @@ class CotizacionPdfServiceV2 {
       align: 'justify'
     });
 
-    doc.moveDown(5);
+    doc.moveDown(1);
   }
 
   /* ------------------------ Sección de garantía con caja elegante ------------------------ */
@@ -677,8 +793,13 @@ class CotizacionPdfServiceV2 {
         // Verificar espacio suficiente para la imagen
         this.addPageIfNeeded(doc, 200);
         
-        // Construir ruta de la imagen
-        const imagePath = path.join(this.imagePath, imagenData.foto);
+        // Construir ruta de la imagen - buscar primero en networks/ luego en el directorio principal
+        let imagePath = path.join(this.imagePath, 'networks', imagenData.foto);
+        
+        if (!fs.existsSync(imagePath)) {
+          // Fallback: buscar en el directorio principal
+          imagePath = path.join(this.imagePath, imagenData.foto);
+        }
         
         if (fs.existsSync(imagePath)) {
           // Centrar la imagen
@@ -737,18 +858,27 @@ class CotizacionPdfServiceV2 {
   }
 
   /**
-   * Obtiene la imagen del proyecto desde la base de datos
+   * Obtiene la imagen del proyecto desde la base de datos normalizada
+   * Prioridad: foto_titulo > foto_tipo (fallback)
    */
   async obtenerImagenProyecto (tituloProyecto) {
     try {
       const knex = require('../config/database');
       
-      const imagenProyecto = await knex('catalogo_1.titulo_proyecto')
-        .select('foto')
-        .where('titulo_proyecto', tituloProyecto)
+      // Buscar en titulo_proyecto con JOIN a tipo_proyecto para obtener foto_tipo como fallback
+      const imagenProyecto = await knex('catalogo_1.titulo_proyecto as tp')
+        .join('catalogo_1.tipo_proyecto as tpro', 'tp.tipo_proyecto', 'tpro.tipo_proyecto')
+        .select('tp.foto_titulo', 'tpro.foto_tipo')
+        .where('tp.titulo_proyecto', tituloProyecto)
         .first();
       
-      return imagenProyecto;
+      if (imagenProyecto) {
+        // Usar foto_titulo si existe, sino foto_tipo como fallback
+        const fotoAUsar = imagenProyecto.foto_titulo || imagenProyecto.foto_tipo;
+        return { foto: fotoAUsar };
+      }
+      
+      return null;
     } catch (error) {
       logger.error('Error obteniendo imagen del proyecto:', error);
       return null;
@@ -1015,49 +1145,46 @@ class CotizacionPdfServiceV2 {
   }
 
   /* ------------------------ Ficha técnica y producto ------------------------ */
-  async drawFichaTecnicaSection (doc, detalle) {
-    const fichaTecnica = await this.obtenerFichaTecnica(detalle);
+  async drawFichaTecnicaSection (doc, detalle, cotizacion) {
+    // Obtener productos que tienen id_mcr (redes del catálogo)
+    // Buscar tanto en el campo id_mcr directo como en metadata.red_data.id_mcr
+    const productosConIdMcr = detalle.filter(item => {
+      // Verificar si tiene id_mcr directo
+      if (item.id_mcr) {
+        return true;
+      }
+      
+      // Verificar si tiene id_mcr en metadata
+      if (item.metadata && item.metadata.red_data && item.metadata.red_data.id_mcr) {
+        return true;
+      }
+      
+      return false;
+    });
     
-    // Verificar espacio necesario
-    this.addPageIfNeeded(doc, 200);
+    logger.info(`🔍 Analizando ${detalle.length} productos del detalle`);
+    logger.info(`📦 Productos con id_mcr encontrados: ${productosConIdMcr.length}`);
 
-    // Título principal
-    doc.font(this.styles.fonts.bold)
-       .fontSize(14)
-       .fillColor(this.styles.colors.primary)
-       .text('Características de la Red:', this.styles.margin, doc.y + 15);
-
-    // Subtítulo
-    doc.font(this.styles.fonts.bold)
-       .fontSize(12)
-       .fillColor(this.styles.colors.primary)
-       .text('Especificaciones Técnicas', this.styles.margin, doc.y + 20);
-
-    // Cuadro elegante con ficha técnica
-    const boxY = doc.y + 10;
-    const boxHeight = 80;
-    const boxWidth = doc.page.width - this.styles.margin * 2;
-
-    if (fichaTecnica && fichaTecnica.ficha_tecnica) {
-      // Dibujar cuadro con sombra
-      doc.rect(this.styles.margin + 2, boxY + 2, boxWidth, boxHeight).fill('#CCCCCC'); // Sombra
-      doc.rect(this.styles.margin, boxY, boxWidth, boxHeight).fill('#FFFFFF').stroke('#DDDDDD'); // Cuadro principal
+    if (productosConIdMcr.length === 0) {
+      // Si no hay productos con id_mcr, mostrar una sección por defecto
+      this.addPageIfNeeded(doc, 250);
       
-      // Línea izquierda de color
-      doc.rect(this.styles.margin, boxY, 4, boxHeight).fill(this.styles.colors.primary);
-      
-      // Texto de ficha técnica
-      doc.font(this.styles.fonts.regular)
-         .fontSize(10)
-         .fillColor('#000000')
-         .text(fichaTecnica.ficha_tecnica, this.styles.margin + 15, boxY + 15, {
-           width: boxWidth - 25,
-           align: 'justify'
-         });
-    } else {
-      // Cuadro por defecto si no hay ficha técnica
-      doc.rect(this.styles.margin + 2, boxY + 2, boxWidth, boxHeight).fill('#CCCCCC'); // Sombra
-      doc.rect(this.styles.margin, boxY, boxWidth, boxHeight).fill('#FFFFFF').stroke('#DDDDDD'); // Cuadro principal
+      doc.font(this.styles.fonts.bold)
+         .fontSize(14)
+         .fillColor(this.styles.colors.primary)
+         .text('Características de la Red:', this.styles.margin, doc.y + 15);
+
+      doc.font(this.styles.fonts.bold)
+         .fontSize(12)
+         .fillColor(this.styles.colors.primary)
+         .text('Especificaciones Técnicas', this.styles.margin, doc.y + 20);
+
+      const boxY = doc.y + 10;
+      const boxHeight = 80;
+      const boxWidth = doc.page.width - this.styles.margin * 2;
+
+      doc.rect(this.styles.margin + 2, boxY + 2, boxWidth, boxHeight).fill('#CCCCCC');
+      doc.rect(this.styles.margin, boxY, boxWidth, boxHeight).fill('#FFFFFF').stroke('#DDDDDD');
       doc.rect(this.styles.margin, boxY, 4, boxHeight).fill(this.styles.colors.primary);
       
       doc.font(this.styles.fonts.regular)
@@ -1067,78 +1194,300 @@ class CotizacionPdfServiceV2 {
            width: boxWidth - 25,
            align: 'center'
          });
+
+      doc.moveDown(1);
+      this.drawProductImagePlaceholder(doc);
+      return;
     }
 
-    doc.y = boxY + boxHeight + 20;
+    // Obtener fichas técnicas para cada producto con id_mcr
+    const fichasTecnicas = [];
+    for (const producto of productosConIdMcr) {
+      // Extraer id_mcr del producto (directo o desde metadata)
+      let idMcr = producto.id_mcr;
+      if (!idMcr && producto.metadata && producto.metadata.red_data) {
+        idMcr = producto.metadata.red_data.id_mcr;
+      }
+      
+      logger.info(`🔍 Obteniendo ficha técnica para id_mcr: ${idMcr}`);
+      const fichaTecnica = await this.obtenerFichaTecnicaPorIdMcr(idMcr);
+      if (fichaTecnica) {
+        fichasTecnicas.push(fichaTecnica);
+      }
+    }
 
-    // Sección de producto
-    doc.font(this.styles.fonts.bold)
-       .fontSize(12)
-       .fillColor(this.styles.colors.primary)
-       .text('Producto:', this.styles.margin, doc.y);
+    logger.info(`📋 Fichas técnicas obtenidas: ${fichasTecnicas.length}`);
 
-    // Imagen del producto
-    if (fichaTecnica && fichaTecnica.foto) {
-      const imagePath = path.join(this.imagePath, fichaTecnica.foto);
-      if (fs.existsSync(imagePath)) {
-        doc.image(imagePath, this.styles.margin, doc.y + 10, { width: 200 });
-        doc.y += 160; // Espacio para la imagen
+    // Procesar cada ficha técnica
+    for (let i = 0; i < fichasTecnicas.length; i++) {
+      const fichaTecnica = fichasTecnicas[i];
+      
+      // Verificar espacio necesario para cada sección
+      this.addPageIfNeeded(doc, 250);
+
+      // Título principal (solo en la primera)
+      if (i === 0) {
+        doc.moveDown(1);
+        doc.font(this.styles.fonts.bold)
+           .fontSize(14)
+           .fillColor(this.styles.colors.primary)
+           .text('Características de la Red:', this.styles.margin, doc.y + 15);
+      }
+
+      // Subtítulo con número si hay múltiples
+      const subtitulo = fichasTecnicas.length > 1 
+        ? `Especificaciones Técnicas - Producto ${i + 1}`
+        : 'Especificaciones Técnicas';
+      
+      doc.font(this.styles.fonts.bold)
+         .fontSize(12)
+         .fillColor(this.styles.colors.primary)
+         .text(subtitulo, this.styles.margin, doc.y + 20);
+
+      // Cuadro elegante con ficha técnica
+      const boxY = doc.y + 10;
+      const boxHeight = 80;
+      const boxWidth = doc.page.width - this.styles.margin * 2;
+
+      if (fichaTecnica && fichaTecnica.ficha_tecnica) {
+        // Dibujar cuadro con sombra
+        doc.rect(this.styles.margin + 2, boxY + 2, boxWidth, boxHeight).fill('#CCCCCC'); // Sombra
+        doc.rect(this.styles.margin, boxY, boxWidth, boxHeight).fill('#FFFFFF').stroke('#DDDDDD'); // Cuadro principal
+        
+        // Línea izquierda de color
+        doc.rect(this.styles.margin, boxY, 4, boxHeight).fill(this.styles.colors.primary);
+        
+        // Texto de ficha técnica
+        doc.font(this.styles.fonts.regular)
+           .fontSize(10)
+           .fillColor('#000000')
+           .text(fichaTecnica.ficha_tecnica, this.styles.margin + 15, boxY + 15, {
+             width: boxWidth - 25,
+             align: 'justify'
+           });
       } else {
+        // Cuadro por defecto si no hay ficha técnica
+        doc.rect(this.styles.margin + 2, boxY + 2, boxWidth, boxHeight).fill('#CCCCCC'); // Sombra
+        doc.rect(this.styles.margin, boxY, boxWidth, boxHeight).fill('#FFFFFF').stroke('#DDDDDD'); // Cuadro principal
+        doc.rect(this.styles.margin, boxY, 4, boxHeight).fill(this.styles.colors.primary);
+        
         doc.font(this.styles.fonts.regular)
            .fontSize(10)
            .fillColor('#666666')
-           .text('Imagen del producto no disponible.', this.styles.margin, doc.y + 15);
-        doc.y += 30;
+           .text('Especificaciones técnicas no disponibles para este producto.', this.styles.margin + 15, boxY + 30, {
+             width: boxWidth - 25,
+             align: 'center'
+           });
       }
-    } else {
+
+      doc.y = boxY + boxHeight + 10;
+
+      // Sección de imágenes en paralelo: Producto y Tipo de Proyecto
+      const imagesTitle = fichasTecnicas.length > 1 
+        ? `Imágenes del Producto ${i + 1}:`
+        : 'Imágenes del Producto:';
+      
+      doc.font(this.styles.fonts.bold)
+         .fontSize(12)
+         .fillColor(this.styles.colors.primary)
+         .text(imagesTitle, this.styles.margin, doc.y);
+
+      // Agregar espacio antes de las imágenes
+      doc.moveDown(1);
+
+      // Calcular posiciones para dos imágenes lado a lado
+      const imageWidth = 140; // Un poco más pequeño para que quepan dos
+      const imageHeight = 110;
+      const spacing = 30; // Espacio entre imágenes
+      const totalWidth = (imageWidth * 2) + spacing;
+      const startX = (doc.page.width - totalWidth) / 2;
+      
+      const leftImageX = startX;
+      const rightImageX = startX + imageWidth + spacing;
+
+      // Guardar la posición Y inicial para ambas imágenes
+      const initialY = doc.y;
+
+      // Imagen 1: Foto del producto (red específica)
+      if (fichaTecnica && fichaTecnica.foto) {
+        const imagePath = path.join(this.imagePath, 'networks', fichaTecnica.foto);
+        logger.info(`🔍 Buscando imagen del producto en: ${imagePath}`);
+        
+        if (fs.existsSync(imagePath)) {
+          doc.image(imagePath, leftImageX, initialY, {
+            width: imageWidth,
+            height: imageHeight
+          });
+          logger.info(`✅ Imagen del producto ${i + 1} agregada: ${fichaTecnica.foto}`);
+        } else {
+          // Fallback si la imagen no existe en networks
+          const fallbackPath = path.join(this.imagePath, fichaTecnica.foto);
+          if (fs.existsSync(fallbackPath)) {
+            doc.image(fallbackPath, leftImageX, initialY, {
+              width: imageWidth,
+              height: imageHeight
+            });
+            logger.info(`✅ Imagen del producto ${i + 1} agregada (fallback): ${fichaTecnica.foto}`);
+          } else {
+            this.drawProductImagePlaceholder(doc, leftImageX, imageWidth, imageHeight, initialY);
+            logger.warn(`⚠️ Imagen del producto no encontrada: ${fichaTecnica.foto}`);
+          }
+        }
+      } else {
+        this.drawProductImagePlaceholder(doc, leftImageX, imageWidth, imageHeight, initialY);
+        logger.warn(`⚠️ No se encontró ficha técnica o foto para el producto ${i + 1}`);
+      }
+
+      // Imagen 2: Foto del tipo de proyecto
+      if (cotizacion && cotizacion.titulo_proyecto) {
+        const imagenProyecto = await this.obtenerImagenProyecto(cotizacion.titulo_proyecto);
+        
+        if (imagenProyecto && imagenProyecto.foto) {
+          const proyectoImagePath = path.join(this.imagePath, 'networks', imagenProyecto.foto);
+          logger.info(`🔍 Buscando imagen del tipo de proyecto en: ${proyectoImagePath}`);
+          
+          if (fs.existsSync(proyectoImagePath)) {
+            doc.image(proyectoImagePath, rightImageX, initialY, {
+              width: imageWidth,
+              height: imageHeight
+            });
+            logger.info(`✅ Imagen del tipo de proyecto agregada: ${imagenProyecto.foto}`);
+          } else {
+            // Fallback si la imagen no existe en networks
+            const fallbackPath = path.join(this.imagePath, imagenProyecto.foto);
+            if (fs.existsSync(fallbackPath)) {
+              doc.image(fallbackPath, rightImageX, initialY, {
+                width: imageWidth,
+                height: imageHeight
+              });
+              logger.info(`✅ Imagen del tipo de proyecto agregada (fallback): ${imagenProyecto.foto}`);
+            } else {
+              this.drawProjectImagePlaceholder(doc, rightImageX, imageWidth, imageHeight, initialY);
+              logger.warn(`⚠️ Imagen del tipo de proyecto no encontrada: ${imagenProyecto.foto}`);
+            }
+          }
+        } else {
+          this.drawProjectImagePlaceholder(doc, rightImageX, imageWidth, imageHeight, initialY);
+          logger.warn(`⚠️ No se encontró imagen para el tipo de proyecto: ${cotizacion.titulo_proyecto}`);
+        }
+      } else {
+        this.drawProjectImagePlaceholder(doc, rightImageX, imageWidth, imageHeight, initialY);
+      }
+
+      // Agregar etiquetas debajo de las imágenes (ambas a la misma altura)
+      const labelY = initialY + imageHeight + 5; // Misma altura para ambos subtítulos
+      
       doc.font(this.styles.fonts.regular)
-         .fontSize(10)
+         .fontSize(9)
          .fillColor('#666666')
-         .text('Imagen del producto no disponible.', this.styles.margin, doc.y + 15);
-      doc.y += 30;
+         .text('Red Específica', leftImageX, labelY, { width: imageWidth, align: 'center' })
+         .text('Tipo de Proyecto', rightImageX, labelY, { width: imageWidth, align: 'center' });
+
+      // Agregar espacio después de las imágenes
+      doc.y = labelY + 25;
+
+      // Agregar espacio entre secciones si hay múltiples productos
+      if (i < fichasTecnicas.length - 1) {
+        doc.moveDown(1);
+      }
     }
   }
 
-  async obtenerFichaTecnica (detalle) {
+  /**
+   * Dibuja un placeholder cuando no hay imagen del producto disponible
+   */
+  drawProductImagePlaceholder (doc, x = null, width = 150, height = 120, y = null) {
+    const boxWidth = width;
+    const boxHeight = height;
+    const boxX = x !== null ? x : (doc.page.width - boxWidth) / 2;
+    const boxY = y !== null ? y : doc.y + 15;
+
+    // Cuadro placeholder con estilo consistente
+    doc.rect(boxX, boxY, boxWidth, boxHeight)
+       .fill('#F5F5F5')
+       .stroke('#CCCCCC');
+    
+    // Texto placeholder centrado
+    doc.font(this.styles.fonts.regular)
+       .fontSize(9)
+       .fillColor('#666666')
+       .text('Imagen del producto\nno disponible', boxX + 10, boxY + boxHeight/2 - 10, {
+         width: boxWidth - 20,
+         align: 'center'
+       });
+
+    // Solo actualizar posición si es el placeholder centrado original
+    if (x === null && y === null) {
+      doc.y = boxY + boxHeight;
+      doc.moveDown(1);
+    }
+  }
+
+  /**
+   * Dibuja un placeholder cuando no hay imagen del tipo de proyecto disponible
+   */
+  drawProjectImagePlaceholder (doc, x = null, width = 150, height = 120, y = null) {
+    const boxWidth = width;
+    const boxHeight = height;
+    const boxX = x !== null ? x : (doc.page.width - boxWidth) / 2;
+    const boxY = y !== null ? y : doc.y + 15;
+
+    // Cuadro placeholder con estilo consistente
+    doc.rect(boxX, boxY, boxWidth, boxHeight)
+       .fill('#F5F5F5')
+       .stroke('#CCCCCC');
+    
+    // Texto placeholder centrado
+    doc.font(this.styles.fonts.regular)
+       .fontSize(9)
+       .fillColor('#666666')
+       .text('Imagen del tipo\nde proyecto\nno disponible', boxX + 10, boxY + boxHeight/2 - 15, {
+         width: boxWidth - 20,
+         align: 'center'
+       });
+
+    // Solo actualizar posición si es el placeholder centrado original
+    if (x === null && y === null) {
+      doc.y = boxY + boxHeight;
+      doc.moveDown(1);
+    }
+  }
+
+  /**
+   * Obtiene la ficha técnica directamente de red_producto por id_mcr
+   */
+  async obtenerFichaTecnicaPorIdMcr (idMcr) {
     try {
       const knex = require('../config/database');
       
-      // Buscar productos que tengan id_item (paños)
-      const productosConId = detalle.filter(item => item.id_item);
-
-      if (productosConId.length === 0) {
-        return null;
+      // Verificar caché
+      const cacheKey = `mcr_${idMcr}`;
+      if (this.cache.fichasTecnicas.has(cacheKey)) {
+        logger.info(`✅ Ficha técnica obtenida del caché para id_mcr: ${idMcr}`);
+        return this.cache.fichasTecnicas.get(cacheKey);
       }
 
-      // Obtener el primer producto con id_item
-      const producto = productosConId[0];
+      logger.info(`🔍 Buscando ficha técnica para id_mcr: ${idMcr}`);
       
-      if (producto && producto.id_item) {
-        // Verificar caché
-        const cacheKey = `item_${producto.id_item}`;
-        if (this.cache.fichasTecnicas.has(cacheKey)) {
-          logger.info('✅ Ficha técnica obtenida del caché');
-          return this.cache.fichasTecnicas.get(cacheKey);
-        }
-
-        // Optimización: usar JOIN para obtener ficha técnica en una sola consulta
-        const fichaTecnica = await knex('catalogo_1.pano as p')
-          .join('catalogo_1.red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
-          .select('rp.*')
-          .where('p.id_item', producto.id_item)
-          .first();
+      // Buscar directamente en red_producto
+      const fichaTecnica = await knex('catalogo_1.red_producto')
+        .select('*')
+        .where('id_mcr', idMcr)
+        .first();
+      
+      if (fichaTecnica) {
+        logger.info(`✅ Ficha técnica encontrada para id_mcr: ${idMcr}`);
+        logger.info(`   - Foto: ${fichaTecnica.foto || 'N/A'}`);
         
         // Guardar en caché
-        if (fichaTecnica) {
-          this.cache.fichasTecnicas.set(cacheKey, fichaTecnica);
-        }
-          
+        this.cache.fichasTecnicas.set(cacheKey, fichaTecnica);
         return fichaTecnica;
+      } else {
+        logger.warn(`⚠️ No se encontró ficha técnica para id_mcr: ${idMcr}`);
+        return null;
       }
-
-      return null;
     } catch (error) {
-      logger.error('Error obteniendo ficha técnica:', error);
+      logger.error('Error obteniendo ficha técnica por id_mcr:', error);
       return null;
     }
   }

@@ -9,8 +9,7 @@ const authenticateToken = async (req, res, next) => {
         const authHeader = req.headers['authorization'];
         const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
-        console.log('🔍 DEBUG - Auth Header:', authHeader);
-        console.log('🔍 DEBUG - Token:', token ? token.substring(0, 20) + '...' : 'No token');
+
 
         if (!token) {
             console.log('❌ DEBUG - No token provided');
@@ -39,7 +38,7 @@ const authenticateToken = async (req, res, next) => {
             .where({ id: decoded.userId })
             .first();
 
-        console.log('🔍 DEBUG - User from DB:', user ? { id: user.id, username: user.username, activo: user.activo } : 'User not found');
+
 
         if (!user || !user.activo) {
             console.log('❌ DEBUG - User not found or inactive');

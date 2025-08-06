@@ -73,7 +73,17 @@ const PanosList = () => {
       limit: pageSize,
       ...filters
     };
-    dispatch(fetchPanos(params));
+    console.log('🔄 loadPanos - Parámetros:', params);
+    console.log('🔄 loadPanos - Timestamp:', new Date().toISOString());
+    
+    // Forzar recarga sin cache
+    const paramsWithTimestamp = {
+      ...params,
+      _t: Date.now() // Cache buster
+    };
+    
+    console.log('🔄 loadPanos - Parámetros finales:', paramsWithTimestamp);
+    dispatch(fetchPanos(paramsWithTimestamp));
   };
 
   const handleFilterChange = (field) => (event) => {
@@ -130,7 +140,13 @@ const PanosList = () => {
   };
 
   const handleModalSuccess = () => {
-    loadPanos();
+    console.log('🔄 handleModalSuccess - Recargando lista de paños...');
+    
+    // Agregar un pequeño delay para asegurar que la BD se actualizó
+    setTimeout(() => {
+      console.log('🔄 Ejecutando loadPanos después de delay...');
+      loadPanos();
+    }, 1000);
   };
 
   const getEstadoColor = (estado) => {

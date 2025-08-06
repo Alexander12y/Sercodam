@@ -145,6 +145,17 @@ const panosSlice = createSlice({
             especificaciones: state.lista[0].especificaciones,
             tiene_especificaciones: !!state.lista[0].especificaciones
           });
+          
+          // Buscar el paño actualizado específicamente
+          const pañoActualizado = state.lista.find(p => p.id_item === 855);
+          if (pañoActualizado) {
+            console.log('🔍 Slice - Paño 855 encontrado en lista:', {
+              id_item: pañoActualizado.id_item,
+              especificaciones: pañoActualizado.especificaciones,
+              calibre: pañoActualizado.calibre,
+              cuadro: pañoActualizado.cuadro
+            });
+          }
         }
       })
       .addCase(fetchPanos.rejected, (state, action) => {

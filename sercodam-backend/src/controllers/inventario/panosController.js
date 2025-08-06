@@ -24,19 +24,6 @@ const panosController = {
     generateSpecifications: (pano) => {
         const specs = [];
         
-        // Log temporal para debug
-        console.log('🔍 generateSpecifications - Datos recibidos:', {
-            tipo_red: pano.tipo_red,
-            calibre: pano.calibre,
-            cuadro: pano.cuadro,
-            torsion: pano.torsion,
-            refuerzo: pano.refuerzo,
-            color: pano.color,
-            presentacion: pano.presentacion,
-            grosor: pano.grosor,
-            color_tipo_red: pano.color_tipo_red
-        });
-        
         switch (pano.tipo_red?.toLowerCase()) {
             case 'nylon':
                 if (pano.calibre) specs.push(`Calibre: ${pano.calibre}`);
@@ -60,9 +47,237 @@ const panosController = {
                 break;
         }
         
-        const result = specs.join('\n');
-        console.log('🔍 generateSpecifications - Resultado:', result || '(vacío)');
-        return result;
+        return specs.join('\n');
+    },
+
+    // GET /api/v1/inventario/redes-producto - Obtener redes del catálogo
+    getRedesProducto: async (req, res) => {
+        try {
+            const { 
+                page = 1, 
+                limit = 50, 
+                sortBy = 'id_mcr', 
+                sortOrder = 'asc',
+                tipo_red,
+                marca,
+                calibre,
+                cuadro,
+                torsion,
+                color,
+                presentacion,
+                grosor,
+                color_tipo_red
+            } = req.query;
+
+            const offset = (page - 1) * limit;
+            
+            // Construir query base con JOINs a las tablas hijas
+            let query = db('catalogo_1.red_producto as rp')
+                .select(
+                    'rp.*',
+                    'n.calibre as calibre',
+                    'n.cuadro as cuadro', 
+                    'n.torsion as torsion',
+                    'n.refuerzo as refuerzo',
+                    'l.color as color',
+                    'l.presentacion as presentacion',
+                    'p.grosor as grosor',
+                    'p.cuadro as cuadro_poli',
+                    'ms.color_tipo_red as color_tipo_red',
+                    'ms.presentacion as presentacion_ms'
+                )
+                .leftJoin('catalogo_1.nylon as n', 'rp.id_mcr', 'n.id_mcr')
+                .leftJoin('catalogo_1.lona as l', 'rp.id_mcr', 'l.id_mcr')
+                .leftJoin('catalogo_1.polipropileno as p', 'rp.id_mcr', 'p.id_mcr')
+                .leftJoin('catalogo_1.malla_sombra as ms', 'rp.id_mcr', 'ms.id_mcr');
+
+            // Aplicar filtros
+            if (tipo_red) {
+                query = query.where('rp.tipo_red', 'ilike', `%${tipo_red}%`);
+            }
+            if (marca) {
+                query = query.where('rp.marca', 'ilike', `%${marca}%`);
+            }
+            if (calibre) {
+                query = query.where('n.calibre', 'ilike', `%${calibre}%`);
+            }
+            if (cuadro) {
+                query = query.where(function() {
+                    this.where('n.cuadro', 'ilike', `%${cuadro}%`)
+                         .orWhere('p.cuadro', 'ilike', `%${cuadro}%`);
+                });
+            }
+            if (torsion) {
+                query = query.where('n.torsion', 'ilike', `%${torsion}%`);
+            }
+            if (color) {
+                query = query.where(function() {
+                    this.where('l.color', 'ilike', `%${color}%`)
+                         .orWhere('ms.color_tipo_red', 'ilike', `%${color}%`);
+                });
+            }
+            if (presentacion) {
+                query = query.where(function() {
+                    this.where('l.presentacion', 'ilike', `%${presentacion}%`)
+                         .orWhere('ms.presentacion', 'ilike', `%${presentacion}%`);
+                });
+            }
+            if (grosor) {
+                query = query.where('p.grosor', 'ilike', `%${grosor}%`);
+            }
+            if (color_tipo_red) {
+                query = query.where('ms.color_tipo_red', 'ilike', `%${color_tipo_red}%`);
+            }
+
+            // Obtener total de registros (consulta separada)
+            const totalQuery = db('catalogo_1.red_producto as rp')
+                .leftJoin('catalogo_1.nylon as n', 'rp.id_mcr', 'n.id_mcr')
+                .leftJoin('catalogo_1.lona as l', 'rp.id_mcr', 'l.id_mcr')
+                .leftJoin('catalogo_1.polipropileno as p', 'rp.id_mcr', 'p.id_mcr')
+                .leftJoin('catalogo_1.malla_sombra as ms', 'rp.id_mcr', 'ms.id_mcr');
+            
+            // Aplicar los mismos filtros al query de conteo
+            if (tipo_red) {
+                totalQuery.where('rp.tipo_red', 'ilike', `%${tipo_red}%`);
+            }
+            if (marca) {
+                totalQuery.where('rp.marca', 'ilike', `%${marca}%`);
+            }
+            if (calibre) {
+                totalQuery.where('n.calibre', 'ilike', `%${calibre}%`);
+            }
+            if (cuadro) {
+                totalQuery.where(function() {
+                    this.where('n.cuadro', 'ilike', `%${cuadro}%`)
+                         .orWhere('p.cuadro', 'ilike', `%${cuadro}%`);
+                });
+            }
+            if (torsion) {
+                totalQuery.where('n.torsion', 'ilike', `%${torsion}%`);
+            }
+            if (color) {
+                totalQuery.where(function() {
+                    this.where('l.color', 'ilike', `%${color}%`)
+                         .orWhere('ms.color_tipo_red', 'ilike', `%${color}%`);
+                });
+            }
+            if (presentacion) {
+                totalQuery.where(function() {
+                    this.where('l.presentacion', 'ilike', `%${presentacion}%`)
+                         .orWhere('ms.presentacion', 'ilike', `%${presentacion}%`);
+                });
+            }
+            if (grosor) {
+                totalQuery.where('p.grosor', 'ilike', `%${grosor}%`);
+            }
+            if (color_tipo_red) {
+                totalQuery.where('ms.color_tipo_red', 'ilike', `%${color_tipo_red}%`);
+            }
+            
+            const totalResult = await totalQuery.count('rp.id_mcr as total').first();
+            const total = parseInt(totalResult.total);
+
+            // Aplicar ordenamiento y paginación al query principal
+            query = query.orderBy(`rp.${sortBy}`, sortOrder)
+                        .limit(limit)
+                        .offset(offset);
+
+            const redes = await query;
+
+            // Formatear especificaciones para cada red
+            const redesFormateadas = redes.map(red => ({
+                ...red,
+                especificaciones_texto: panosController.generateSpecifications(red)
+            }));
+
+            res.json({
+                success: true,
+                data: redesFormateadas,
+                pagination: {
+                    page: parseInt(page),
+                    limit: parseInt(limit),
+                    total,
+                    totalPages: Math.ceil(total / limit)
+                }
+            });
+
+        } catch (error) {
+            logger.error('Error obteniendo redes del catálogo:', error);
+            throw error;
+        }
+    },
+
+    // GET /api/v1/inventario/redes-producto/catalogos - Obtener catálogos de especificaciones
+    getRedesProductoCatalogos: async (req, res) => {
+        try {
+            const catalogos = {
+                tipos_red: await db('catalogo_1.red_producto')
+                    .distinct('tipo_red')
+                    .whereNotNull('tipo_red')
+                    .orderBy('tipo_red'),
+                
+                marcas: await db('catalogo_1.red_producto')
+                    .distinct('marca')
+                    .whereNotNull('marca')
+                    .orderBy('marca'),
+                
+                calibres: await db('catalogo_1.nylon')
+                    .distinct('calibre')
+                    .whereNotNull('calibre')
+                    .orderBy('calibre'),
+                
+                cuadros: await db.raw(`
+                    SELECT DISTINCT cuadro FROM (
+                        SELECT cuadro FROM catalogo_1.nylon WHERE cuadro IS NOT NULL
+                        UNION
+                        SELECT cuadro FROM catalogo_1.polipropileno WHERE cuadro IS NOT NULL
+                    ) AS cuadros_combined
+                    ORDER BY cuadro
+                `).then(result => result.rows),
+                
+                torsiones: await db('catalogo_1.nylon')
+                    .distinct('torsion')
+                    .whereNotNull('torsion')
+                    .orderBy('torsion'),
+                
+                colores: await db.raw(`
+                    SELECT DISTINCT color FROM (
+                        SELECT color FROM catalogo_1.lona WHERE color IS NOT NULL
+                        UNION
+                        SELECT color_tipo_red as color FROM catalogo_1.malla_sombra WHERE color_tipo_red IS NOT NULL
+                    ) AS colores_combined
+                    ORDER BY color
+                `).then(result => result.rows),
+                
+                presentaciones: await db.raw(`
+                    SELECT DISTINCT presentacion FROM (
+                        SELECT presentacion FROM catalogo_1.lona WHERE presentacion IS NOT NULL
+                        UNION
+                        SELECT presentacion FROM catalogo_1.malla_sombra WHERE presentacion IS NOT NULL
+                    ) AS presentaciones_combined
+                    ORDER BY presentacion
+                `).then(result => result.rows),
+                
+                grosores: await db('catalogo_1.polipropileno')
+                    .distinct('grosor')
+                    .whereNotNull('grosor')
+                    .orderBy('grosor'),
+                
+                colores_tipo_red: await db('catalogo_1.malla_sombra')
+                    .distinct('color_tipo_red')
+                    .whereNotNull('color_tipo_red')
+                    .orderBy('color_tipo_red')
+            };
+
+            res.json({
+                success: true,
+                data: catalogos
+            });
+
+        } catch (error) {
+            logger.error('Error obteniendo catálogos de redes:', error);
+            throw error;
+        }
     },
 
     // POST /api/v1/inventario/panos/calculate-dimensions - Calcular dimensiones recomendadas
@@ -172,11 +387,8 @@ const panosController = {
 
             // Función para construir la consulta base con JOINs a las tablas hijas
             const buildBaseQuery = () => {
-                console.log('🔍 buildBaseQuery - Filtros de especificaciones recibidos:', {
-                    calibre, cuadro, torsion, refuerzo, color, presentacion, grosor, color_tipo_red
-                });
 
-                let query = db('pano as p')
+                let query = db('catalogo_1.pano as p')
                     .select(
                         'p.*',
                         'rp.tipo_red',
@@ -198,11 +410,11 @@ const panosController = {
                         'ms.color_tipo_red',
                         'ms.presentacion as ms_presentacion'
                     )
-                    .leftJoin('red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
-                    .leftJoin('nylon as n', 'p.id_mcr', 'n.id_mcr')
-                    .leftJoin('lona as l', 'p.id_mcr', 'l.id_mcr')
-                    .leftJoin('polipropileno as pp', 'p.id_mcr', 'pp.id_mcr')
-                    .leftJoin('malla_sombra as ms', 'p.id_mcr', 'ms.id_mcr');
+                    .leftJoin('catalogo_1.red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
+                    .leftJoin('catalogo_1.nylon as n', 'p.id_mcr', 'n.id_mcr')
+                    .leftJoin('catalogo_1.lona as l', 'p.id_mcr', 'l.id_mcr')
+                    .leftJoin('catalogo_1.polipropileno as pp', 'p.id_mcr', 'pp.id_mcr')
+                    .leftJoin('catalogo_1.malla_sombra as ms', 'p.id_mcr', 'ms.id_mcr');
 
                 // Aplicar filtros básicos
                 if (tipo_red) {
@@ -247,46 +459,36 @@ const panosController = {
 
                 // Filtros de especificaciones por tipo de red
                 if (calibre) {
-                    console.log('🔍 Aplicando filtro calibre:', calibre);
                     query = query.where('n.calibre', calibre);
                 }
                 if (cuadro) {
-                    console.log('🔍 Aplicando filtro cuadro:', cuadro);
                     query = query.where(function() {
                         this.where('n.cuadro', cuadro)
                             .orWhere('pp.cuadro', cuadro);
                     });
                 }
                 if (torsion) {
-                    console.log('🔍 Aplicando filtro torsion:', torsion);
                     query = query.where('n.torsion', torsion);
                 }
                 if (refuerzo !== undefined && refuerzo !== null && refuerzo !== '') {
                     const refuerzoBool = refuerzo === 'true' || refuerzo === 'Sí' || refuerzo === 'sí';
-                    console.log('🔍 Aplicando filtro refuerzo:', refuerzo, '->', refuerzoBool);
                     query = query.where('n.refuerzo', refuerzoBool);
                 }
                 if (color) {
-                    console.log('🔍 Aplicando filtro color:', color);
                     query = query.where('l.color', color);
                 }
                 if (presentacion) {
-                    console.log('🔍 Aplicando filtro presentacion:', presentacion);
                     query = query.where(function() {
                         this.where('l.presentacion', presentacion)
                             .orWhere('ms.presentacion', presentacion);
                     });
                 }
                 if (grosor) {
-                    console.log('🔍 Aplicando filtro grosor:', grosor);
                     query = query.where('pp.grosor', grosor);
                 }
                 if (color_tipo_red) {
-                    console.log('🔍 Aplicando filtro color_tipo_red:', color_tipo_red);
                     query = query.where('ms.color_tipo_red', color_tipo_red);
                 }
-
-                console.log('🔍 buildBaseQuery - Consulta construida con todos los filtros');
                 return query;
             };
 
@@ -306,7 +508,7 @@ const panosController = {
                 // Contar total para paginación (consulta separada y simple)
                 try {
                     // Consulta simple de conteo sin JOINs complejos
-                    const countResult = await db('pano').count('id_item as count').first();
+                    const countResult = await db('catalogo_1.pano').count('id_item as count').first();
                     total = parseInt(countResult.count || 0);
                     console.log('🔍 Total de paños encontrados:', total);
                 } catch (countError) {
@@ -336,24 +538,10 @@ const panosController = {
                     .orderBy('p.id_item', 'desc')
                     .limit(limit)
                     .offset(offset);
-                console.log('🔍 Consulta con paginación - Resultados obtenidos:', panos.length);
+
             }
 
             const panosWithDetails = panos.map((pano) => {
-                // Log temporal para debug
-                console.log('🔍 Mapeando paño ID:', pano.id_item, 'Tipo:', pano.tipo_red);
-                console.log('🔍 Datos RAW del paño:', {
-                    calibre: pano.calibre,
-                    cuadro: pano.cuadro,
-                    pp_cuadro: pano.pp_cuadro,
-                    torsion: pano.torsion,
-                    refuerzo: pano.refuerzo,
-                    color: pano.color,
-                    presentacion: pano.presentacion,
-                    ms_presentacion: pano.ms_presentacion,
-                    grosor: pano.grosor,
-                    color_tipo_red: pano.color_tipo_red
-                });
                 
                 const result = {
                     id_item: pano.id_item,
@@ -386,16 +574,7 @@ const panosController = {
                     color_tipo_red: pano.color_tipo_red
                 };
 
-                console.log('🔍 Datos mapeados:', {
-                    calibre: result.calibre,
-                    cuadro: result.cuadro,
-                    torsion: result.torsion,
-                    refuerzo: result.refuerzo,
-                    color: result.color,
-                    presentacion: result.presentacion,
-                    grosor: result.grosor,
-                    color_tipo_red: result.color_tipo_red
-                });
+
 
                 // Generar especificaciones formateadas
                 result.especificaciones = panosController.generateSpecifications(result);
@@ -426,22 +605,58 @@ const panosController = {
         }
     },
 
+    // GET /api/v1/inventario/panos/:id/debug - Debug de datos específicos
+    debugPanoById: async (req, res) => {
+        try {
+            const { id } = req.params;
+
+            // Consulta directa a la tabla pano
+            const panoData = await db('catalogo_1.pano').where('id_item', id).first();
+            
+            // Consulta directa a la tabla nylon si existe
+            let nylonData = null;
+            if (panoData) {
+                nylonData = await db('catalogo_1.nylon').where('id_mcr', panoData.id_mcr).first();
+            }
+
+            res.json({
+                success: true,
+                debug: {
+                    pano: panoData,
+                    nylon: nylonData,
+                    timestamp: new Date().toISOString()
+                }
+            });
+
+        } catch (error) {
+            logger.error('Error en debug paño:', error);
+            throw error;
+        }
+    },
+
     // GET /api/v1/inventario/panos/:id - Obtener paño específico
     getPanoById: async (req, res) => {
         try {
             const { id } = req.params;
 
-            // Verificar si existe la vista materializada
-            const viewExists = await checkViewExists('mv_panos_resumen');
-            let pano;
+            // Forzar una nueva conexión para evitar problemas de aislamiento
+            const trx = await db.transaction();
             
-            if (viewExists) {
-                pano = await db('mv_panos_resumen')
-                    .where('id_item', id)
-                    .first();
-            } else {
-                // Consulta con JOINs a las tablas hijas
-                pano = await db('pano as p')
+            try {
+                                // Verificar si existe la vista materializada
+                const viewExists = await checkViewExists('mv_panos_resumen');
+                let pano;
+                
+                // Usar vista materializada si existe
+                if (viewExists) {
+                    console.log('🔍 getPanoById: Usando vista materializada');
+                    pano = await trx('mv_panos_resumen')
+                        .where('id_item', id)
+                        .first();
+                } else {
+                    console.log('🔍 getPanoById: Usando consulta directa con JOINs');
+                    // Consulta con JOINs a las tablas hijas
+                    pano = await trx('catalogo_1.pano as p')
                     .select(
                         'p.*',
                         'rp.tipo_red',
@@ -463,14 +678,21 @@ const panosController = {
                         'ms.color_tipo_red',
                         'ms.presentacion as ms_presentacion'
                     )
-                    .leftJoin('red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
-                    .leftJoin('nylon as n', 'p.id_mcr', 'n.id_mcr')
-                    .leftJoin('lona as l', 'p.id_mcr', 'l.id_mcr')
-                    .leftJoin('polipropileno as pp', 'p.id_mcr', 'pp.id_mcr')
-                    .leftJoin('malla_sombra as ms', 'p.id_mcr', 'ms.id_mcr')
+                    .leftJoin('catalogo_1.red_producto as rp', 'p.id_mcr', 'rp.id_mcr')
+                    .leftJoin('catalogo_1.nylon as n', 'p.id_mcr', 'n.id_mcr')
+                    .leftJoin('catalogo_1.lona as l', 'p.id_mcr', 'l.id_mcr')
+                    .leftJoin('catalogo_1.polipropileno as pp', 'p.id_mcr', 'pp.id_mcr')
+                    .leftJoin('catalogo_1.malla_sombra as ms', 'p.id_mcr', 'ms.id_mcr')
                     .where('p.id_item', id)
                     .first();
             }
+
+            console.log('🔍 getPanoById: Datos obtenidos de BD:', {
+                largo_m: pano?.largo_m,
+                cuadro: pano?.cuadro,
+                refuerzo: pano?.refuerzo,
+                timestamp: new Date().toISOString()
+            });
 
             if (!pano) {
                 throw new NotFoundError('Paño no encontrado');
@@ -498,11 +720,18 @@ const panosController = {
                 pano.especificaciones = panosController.generateSpecifications(pano);
             }
 
-            res.json({
-                success: true,
-                data: pano
-            });
-
+                res.json({
+                    success: true,
+                    data: pano
+                });
+                
+                await trx.commit();
+                
+            } catch (error) {
+                await trx.rollback();
+                logger.error('Error obteniendo paño:', error);
+                throw error;
+            }
         } catch (error) {
             logger.error('Error obteniendo paño:', error);
             throw error;
@@ -587,30 +816,17 @@ const panosController = {
         try {
             const { id } = req.params;
             const {
-                tipo_red,
+                id_mcr, // Nuevo campo para cambiar el tipo de red
                 largo_m,
                 ancho_m,
                 estado,
                 ubicacion,
                 precio_x_unidad,
-                descripcion,
-                // Campos específicos por tipo
-                calibre,
-                cuadro,
-                torsion,
-                refuerzo,
-                color,
-                presentacion,
-                grosor,
                 stock_minimo
             } = req.body;
 
-            console.log('🔍 Backend - Datos recibidos para actualizar paño ID:', id);
-            console.log('🔍 Backend - Body completo:', req.body);
-            console.log('🔍 Backend - Campos específicos:', { calibre, cuadro, torsion, refuerzo, color, presentacion, grosor });
-
             // Verificar que el paño existe
-            const panoExistente = await trx('pano')
+            const panoExistente = await trx('catalogo_1.pano')
                 .where('id_item', id)
                 .first();
 
@@ -618,21 +834,7 @@ const panosController = {
                 throw new NotFoundError('Paño no encontrado');
             }
 
-            // Obtener el registro de red_producto
-            const redProducto = await trx('red_producto')
-                .where('id_mcr', panoExistente.id_mcr)
-                .first();
-
-            if (!redProducto) {
-                throw new NotFoundError('Producto de red no encontrado');
-            }
-
             // Validaciones
-            const tiposValidos = ['lona', 'nylon', 'polipropileno', 'malla sombra'];
-            if (tipo_red && !tiposValidos.includes(tipo_red.toLowerCase())) {
-                throw new ValidationError('Tipo de paño inválido');
-            }
-
             const estadosValidos = ['bueno', 'regular', 'malo', 'usado 50%'];
             if (estado && !estadosValidos.includes(estado)) {
                 throw new ValidationError('Estado inválido');
@@ -646,8 +848,31 @@ const panosController = {
                 throw new ValidationError('El ancho debe ser mayor a 0');
             }
 
+            // Si se proporciona un nuevo id_mcr, verificar que existe en red_producto
+            if (id_mcr && id_mcr !== panoExistente.id_mcr) {
+                const redProducto = await trx('catalogo_1.red_producto')
+                    .where('id_mcr', id_mcr)
+                    .first();
+
+                if (!redProducto) {
+                    throw new ValidationError('El tipo de red seleccionado no existe en el catálogo');
+                }
+
+                // Verificar que no hay trabajos de corte activos para este paño
+                const trabajosActivos = await trx('trabajo_corte as tc')
+                    .join('orden_produccion as op', 'tc.id_op', 'op.id_op')
+                    .where('tc.id_item', id)
+                    .whereNotIn('op.estado', ['cancelada', 'completada'])
+                    .first();
+
+                if (trabajosActivos) {
+                    throw new ValidationError('No se puede cambiar el tipo de red de un paño que tiene trabajos de corte activos');
+                }
+            }
+
             // Actualizar tabla pano
             const updatePanoData = {};
+            if (id_mcr && id_mcr !== panoExistente.id_mcr) updatePanoData.id_mcr = id_mcr;
             if (largo_m !== undefined) updatePanoData.largo_m = parseFloat(largo_m);
             if (ancho_m !== undefined) updatePanoData.ancho_m = parseFloat(ancho_m);
             if (estado) updatePanoData.estado = estado;
@@ -656,103 +881,18 @@ const panosController = {
             if (stock_minimo !== undefined) updatePanoData.stock_minimo = parseFloat(stock_minimo);
             updatePanoData.updated_at = db.fn.now();
 
-            await trx('pano')
+            console.log('🔍 Datos a actualizar en tabla pano:', updatePanoData);
+            console.log('🔍 ID del paño a actualizar:', id);
+
+            const panoUpdateResult = await trx('catalogo_1.pano')
                 .where('id_item', id)
                 .update(updatePanoData);
-
-            // Actualizar red_producto si cambió el tipo o descripción
-            const updateRedProductoData = {};
-            if (tipo_red && tipo_red !== redProducto.tipo_red) {
-                updateRedProductoData.tipo_red = tipo_red.toLowerCase();
-            }
-            if (descripcion !== undefined) {
-                updateRedProductoData.descripcion = descripcion;
-            }
-
-            if (Object.keys(updateRedProductoData).length > 0) {
-                await trx('red_producto')
-                    .where('id_mcr', panoExistente.id_mcr)
-                    .update(updateRedProductoData);
-            }
-
-            // Actualizar tabla específica según el tipo
-            const currentTipo = tipo_red || redProducto.tipo_red;
             
-            switch (currentTipo) {
-                case 'nylon':
-                    const updateNylonData = {};
-                    if (calibre !== undefined) updateNylonData.calibre = calibre;
-                    if (cuadro !== undefined) updateNylonData.cuadro = cuadro;
-                    if (torsion !== undefined) updateNylonData.torsion = torsion;
-                    if (refuerzo !== undefined) updateNylonData.refuerzo = refuerzo === 'Sí' || refuerzo === true;
-                    
-                    if (Object.keys(updateNylonData).length > 0) {
-                        await trx('nylon')
-                            .where('id_mcr', panoExistente.id_mcr)
-                            .update(updateNylonData);
-                    }
-                    break;
-                    
-                case 'lona':
-                    const updateLonaData = {};
-                    if (color !== undefined) updateLonaData.color = color;
-                    if (presentacion !== undefined) updateLonaData.presentacion = presentacion;
-                    if (Object.keys(updateLonaData).length > 0) {
-                        // Verificar si existe el registro en lona
-                        const existingLona = await trx('lona')
-                            .where('id_mcr', panoExistente.id_mcr)
-                            .first();
-                        if (existingLona) {
-                            await trx('lona')
-                                .where('id_mcr', panoExistente.id_mcr)
-                                .update(updateLonaData);
-                        } else {
-                            updateLonaData.id_mcr = panoExistente.id_mcr;
-                            await trx('lona').insert(updateLonaData);
-                        }
-                    }
-                    break;
-                    
-                case 'polipropileno':
-                    const updatePolipropilenoData = {};
-                    if (grosor !== undefined) updatePolipropilenoData.grosor = grosor;
-                    if (cuadro !== undefined) updatePolipropilenoData.cuadro = cuadro;
-                    if (Object.keys(updatePolipropilenoData).length > 0) {
-                        const existingPolipropileno = await trx('polipropileno')
-                            .where('id_mcr', panoExistente.id_mcr)
-                            .first();
-                        if (existingPolipropileno) {
-                            await trx('polipropileno')
-                                .where('id_mcr', panoExistente.id_mcr)
-                                .update(updatePolipropilenoData);
-                        } else {
-                            updatePolipropilenoData.id_mcr = panoExistente.id_mcr;
-                            await trx('polipropileno').insert(updatePolipropilenoData);
-                        }
-                    }
-                    break;
-                    
-                case 'malla sombra':
-                    const updateMallaData = {};
-                    if (color !== undefined) updateMallaData.color_tipo_red = color;
-                    if (presentacion !== undefined) updateMallaData.presentacion = presentacion;
-                    if (Object.keys(updateMallaData).length > 0) {
-                        const existingMalla = await trx('malla_sombra')
-                            .where('id_mcr', panoExistente.id_mcr)
-                            .first();
-                        if (existingMalla) {
-                            await trx('malla_sombra')
-                                .where('id_mcr', panoExistente.id_mcr)
-                                .update(updateMallaData);
-                        } else {
-                            updateMallaData.id_mcr = panoExistente.id_mcr;
-                            await trx('malla_sombra').insert(updateMallaData);
-                        }
-                    }
-                    break;
-            }
+            console.log('🔍 Resultado de actualización tabla pano:', panoUpdateResult);
 
+            // Commit de la transacción
             await trx.commit();
+            console.log('✅ Transacción commitada exitosamente');
 
             res.json({
                 success: true,
@@ -760,7 +900,9 @@ const panosController = {
             });
 
         } catch (error) {
+            console.error('❌ ERROR EN UPDATE PANO - Ejecutando rollback:', error.message);
             await trx.rollback();
+            console.log('🔙 Rollback ejecutado');
             logger.error('Error actualizando paño:', error);
             throw error;
         }
@@ -1247,6 +1389,99 @@ const panosController = {
 
         } catch (error) {
             logger.error('Error obteniendo datos completos de malla sombra:', error);
+            throw error;
+        }
+    },
+
+    // POST /api/v1/inventario/panos/find-id-mcr - Encontrar id_mcr basado en especificaciones
+    findIdMcrBySpecs: async (req, res) => {
+        try {
+            const { tipo_red, especificaciones } = req.body;
+
+            if (!tipo_red || !especificaciones) {
+                throw new ValidationError('Tipo de red y especificaciones son requeridos');
+            }
+
+            let query = db('catalogo_1.red_producto as rp');
+
+            switch (tipo_red.toLowerCase()) {
+                case 'nylon':
+                    query = query
+                        .join('catalogo_1.nylon as n', 'rp.id_mcr', 'n.id_mcr')
+                        .whereIn('rp.tipo_red', ['nylon', 'Nylon']);
+                    
+                    if (especificaciones.calibre) {
+                        query = query.where('n.calibre', especificaciones.calibre);
+                    }
+                    if (especificaciones.cuadro) {
+                        query = query.where('n.cuadro', especificaciones.cuadro);
+                    }
+                    if (especificaciones.torsion) {
+                        query = query.where('n.torsion', especificaciones.torsion);
+                    }
+                    if (especificaciones.refuerzo !== undefined && especificaciones.refuerzo !== null) {
+                        query = query.where('n.refuerzo', especificaciones.refuerzo);
+                    }
+                    break;
+
+                case 'polipropileno':
+                    query = query
+                        .join('catalogo_1.polipropileno as pp', 'rp.id_mcr', 'pp.id_mcr')
+                        .whereIn('rp.tipo_red', ['polipropileno', 'Polipropileno']);
+                    
+                    if (especificaciones.grosor) {
+                        query = query.where('pp.grosor', especificaciones.grosor);
+                    }
+                    if (especificaciones.cuadro) {
+                        query = query.where('pp.cuadro', especificaciones.cuadro);
+                    }
+                    break;
+
+                case 'lona':
+                    query = query
+                        .join('catalogo_1.lona as l', 'rp.id_mcr', 'l.id_mcr')
+                        .whereIn('rp.tipo_red', ['lona', 'Lona']);
+                    
+                    if (especificaciones.color) {
+                        query = query.where('l.color', especificaciones.color);
+                    }
+                    if (especificaciones.presentacion) {
+                        query = query.where('l.presentacion', especificaciones.presentacion);
+                    }
+                    break;
+
+                case 'malla sombra':
+                    query = query
+                        .join('catalogo_1.malla_sombra as ms', 'rp.id_mcr', 'ms.id_mcr')
+                        .whereIn('rp.tipo_red', ['malla sombra', 'Malla Sombra']);
+                    
+                    if (especificaciones.color_tipo_red) {
+                        query = query.where('ms.color_tipo_red', especificaciones.color_tipo_red);
+                    }
+                    if (especificaciones.presentacion) {
+                        query = query.where('ms.presentacion', especificaciones.presentacion);
+                    }
+                    break;
+
+                default:
+                    throw new ValidationError('Tipo de red no válido');
+            }
+
+            const result = await query.select('rp.id_mcr').first();
+
+            if (!result) {
+                throw new NotFoundError('No se encontró una red con las especificaciones proporcionadas');
+            }
+
+            res.json({
+                success: true,
+                data: {
+                    id_mcr: result.id_mcr
+                }
+            });
+
+        } catch (error) {
+            logger.error('Error encontrando id_mcr por especificaciones:', error);
             throw error;
         }
     },

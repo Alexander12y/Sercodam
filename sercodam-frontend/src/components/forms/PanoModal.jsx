@@ -20,6 +20,12 @@ import {
 import { panosApi } from '../../services/api';
 
 const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
+  console.log('🔍 PanoModal - Props recibidas:', { 
+    open, 
+    hasOnClose: !!onClose, 
+    hasOnSuccess: !!onSuccess, 
+    panoId: pano?.id_item 
+  });
   const [formData, setFormData] = useState({
     tipo_red: '',
     largo_m: '',
@@ -396,7 +402,17 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
   }, [pano, open]);
 
   const validateForm = () => {
-    if (!formData.tipo_red) {
+    console.log('🔍 validateForm iniciado');
+    console.log('🔍 isEditing:', isEditing);
+    console.log('🔍 formData.tipo_red:', formData.tipo_red);
+    console.log('🔍 formData.largo_m:', formData.largo_m);
+    console.log('🔍 formData.ancho_m:', formData.ancho_m);
+    console.log('🔍 formData.estado:', formData.estado);
+    console.log('🔍 formData.ubicacion:', formData.ubicacion);
+    
+    // En modo edición, no validar tipo_red (ya está establecido)
+    if (!isEditing && !formData.tipo_red) {
+      console.log('❌ Validación falló: tipo_red requerido');
       setError('El tipo de red es requerido');
       return false;
     }
@@ -426,18 +442,28 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
       return false;
     }
 
-    // Validar que se seleccionó una combinación válida
-    const selectedIdMcr = getSelectedIdMcr();
-    if (!selectedIdMcr) {
-      setError('Debe seleccionar una combinación válida de especificaciones');
-      return false;
+    // Validar que se seleccionó una combinación válida (solo en modo creación)
+    if (!isEditing) {
+      const selectedIdMcr = getSelectedIdMcr();
+      if (!selectedIdMcr) {
+        setError('Debe seleccionar una combinación válida de especificaciones');
+        return false;
+      }
     }
 
     return true;
   };
 
   const handleSubmit = async () => {
-    if (!validateForm()) return;
+    console.log('🔄 handleSubmit iniciado - CLICK EN BOTÓN');
+    console.log('🔍 Estado del formulario:', formData);
+    console.log('🔍 isEditing:', isEditing);
+    console.log('🔍 pano:', pano);
+    
+    if (!validateForm()) {
+      console.log('❌ Validación del formulario falló');
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -445,14 +471,73 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
     if (formData.precio_x_unidad === '' || formData.precio_x_unidad === null) {
       setLoading(false);
       setError('Debes ingresar un precio por unidad');
+      console.log('❌ Precio por unidad requerido');
       return;
     }
 
     try {
-      const selectedIdMcr = getSelectedIdMcr();
+      let selectedIdMcr;
       
+      if (isEditing) {
+        // En modo edición, verificar si el tipo de red o especificaciones cambiaron
+        const tipoRedCambio = formData.tipo_red !== pano.tipo_red;
+        const especificacionesCambiaron = 
+          formData.calibre !== pano.calibre ||
+          formData.cuadro !== pano.cuadro ||
+          formData.torsion !== pano.torsion ||
+          formData.refuerzo !== (pano.refuerzo ? 'Sí' : 'No') ||
+          formData.color !== pano.color ||
+          formData.presentacion !== pano.presentacion ||
+          formData.grosor !== pano.grosor ||
+          formData.color_tipo_red !== pano.color_tipo_red;
+
+        if (tipoRedCambio || especificacionesCambiaron) {
+          // Si cambiaron las especificaciones, buscar el nuevo id_mcr
+          const especificaciones = {};
+          
+          switch (formData.tipo_red) {
+            case 'nylon':
+              if (formData.calibre) especificaciones.calibre = formData.calibre;
+              if (formData.cuadro) especificaciones.cuadro = formData.cuadro;
+              if (formData.torsion) especificaciones.torsion = formData.torsion;
+              if (formData.refuerzo) especificaciones.refuerzo = formData.refuerzo === 'Sí';
+              break;
+            case 'polipropileno':
+              if (formData.grosor) especificaciones.grosor = formData.grosor;
+              if (formData.cuadro) especificaciones.cuadro = formData.cuadro;
+              break;
+            case 'lona':
+              if (formData.color) especificaciones.color = formData.color;
+              if (formData.presentacion) especificaciones.presentacion = formData.presentacion;
+              break;
+            case 'malla sombra':
+              if (formData.color_tipo_red) especificaciones.color_tipo_red = formData.color_tipo_red;
+              if (formData.presentacion) especificaciones.presentacion = formData.presentacion;
+              break;
+          }
+
+          try {
+            const response = await panosApi.findIdMcrBySpecs({
+              tipo_red: formData.tipo_red,
+              especificaciones
+            });
+            selectedIdMcr = response.data.data.id_mcr;
+          } catch (error) {
+            setError('No se encontró una red con las especificaciones seleccionadas');
+            setLoading(false);
+            return;
+          }
+        } else {
+          // Si no cambiaron las especificaciones, usar el id_mcr original
+          selectedIdMcr = pano.id_mcr;
+        }
+      } else {
+        // En modo creación, usar el seleccionado
+        selectedIdMcr = getSelectedIdMcr();
+      }
+      
+      // Preparar datos para envío
       const submitData = {
-        id_mcr: selectedIdMcr, // Usar el id_mcr del catálogo
         largo_m: parseFloat(formData.largo_m),
         ancho_m: parseFloat(formData.ancho_m),
         estado: formData.estado,
@@ -461,20 +546,52 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
         stock_minimo: parseFloat(formData.stock_minimo || 0)
       };
 
-      console.log('🔍 Datos que se van a enviar:', submitData);
-      console.log('🔍 ID del paño a editar:', pano?.id_item);
-
-      if (isEditing) {
-        await panosApi.updatePano(pano.id_item, submitData);
-      } else {
-        await panosApi.createPano(submitData);
+      // Solo incluir id_mcr si es diferente al original (en edición) o en creación
+      if (isEditing && selectedIdMcr !== pano.id_mcr) {
+        submitData.id_mcr = selectedIdMcr;
+      } else if (!isEditing) {
+        submitData.id_mcr = selectedIdMcr;
       }
 
-      onSuccess();
+      console.log('🔍 Datos que se van a enviar:', submitData);
+      console.log('🔍 ID del paño a editar:', pano?.id_item);
+      console.log('🔍 Modo de edición:', isEditing);
+
+      let response;
+      if (isEditing) {
+        console.log('🔄 Actualizando paño...');
+        response = await panosApi.updatePano(pano.id_item, submitData);
+        console.log('✅ Paño actualizado exitosamente');
+        console.log('✅ Respuesta de actualización:', response);
+      } else {
+        console.log('🔄 Creando paño...');
+        response = await panosApi.createPano(submitData);
+        console.log('✅ Paño creado exitosamente');
+        console.log('✅ Respuesta de creación:', response);
+      }
+
+      console.log('🔄 Llamando onSuccess...');
+      console.log('🔍 onSuccess es función:', typeof onSuccess === 'function');
+      console.log('🔍 onSuccess valor:', onSuccess);
+      
+      if (onSuccess && typeof onSuccess === 'function') {
+        try {
+          onSuccess();
+          console.log('✅ onSuccess llamado exitosamente');
+        } catch (onSuccessError) {
+          console.error('❌ Error al llamar onSuccess:', onSuccessError);
+        }
+      } else {
+        console.error('❌ onSuccess no es una función válida:', onSuccess);
+      }
+      
+      console.log('🔄 Cerrando modal...');
       onClose();
+      console.log('✅ Modal cerrado exitosamente');
+      
     } catch (error) {
-      console.error('Error:', error);
-      console.error('Error response:', error.response?.data);
+      console.error('❌ Error en handleSubmit:', error);
+      console.error('❌ Error response:', error.response?.data);
       
       if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
         const errorMessages = error.response.data.errors.map(err => err.message || err).join(', ');
@@ -483,6 +600,7 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
         setError(error.response?.data?.message || 'Error al guardar el paño');
       }
     } finally {
+      console.log('🔄 Finalizando handleSubmit');
       setLoading(false);
     }
   };
@@ -498,6 +616,28 @@ const PanoModal = ({ open, onClose, pano = null, onSuccess }) => {
   };
 
   const renderSpecificFields = () => {
+    // En modo edición, mostrar campos de especificaciones pero con validaciones adicionales
+    if (isEditing) {
+      return (
+        <>
+          <Grid item xs={12}>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              <Typography variant="body2">
+                <strong>Nota:</strong> Puedes modificar el tipo de red y sus especificaciones. 
+                Los cambios se aplicarán solo si el paño no tiene trabajos de corte activos.
+              </Typography>
+            </Alert>
+          </Grid>
+          {renderSpecificFieldsByType()}
+        </>
+      );
+    }
+
+    // En modo creación, mostrar campos de especificaciones según el tipo
+    return renderSpecificFieldsByType();
+  };
+
+  const renderSpecificFieldsByType = () => {
     switch (formData.tipo_red) {
       case 'nylon':
         return (

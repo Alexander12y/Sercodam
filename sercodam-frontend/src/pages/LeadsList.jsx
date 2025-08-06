@@ -133,7 +133,7 @@ const LeadsList = () => {
     // Marcar como leído si no está leído
     if (!lead.leido) {
       try {
-        await dispatch(updateLead(lead.id_lead, { leido: true })).unwrap();
+        await dispatch(updateLead({ id: lead.id_lead, data: { leido: true } })).unwrap();
         // Recargar leads para actualizar el estado
         dispatch(fetchLeads({ page: page + 1, limit: rowsPerPage }));
       } catch (error) {

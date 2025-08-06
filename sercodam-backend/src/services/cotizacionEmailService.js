@@ -1,4 +1,6 @@
 const { google } = require('googleapis');
+const fs = require('fs');
+const path = require('path');
 const logger = require('../config/logger');
 const CotizacionPdfServiceV2 = require('./cotizacionPdfServiceV2');
 
@@ -25,6 +27,20 @@ class CotizacionEmailService {
     }
 
     return google.gmail({ version: 'v1', auth: oauth2Client });
+  }
+
+  /**
+   * Obtener el logo de Sercodam en base64
+   */
+  getLogoBase64() {
+    try {
+      const logoPath = path.join(__dirname, '../../public/images/public/images/logo-sercodam.png');
+      const logoBuffer = fs.readFileSync(logoPath);
+      return logoBuffer.toString('base64');
+    } catch (error) {
+      logger.warn('⚠️ No se pudo cargar el logo, usando header sin imagen:', error.message);
+      return null;
+    }
   }
 
   /**
@@ -69,6 +85,8 @@ class CotizacionEmailService {
       day: 'numeric'
     });
 
+    const logoBase64 = this.getLogoBase64();
+
     return `
       <!DOCTYPE html>
       <html lang="es">
@@ -91,6 +109,11 @@ class CotizacionEmailService {
             padding: 20px;
             text-align: center;
             border-radius: 8px 8px 0 0;
+          }
+          .logo {
+            max-width: 200px;
+            height: auto;
+            margin-bottom: 10px;
           }
           .content {
             background-color: #f9f9f9;
@@ -122,8 +145,9 @@ class CotizacionEmailService {
       </head>
       <body>
         <div class="header">
+          ${logoBase64 ? `<img src="data:image/png;base64,${logoBase64}" alt="Sercodam Logo" class="logo">` : ''}
           <h1>Sercodam</h1>
-          <p>Redes de Protección Industrial</p>
+          <p>Redes & Piolas</p>
         </div>
         
         <div class="content">
@@ -135,7 +159,6 @@ class CotizacionEmailService {
             <h3 style="color: #CE0A0A; margin-top: 0;">Cotización ${cotizacion.numero_cotizacion}</h3>
             <p><strong>Proyecto:</strong> ${cotizacion.titulo_proyecto}</p>
             <p><strong>Tipo:</strong> ${cotizacion.tipo_proyecto}</p>
-            <p><strong>Total:</strong> <span class="highlight">$${cotizacion.total?.toLocaleString('es-MX') || '0.00'}</span></p>
             <p><strong>Válida hasta:</strong> ${cotizacion.valido_hasta ? new Date(cotizacion.valido_hasta).toLocaleDateString('es-MX') : '15 días'}</p>
           </div>
           
@@ -155,12 +178,11 @@ class CotizacionEmailService {
         </div>
         
         <div class="footer">
-          <p><strong>Sercodam</strong> - Redes de Protección Industrial</p>
+          <p><strong>Sercodam</strong> - Redes & Piolas</p>
           <p>📧 ${process.env.GMAIL_FROM || 'sercodamxbuddify@gmail.com'}</p>
           <p>📱 +52 55 1234 5678</p>
-          <p>🌐 www.sercodam.com</p>
+          <p>🌐 www.redesdenylon.com</p>
           <p style="font-size: 12px; margin-top: 15px;">
-            Este es un email automático generado por el sistema de cotizaciones de Sercodam.
             Fecha de envío: ${fecha}
           </p>
         </div>

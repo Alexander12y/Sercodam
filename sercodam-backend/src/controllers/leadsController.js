@@ -412,7 +412,8 @@ const leadsController = {
                 asignado_a,
                 notas,
                 fecha_contacto,
-                fecha_conversion
+                fecha_conversion,
+                leido
             } = req.body;
 
             // Verificar que el lead existe
@@ -434,6 +435,7 @@ const leadsController = {
             if (notas !== undefined) updateData.notas = notas;
             if (fecha_contacto) updateData.fecha_contacto = fecha_contacto;
             if (fecha_conversion) updateData.fecha_conversion = fecha_conversion;
+            if (leido !== undefined) updateData.leido = leido;
 
             // Actualizar lead
             const [leadActualizado] = await db('leads')
@@ -441,7 +443,12 @@ const leadsController = {
                 .update(updateData)
                 .returning('*');
 
-            logger.info(`Lead actualizado: ${leadActualizado.id_lead} - Estado: ${leadActualizado.estado}`);
+            // Invalidar cache si se cambió el estado de leído
+            if (leido !== undefined && leido !== leadExistente.leido) {
+                await cache.del('leads_no_leidos');
+            }
+
+            logger.info(`Lead actualizado: ${leadActualizado.id_lead} - Estado: ${leadActualizado.estado} - Leído: ${leadActualizado.leido}`);
 
             res.json({
                 success: true,

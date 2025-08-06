@@ -52,6 +52,7 @@ import { fetchMateriales } from '../../../store/slices/materialesSlice';
 import { fetchLeads } from '../../../store/slices/leadsSlice';
 import { panosApi, inventarioApi } from '../../../services/api';
 import { SUBGRUPOS_CATEGORIAS_MATERIALES } from '../../../constants/materialesConstants';
+import RedesProductoModal from './RedesProductoModal';
 
 // ===== SECCIÓN 1: INFORMACIÓN GENERAL =====
 export const SeccionGeneral = ({ cotizacion, onUpdate }) => {
@@ -449,6 +450,9 @@ export const SeccionProductos = ({ cotizacion, onUpdate }) => {
   const [anchoTomar, setAnchoTomar] = useState(0);
   const [cantidadPano, setCantidadPano] = useState(1);
   const [precioUnitarioPano, setPrecioUnitarioPano] = useState(0);
+
+  // Estados para redes producto (catálogo)
+  const [modalRedesProductoOpen, setModalRedesProductoOpen] = useState(false);
 
   // Función para renderizar especificaciones de paños (copiada de PanosList.jsx)
   const renderPanoSpecifications = (pano) => {
@@ -1189,6 +1193,39 @@ export const SeccionProductos = ({ cotizacion, onUpdate }) => {
     }
   };
 
+  // Función para manejar la selección de redes del catálogo
+  const handleRedSeleccionada = (redData) => {
+    const newItem = {
+      partida: String.fromCharCode(65 + (cotizacion.detalle?.length || 0)),
+      orden_index: (cotizacion.detalle?.length || 0) + 1,
+      id_mcr: redData.id_mcr, // Usar id_mcr para redes del catálogo
+      cantidad: redData.cantidad,
+      precio_unitario: redData.precio_total_por_area,
+      subtotal: redData.subtotal,
+      notas: `Red: ${redData.descripcion || redData.id_mcr}`,
+      caracteristicas: `Tipo: ${redData.tipo_red}, Dimensiones: ${redData.largo_tomar.toFixed(2)}m × ${redData.ancho_tomar.toFixed(2)}m, Área: ${redData.area_tomar.toFixed(2)}m², Precio/m²: $${redData.precio_por_m2.toFixed(2)}`,
+      especificaciones: redData.especificaciones, // Guardar especificaciones como objeto
+      especificaciones_texto: redData.especificaciones_texto, // Guardar especificaciones como texto
+      catalogo: 'CATALOGO_1',
+      tipo_item: 'RED_PRODUCTO',
+      estado: 'por aprobar',
+      metadata: {
+        red_data: redData,
+        largo_tomar: redData.largo_tomar,
+        ancho_tomar: redData.ancho_tomar,
+        area_tomar: redData.area_tomar,
+        precio_por_m2: redData.precio_por_m2,
+        tipo_red: redData.tipo_red,
+        marca: redData.marca
+      }
+    };
+
+    dispatch(updateCurrentCotizacion({
+      detalle: [...(cotizacion.detalle || []), newItem]
+    }));
+    dispatch(calculateTotals());
+  };
+
   const getEstadoColor = (estado) => {
     switch (estado?.toLowerCase()) {
       case 'bueno': return 'success';
@@ -1432,13 +1469,13 @@ export const SeccionProductos = ({ cotizacion, onUpdate }) => {
             Productos y Servicios
           </Typography>
           <Box display="flex" gap={1}>
-          <Button
+            <Button
               variant="outlined"
-            startIcon={<AddIcon />}
-              onClick={() => setModalPanosOpen(true)}
+              startIcon={<AddIcon />}
+              onClick={() => setModalRedesProductoOpen(true)}
               size="small"
             >
-              Agregar Paño
+              Red del Catálogo
             </Button>
             <Button
               variant="outlined"
@@ -1455,7 +1492,7 @@ export const SeccionProductos = ({ cotizacion, onUpdate }) => {
               size="small"
             >
               Producto Personalizado
-          </Button>
+            </Button>
           </Box>
         </Box>
 
@@ -2418,6 +2455,13 @@ export const SeccionProductos = ({ cotizacion, onUpdate }) => {
             </Button>
           </DialogActions>
         </Dialog>
+
+        {/* Modal de redes producto */}
+        <RedesProductoModal
+          open={modalRedesProductoOpen}
+          onClose={() => setModalRedesProductoOpen(false)}
+          onRedSeleccionada={handleRedSeleccionada}
+        />
       </CardContent>
     </Card>
   );

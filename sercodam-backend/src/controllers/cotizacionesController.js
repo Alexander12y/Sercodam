@@ -135,6 +135,7 @@ const cotizacionesController = {
        if (cotizacionData.detalle) {
          console.log('📦 Detalle recibido:', cotizacionData.detalle.map(item => ({
            id_item: item.id_item,
+           id_mcr: item.id_mcr,
            tipo_item: item.tipo_item,
            notas: item.notas,
            cantidad: item.cantidad,
@@ -145,6 +146,12 @@ const cotizacionesController = {
          cotizacionData.detalle.forEach((item, index) => {
            if (item.id_item && typeof item.id_item === 'object') {
              console.error(`❌ Item ${index} tiene id_item como objeto:`, item.id_item);
+           }
+           // Debug: Check for id_mcr
+           if (item.id_mcr) {
+             console.log(`✅ Item ${index} tiene id_mcr: ${item.id_mcr}`);
+           } else {
+             console.log(`❌ Item ${index} NO tiene id_mcr`);
            }
          });
        }
@@ -232,9 +239,17 @@ const cotizacionesController = {
              }
            }
 
+           // Procesar id_mcr si existe
+           let idMcr = null;
+           if (item.id_mcr) {
+             idMcr = item.id_mcr;
+             console.log(`🔍 Item ${index} tiene id_mcr: ${idMcr}`);
+           }
+
                        return {
               id_cotizacion: cotizacionId,
               id_item: idItem,
+              id_mcr: idMcr,
               cantidad: item.cantidad || 0,
               precio_unitario: item.precio_unitario || 0,
               subtotal: item.subtotal || 0,
@@ -384,9 +399,17 @@ const cotizacionesController = {
              }
            }
 
+           // Procesar id_mcr si existe
+           let idMcr = null;
+           if (item.id_mcr) {
+             idMcr = item.id_mcr;
+             console.log(`🔍 Item ${index} (update) tiene id_mcr: ${idMcr}`);
+           }
+
                                    return {
               id_cotizacion: parseInt(id),
               id_item: idItem,
+              id_mcr: idMcr,
               cantidad: item.cantidad || 0,
               precio_unitario: item.precio_unitario || 0,
               subtotal: item.subtotal || 0,

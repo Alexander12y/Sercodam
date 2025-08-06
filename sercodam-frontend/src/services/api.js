@@ -157,6 +157,10 @@ export const panosApi = {
   getLonaFullData: () => api.get('/inventario/panos/catalogos/lona/full'),
   getMallaSombraFullData: () => api.get('/inventario/panos/catalogos/malla-sombra/full'),
   calculateRecommendedDimensions: (data) => api.post('/inventario/panos/calculate-dimensions', data),
+  findIdMcrBySpecs: (data) => api.post('/inventario/panos/find-id-mcr', data),
+  // Nuevos endpoints para redes producto (catálogo)
+  getRedesProducto: (params = {}) => api.get('/inventario/redes-producto', { params }),
+  getRedesProductoCatalogos: (params = {}) => api.get('/inventario/redes-producto/catalogos', { params }),
 };
 
 // API de materiales

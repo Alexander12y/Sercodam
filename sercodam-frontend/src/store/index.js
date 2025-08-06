@@ -8,6 +8,7 @@ import herramientasReducer from './slices/herramientasSlice';
 import clientesReducer from './slices/clientesSlice';
 import leadsReducer from './slices/leadsSlice';
 import cotizacionesReducer from './slices/cotizacionesSlice';
+import redesProductoReducer from './slices/redesProductoSlice';
 
 export const store = configureStore({
   reducer: {
@@ -20,6 +21,7 @@ export const store = configureStore({
     clientes: clientesReducer,
     leads: leadsReducer,
     cotizaciones: cotizacionesReducer,
+    redesProducto: redesProductoReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

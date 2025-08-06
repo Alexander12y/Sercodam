@@ -100,9 +100,27 @@ router.get('/panos/catalogos/malla-sombra/full',
     asyncHandler(panosController.getMallaSombraFullData)
 );
 
+// ========== RUTAS DE REDES PRODUCTO (CATÁLOGO) ==========
+// GET /api/v1/inventario/redes-producto - Obtener redes del catálogo
+router.get('/redes-producto', 
+    validateQueryParams,
+    asyncHandler(panosController.getRedesProducto)
+);
+
+// GET /api/v1/inventario/redes-producto/catalogos - Obtener catálogos de especificaciones
+router.get('/redes-producto/catalogos', 
+    asyncHandler(panosController.getRedesProductoCatalogos)
+);
+
 // POST /api/v1/inventario/panos/calculate-dimensions - Calcular dimensiones recomendadas para múltiples cortes
 router.post('/panos/calculate-dimensions', 
     asyncHandler(panosController.calculateRecommendedDimensions)
+);
+
+// GET /api/v1/inventario/panos/:id/debug - Debug de paño específico
+router.get('/panos/:id/debug', 
+    validateIdParam,
+    asyncHandler(panosController.debugPanoById)
 );
 
 // GET /api/v1/inventario/panos/:id - Obtener paño específico
@@ -143,6 +161,12 @@ router.post('/panos/entrada',
 router.post('/panos/salida', 
     requireRole(['admin', 'supervisor']),
     asyncHandler(panosController.salidaPano)
+);
+
+// POST /api/v1/inventario/panos/find-id-mcr - Encontrar id_mcr basado en especificaciones
+router.post('/panos/find-id-mcr', 
+    requireRole(['admin', 'supervisor']),
+    asyncHandler(panosController.findIdMcrBySpecs)
 );
 
 // ========== RUTAS DE MATERIALES ==========
