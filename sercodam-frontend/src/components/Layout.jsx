@@ -53,6 +53,7 @@ import {
   Email as EmailIcon,
   Folder as FolderIcon,
   Engineering as EngineeringIcon,
+  Receipt as ReceiptIcon,
   // Iconos outline para mejor control de color
   HomeOutlined as HomeOutlinedIcon,
   EmailOutlined as EmailOutlinedIcon,
@@ -68,6 +69,7 @@ import {
   AssessmentOutlined as AssessmentOutlinedIcon,
   EngineeringOutlined as EngineeringOutlinedIcon,
   FolderOutlined as FolderOutlinedIcon,
+  ReceiptOutlined as ReceiptOutlinedIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
@@ -99,6 +101,16 @@ const menuItems = [
       { text: 'Nueva Orden', icon: <AddOutlinedIcon />, path: '/ordenes/nueva' },
       { text: 'Ejecutar un Corte', icon: <EngineeringOutlinedIcon />, path: '/ejecutar-corte', roles: ['operador', 'admin'] },
     ]
+  },
+  { 
+    text: 'Facturación', 
+    icon: <ReceiptOutlinedIcon />, 
+    path: '/facturas',
+    submenu: [
+      { text: 'Lista de Facturas', icon: <AssessmentOutlinedIcon />, path: '/facturas' },
+      { text: 'Nueva Factura', icon: <AddOutlinedIcon />, path: '/facturas/nueva' },
+    ],
+    roles: ['admin']
   },
   { text: 'Clientes', icon: <GroupOutlinedIcon />, path: '/clientes' },
   { 

@@ -47,6 +47,7 @@ import {
 
 // Importar acciones para cargar datos
 import { fetchClientes } from '../store/slices/clientesSlice';
+import { fetchLeads } from '../store/slices/leadsSlice';
 import { fetchPanos } from '../store/slices/panosSlice';
 import { fetchMateriales } from '../store/slices/materialesSlice';
 import { fetchHerramientas } from '../store/slices/herramientasSlice';
@@ -109,6 +110,7 @@ const CreateCotizacion = () => {
   useEffect(() => {
     // Cargar datos necesarios para el formulario
     dispatch(fetchClientes());
+    dispatch(fetchLeads({ limit: 1000 })); // Cargar todos los leads disponibles
     dispatch(fetchPanos());
     dispatch(fetchMateriales());
     dispatch(fetchHerramientas());
@@ -125,7 +127,7 @@ const CreateCotizacion = () => {
           const leadData = JSON.parse(cotizacionFromLead);
           console.log('📋 Cargando datos del lead:', leadData);
           
-          // Pequeño delay para asegurar que los leads se carguen
+          // Delay para asegurar que tanto clientes como leads se carguen
           setTimeout(() => {
             // Actualizar la cotización con los datos del lead
             const cotizacionData = {
@@ -149,8 +151,9 @@ const CreateCotizacion = () => {
               lead_presupuesto_estimado: leadData.proyecto.presupuesto_estimado
             };
             
+            console.log('📋 Estableciendo datos de cotización desde lead:', cotizacionData);
             dispatch(updateCurrentCotizacion(cotizacionData));
-          }, 500);
+          }, 1000); // Aumentar delay para asegurar que se carguen todos los datos
           
           // Limpiar sessionStorage después de usar los datos
           sessionStorage.removeItem('cotizacionFromLead');
@@ -251,7 +254,8 @@ const CreateCotizacion = () => {
 
     switch (section) {
       case 0: // Información General
-        if (!currentCotizacion?.id_cliente) {
+        // Validar que haya un cliente O un lead seleccionado
+        if (!currentCotizacion?.id_cliente && !currentCotizacion?.lead_id) {
           errors.id_cliente = 'Cliente es obligatorio';
         }
         if (!currentCotizacion?.titulo_proyecto?.trim()) {

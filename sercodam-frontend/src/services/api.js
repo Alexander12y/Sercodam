@@ -317,4 +317,43 @@ export const cotizacionesApi = {
   sendEmail: (id) => api.post(`/cotizaciones/${id}/send-email`)
 };
 
+// API del sistema de facturación
+export const facturaApi = {
+  // Obtener todas las facturas
+  getFacturas: (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    return api.get(`/facturas${queryString ? `?${queryString}` : ''}`);
+  },
+  
+  // Obtener factura por ID
+  getFacturaById: (id) => api.get(`/facturas/${id}`),
+  
+  // Crear nueva factura
+  createFactura: (data) => api.post('/facturas', data),
+  
+  // Actualizar factura
+  updateFactura: (id, data) => api.put(`/facturas/${id}`, data),
+  
+  // Cambiar estado de factura
+  changeStatus: (id, estado) => api.patch(`/facturas/${id}/status`, { estado }),
+  
+  // Registrar pago
+  registerPayment: (id, data) => api.post(`/facturas/${id}/pagos`, data),
+  
+  // Eliminar factura
+  deleteFactura: (id) => api.delete(`/facturas/${id}`),
+  
+  // Obtener estadísticas
+  getStats: (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    return api.get(`/facturas/stats${queryString ? `?${queryString}` : ''}`);
+  },
+  
+  // Generar PDF de factura
+  generatePDF: (id) => api.get(`/facturas/${id}/pdf`, { responseType: 'blob' }),
+  
+  // Enviar factura por email
+  sendEmail: (id) => api.post(`/facturas/${id}/send-email`)
+};
+
 export default api; 

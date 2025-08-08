@@ -331,6 +331,16 @@ try {
         console.log('⚠️  Continuando sin rutas de drafts de cotizaciones (pueden no estar implementadas)');
     }
 
+    try {
+        console.log('Cargando rutas de facturación...');
+        const facturaRoutes = require('./routes/facturaRoutes');
+        app.use(`/api/${API_VERSION}/facturas`, facturaRoutes);
+        console.log('✅ Rutas de facturación cargadas');
+    } catch (error) {
+        console.error('❌ Error cargando rutas de facturación:', error.message);
+        console.log('⚠️  Continuando sin rutas de facturación (pueden no estar implementadas)');
+    }
+
     // ========== INICIALIZACIÓN DEL PROCESAMIENTO AUTOMÁTICO DE EMAILS ==========
     try {
         console.log('Configurando procesamiento automático de emails...');

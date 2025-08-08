@@ -26,6 +26,7 @@ import LeadsList from './pages/LeadsList';
 import CotizacionesList from './pages/CotizacionesList';
 import CotizacionDetail from './pages/CotizacionDetail';
 import CreateCotizacion from './pages/CreateCotizacion';
+import FacturasList from './pages/FacturasList';
 import Login from './pages/Login';
 
 function RequireAuth({ children }) {
@@ -80,6 +81,14 @@ function App() {
                   <Route path="/cotizaciones/:id" element={<CotizacionDetail />} />
                   <Route path="/cotizaciones/nueva" element={<CreateCotizacion />} />
                   <Route path="/cotizaciones/editar/:id" element={<CreateCotizacion />} />
+                  <Route 
+                    path="/facturas" 
+                    element={
+                      <RequireRole roles={['admin']}>
+                        <FacturasList />
+                      </RequireRole>
+                    } 
+                  />
                   <Route path="/inventario/panos" element={<PanosList />} />
                   <Route path="/inventario/materiales" element={<MaterialesList />} />
                   <Route path="/inventario/herramientas" element={<HerramientasList />} />

@@ -225,16 +225,27 @@ export const SeccionGeneral = ({ cotizacion, onUpdate }) => {
   const getSelectedValue = () => {
     const options = getClienteOptions();
     
+    console.log('🔍 getSelectedValue - cotizacion:', {
+      id_cliente: cotizacion.id_cliente,
+      lead_id: cotizacion.lead_id,
+      nombre_cliente: cotizacion.nombre_cliente
+    });
+    console.log('🔍 getSelectedValue - options disponibles:', options.length);
+    
     if (cotizacion.id_cliente) {
       // Buscar cliente
-      return options.find(option => 
+      const cliente = options.find(option => 
         option.type === 'cliente' && option.id_cliente === cotizacion.id_cliente
       );
+      console.log('🔍 Cliente encontrado:', cliente);
+      return cliente;
     } else if (cotizacion.lead_id) {
       // Buscar lead
-      return options.find(option => 
+      const lead = options.find(option => 
         option.type === 'lead' && option.id_lead === cotizacion.lead_id
       );
+      console.log('🔍 Lead encontrado:', lead);
+      return lead;
     }
     
     return null;
